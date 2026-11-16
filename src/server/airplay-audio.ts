@@ -32,6 +32,10 @@ const quietAfter = (prebuffer * 1000) / sampleRate,
 // UxPlay's clock requests has its sound due as it arrives, about 0 ahead. Outside this, a stream
 // is timed by its arrival, and so a sender's time never runs Core's stream faster than real time.
 const lead = { min: quietAhead, max: sampleRate * 3 };
+// A sender-timed stream's packet under the lead arrived late (a Wi-Fi or event-loop stall, a resend)
+// and is dropped. UxPlay holds up to 256 packets of 352 samples for resends, about two seconds: a
+// stream still under the lead after that has stepped back, and is timed by arrival.
+const strayFor = 2000;
 
 export type RtpPacket = {
   sequence: number;
@@ -114,12 +118,13 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
     emitted = 0;
   // A sender-timed stream: its wall clock less now()'s, read once so its times don't jitter; how far
   // the sender's time runs ahead of the samples placed one after another (its clock's drift); and
-  // where the latest packet ended, in the sender's time and as placed.
+  // where the latest packet ended, in the sender's time and as placed; since when its packets arrive late.
   let wallOffset = 0,
     drift = 0,
     senderEnd: number | undefined,
     placedEnd = 0,
-    arrivedAt = 0;
+    arrivedAt = 0,
+    strayedAt: number | undefined;
   const stats = { packets: 0, invalid: 0, late: 0, resyncs: 0 };
   const resync = (at: number) => {
     packets = [];
@@ -131,12 +136,16 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
   const sender = (timestamp: number, offset: number) => {
     const current = Math.round(((now() + offset) * sampleRate) / 1000),
       time = current + ((timestamp - current) | 0);
-    return { time, usable: time >= current + lead.min && time <= current + lead.max };
+    return {
+      time,
+      usable: time >= current + lead.min && time <= current + lead.max,
+      under: time < current + lead.min,
+    };
   };
 
   // False: the packet belongs to a stream timed otherwise (the sender's time against arrival), which
   // is another source; it isn't placed. A new pipeline decides its timing from its first packet;
-  // a sender-timed stream whose time leaves the lead window is timed by arrival from then on.
+  // a sender-timed stream whose time passes the lead, or stays under it, is timed by arrival from then on.
   const place = (packet: RtpPacket) => {
     const samples = packet.payload.length / bytesPerSample;
     // A new pipeline (UxPlay restarts it for another audio format) starts its own clock.
@@ -144,6 +153,12 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
       offset = pipeline ? wall() - now() : wallOffset,
       time = packet.timed ? sender(packet.timestamp, offset) : undefined,
       usable = !!time?.usable && (pipeline || timed);
+    if (timed && !pipeline && time!.under) {
+      strayedAt ??= now();
+      if (now() - strayedAt > strayFor) return false;
+      stats.late++;
+      return true;
+    }
     if (ssrc !== undefined && usable !== timed) return false;
     if (pipeline) {
       if (ssrc !== undefined) {
@@ -158,6 +173,7 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
       wallOffset = offset;
       drift = 0;
       senderEnd = undefined;
+      strayedAt = undefined;
       unwrapped = packet.timestamp;
     } else unwrapped += (packet.timestamp - last) | 0; // RTP timestamps wrap at 32 bits
     if (timed) unwrapped = time!.time;
@@ -167,6 +183,7 @@ export function createAudioIngress(options: { now?: () => number; wall?: () => n
     if (inOrder) latest = packet.sequence;
     if (timed) {
       arrivedAt = now();
+      strayedAt = undefined;
       if (senderEnd !== undefined && Math.abs(unwrapped - senderEnd) <= seam)
         drift = unwrapped - placedEnd;
       senderEnd = unwrapped + samples;

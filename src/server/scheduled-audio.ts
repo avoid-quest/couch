@@ -492,7 +492,8 @@ export function createScheduledAudio(options: {
     const start = async () => {
       const current = load!,
         attempt = ++generation;
-      state = { ...state, status: "loading", buffering: false, error: null };
+      // A decoder that runs again (a speaker joined a picture-only run) gives back its timestamps.
+      state = { ...state, status: "loading", buffering: false, error: null, timeline: undefined };
       const signal = AbortSignal.timeout(15_000);
       const inputUrl = current.audioSource ?? current.source;
       const credentialOrigin = current.credentialOrigin ?? current.source;

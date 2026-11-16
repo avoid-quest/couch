@@ -112,14 +112,20 @@ const variantsOf = (text: string, base: string) => {
       : [];
   });
 };
-// A media playlist's segment addresses, in order.
+// A media playlist's segment, init file and key addresses, in order.
 const segmentsOf = (text: string, base: string) =>
   text
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .flatMap((line) =>
-      line && !line.startsWith("#") ? [URL.parse(line, base)?.href ?? line] : [],
-    );
+    .flatMap((line) => {
+      const uri =
+        line && !line.startsWith("#")
+          ? line
+          : /^#EXT-X-(?:MAP|KEY):/.test(line)
+            ? /[:,]URI="([^"]+)"/.exec(line)?.[1]
+            : undefined;
+      return uri ? [URL.parse(uri, base)?.href ?? uri] : [];
+    });
 
 const playlistType = (type: string | null, url: string) =>
   /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -397,11 +403,12 @@ export function createPassThrough(
     return read.answer;
   };
   // Core resolves the item again, once at a time for every route of its resolution, and maps each
-  // old address (the master, its variants and renditions, a file, a finished playlist's segments)
-  // onto the new one. Each address renews the item once, so an address and the expiry it names
-  // never renew it twice; a renewal that leaves its address as it was, or as close to expiry, is
-  // the last. One that fails (yt-dlp, the network) may be tried once more.
-  const renew = (relay: Relay, trigger: string): Promise<boolean> => {
+  // old address (the master, its variants and renditions, a file, a finished playlist's segments,
+  // init files and keys) onto the new one. Each address renews the item once, so an address and the
+  // expiry it names never renew it twice; a renewal that leaves its address as it was, or as close
+  // to expiry, is the last, except an endless stream's segment: the stream's next playlist read
+  // names new ones. One that fails (yt-dlp, the network) may be tried once more.
+  const renew = (relay: Relay, trigger: string, segment = false): Promise<boolean> => {
     const renewal = relay.renewal;
     if (!renewal || renewal.spent) return Promise.resolve(false);
     if (renewal.pending) return renewal.pending;
@@ -450,12 +457,14 @@ export function createPassThrough(
       for (const [from, to] of pairs) if (from && to && from !== to) aliases.set(from, to);
       // A finished media playlist keeps its segments in order: each old one maps to the fresh
       // one in its place, so a picture paused past its links' expiry continues where it was.
+      const finished = new Set<string>();
       for (const [url, answer] of old) {
         if (playlistAge(answer.text) !== Infinity || variantsOf(answer.text, answer.url).length)
           continue;
         const next = await read(aliases.get(url) ?? url);
         const from = segmentsOf(answer.text, answer.url),
           to = next?.text === undefined ? [] : segmentsOf(next.text, next.url);
+        for (const segment of from) finished.add(segment);
         if (from.length === to.length)
           from.forEach((segment, index) => {
             if (segment !== to[index]) aliases.set(segment, to[index]!);
@@ -469,7 +478,11 @@ export function createPassThrough(
       };
       renewal.failed = undefined;
       const now = renewedAddress(relay.playbackId, trigger);
-      if (now === trigger || (linkExpiry(now) ?? Infinity) - Date.now() < renewAhead)
+      if (
+        now === trigger
+          ? !segment || finished.has(trigger)
+          : (linkExpiry(now) ?? Infinity) - Date.now() < renewAhead
+      )
         renewal.spent = true;
       return true;
     })()
@@ -484,8 +497,8 @@ export function createPassThrough(
   };
   // Whether a refused address now reads from a renewed one: this request renewed the item, or
   // another just did. A renewed item refused again is spent.
-  const renewedFor = async (relay: Relay, url: string, address: string) =>
-    (await renew(relay, address)) || renewedAddress(relay.playbackId, url) !== address;
+  const renewedFor = async (relay: Relay, url: string, address: string, segment = false) =>
+    (await renew(relay, address, segment)) || renewedAddress(relay.playbackId, url) !== address;
   // A playlist through the shared read; a refusal renews the link once and reads again.
   const playlistOf = async (relay: Relay, url: string) => {
     let address = url;
@@ -851,7 +864,12 @@ export function createPassThrough(
           await upstream.body?.cancel().catch(() => {});
           upstream = await read();
         }
-        if (refusal(upstream.status, !file) && (await renewedFor(relay, url, address))) {
+        // An endless stream's segment keeps its refused address: the player reads new ones.
+        if (
+          refusal(upstream.status, !file) &&
+          (await renewedFor(relay, url, address, !file)) &&
+          (file || renewedAddress(playbackId, url) !== address)
+        ) {
           await upstream.body?.cancel().catch(() => {});
           upstream = await read();
           if (refusal(upstream.status, !file) && relay.renewal) {

@@ -346,7 +346,14 @@ test("a sender clock that steps back plays on without a gap, at the sender's tim
   expect(stream.list.length).toBe(1);
   expect(stream.current().stats.late).toBe(50);
   expect(played).toBe(50 * packet);
-  // Thirty seconds back, no longer ahead: timed by arrival, a quarter second after it arrives.
+  // Thirty seconds back, no longer ahead: dropped as late for as long as UxPlay may hold a packet
+  // back, then timed by arrival, a quarter second after it arrives.
+  for (let index = 0; index <= 200; index++) {
+    stream.send(1250 - 30_000, 3);
+    time.advance(10);
+    stream.current().tick();
+  }
+  expect(stream.list.length).toBe(1);
   stream.send(1250 - 30_000, 3);
   expect(stream.list.length).toBe(2);
   let heard = 0;
@@ -357,4 +364,31 @@ test("a sender clock that steps back plays on without a gap, at the sender's tim
     heard += values(stream.current().tick().pcm).filter((value) => value === 3).length;
   }
   expect(heard).toBe((50 - 25) * packet); // 500 ms out, less the quarter second before it
+});
+
+test("a sender-timed stream drops what arrives late after a stall and plays on at the sender's time", () => {
+  const time = wallClock(1_800_000_000_000),
+    stream = sources(time);
+  for (let index = 0; index < 20; index++) {
+    stream.send(1750, 1);
+    time.advance(10);
+    stream.current().tick();
+  }
+  // 800 ms with nothing from the sender (Wi-Fi or Core stalled), then what it sent meanwhile at once:
+  // the first of it now under a second ahead.
+  for (let index = 0; index < 80; index++) {
+    time.advance(10);
+    stream.current().tick();
+  }
+  for (let index = 0; index < 80; index++) stream.send(950 + index * 10, 2);
+  let heard = 0;
+  for (let index = 0; index < 300; index++) {
+    stream.send(1750, 3);
+    time.advance(10);
+    heard += values(stream.current().tick().pcm).filter((value) => value === 3).length;
+  }
+  expect(stream.list.length).toBe(1);
+  expect(stream.current().timed()).toBe(true);
+  expect(stream.current().stats.late).toBeGreaterThan(0);
+  expect(heard).toBeGreaterThan(100 * packet);
 });

@@ -130,4 +130,11 @@ test("a live picture-only group plays on its plain timeline when the decoder for
   await until(() => states.at(-1)?.timeline?.mapping === "unavailable");
   assert.notEqual(states.at(-1)!.status, "error");
   assert.equal(states.at(-1)!.error, null);
+  // A speaker joins: the decoder runs again, and its pictures follow the stream's timestamps again.
+  group.members([{ deviceId: "speaker", level: 100 }]);
+  await until(() => children.length > 1);
+  group.members([{ deviceId: "speaker", level: 90 }]);
+  assert.equal(states.at(-1)!.volume, 90);
+  assert.equal(states.at(-1)!.timeline, undefined);
+  children[1]!.emit("close", 1);
 });

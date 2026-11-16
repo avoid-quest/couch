@@ -55,10 +55,12 @@ the password check and one sender at a time.
   second after it arrives, plus the relaxed send-ahead. So does a sender's time
   that isn't 1–3 s ahead (a Mac's is 1.6–1.75 s): a sender that never answers
   UxPlay's clock requests, whose sound is due as it arrives, or one whose time
-  jumps far ahead or back. That stream becomes another source, timed by arrival
-  for the rest of the connection. A sender's clock that steps back within the
-  window plays on without a gap: the part that overlaps sound already sent is
-  dropped.
+  jumps more than 3 s ahead or stays under 1 s ahead for 2 s (as long as UxPlay
+  may hold a packet for resends). That stream becomes another source, timed by
+  arrival for the rest of the connection. A packet that arrives under 1 s ahead
+  (a Wi-Fi stall, a resend) is dropped, and the stream stays on the sender's
+  time. A sender's clock that steps back within the window plays on without a
+  gap: the part that overlaps sound already sent is dropped.
 - A sender becomes a source only when its sound arrives on a connection UxPlay
   authenticated (`-d 1` log lines). One UxPlay process serves one sender: after
   it leaves, Core restarts UxPlay, because log and sound arrive on separate pipes

@@ -1020,8 +1020,10 @@ export async function createHub(options: HubOptions) {
       observeSynced(playback);
       // Core's decoder for the clock alone failed, and the group plays on (scheduled-audio.ts):
       // its screens stop mapping timestamps, and a speaker that joins needs a resolution with sound.
-      if (mapped !== "hls" || followOf(playback).timeline?.mapping !== "unavailable") return;
-      if (playback.resolved?.output)
+      // Once that speaker's decoder runs, they map them again.
+      const now = followOf(playback).timeline?.mapping;
+      if (mapped === now || !player.playbackId) return;
+      if (now === "unavailable" && playback.resolved?.output)
         playback.resolved.output = { ...playback.resolved.output, sound: false };
       for (const tab of playback.screens.keys())
         if (browserLoads.get(tab)?.playbackId === player.playbackId)
@@ -1029,7 +1031,7 @@ export async function createHub(options: HubOptions) {
             tab,
             playerCommand({
               type: "follow",
-              playbackId: player.playbackId!,
+              playbackId: player.playbackId,
               follow: followOf(playback),
             }),
           );

@@ -794,3 +794,81 @@ test("a failed renewal is tried once more; a spent one that's refused lets a lat
   expect(renewal.spent).toBe(true);
   expect(renewal.dead).toBe(true);
 });
+
+test("a finished playlist's refused init file or key renews the item and reads its renewed one", async () => {
+  const f = fixture();
+  const variant = "https://media.example/vod.m3u8";
+  const segments = (sig: string) =>
+    `#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-TARGETDURATION:2\n#EXT-X-MAP:URI="https://media.example/init.mp4?sig=${sig}"\n#EXT-X-KEY:METHOD=AES-128,URI="https://media.example/key?sig=${sig}"\n#EXTINF:2,\nhttps://media.example/1.m4s?sig=${sig}\n#EXT-X-ENDLIST\n`;
+  f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${variant}\n`);
+  f.manifest(variant, segments("old"));
+  let runs = 0;
+  const renewal = {
+    current: { source },
+    renew: async () => {
+      runs++;
+      f.manifest(variant, segments("new"));
+      return { source };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const text = await (await f.serve(await firstLink(f, media.source))).text();
+  const uris = [...text.matchAll(/URI="([^"]+)"/g)].map((match) => match[1]!);
+  destination(uris[0]!, "bytes", "https://media.example/init.mp4?sig=old");
+  destination(uris[1]!, "bytes", "https://media.example/key?sig=old");
+  // A receiver joining after the links expired.
+  for (const name of ["init.mp4", "key"])
+    f.replies.set(`https://media.example/${name}?sig=old`, () =>
+      response(`https://media.example/${name}?sig=old`, "", { status: 403 }),
+    );
+  expect((await f.serve(uris[0]!)).status).toBe(200);
+  expect(f.requests.at(-1)!.url).toBe("https://media.example/init.mp4?sig=new");
+  expect((await f.serve(uris[1]!)).status).toBe(200);
+  expect(f.requests.at(-1)!.url).toBe("https://media.example/key?sig=new");
+  expect(runs).toBe(1);
+});
+
+test("an endless stream's refused segment renews the item and leaves a later expiry free to renew it", async () => {
+  const f = fixture();
+  const live = (sig: string) => `https://media.example/live.m3u8?sig=${sig}`,
+    segment = (sig: string) => `https://media.example/${sig}.ts?sig=${sig}`;
+  const publish = (sig: string) => {
+    f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${live(sig)}\n`);
+    f.manifest(live(sig), `#EXTM3U\n#EXT-X-TARGETDURATION:0.002\n#EXTINF:2,\n${segment(sig)}\n`);
+  };
+  publish("a");
+  const signatures = ["b", "c"];
+  let runs = 0;
+  const renewal: NonNullable<Parameters<typeof f.relay.prepare>[1]["renewal"]> = {
+    current: { source },
+    renew: async () => {
+      publish(signatures[runs++]!);
+      return { source };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const variant = await firstLink(f, media.source);
+  for (const [index, sig] of ["a", "b"].entries()) {
+    const link = await firstLink(f, variant);
+    destination(link, "bytes", segment(sig));
+    // Its link expired: the item renews, and the player's next playlist read names fresh segments.
+    f.replies.set(segment(sig), () => response(segment(sig), "", { status: 403 }));
+    expect((await f.serve(link)).status).toBe(403);
+    expect(runs).toBe(index + 1);
+    expect(renewal.spent).toBeFalsy();
+    await Bun.sleep(5);
+  }
+  expect(await firstLink(f, variant)).toContain(encodeURIComponent(segment("c")));
+});
