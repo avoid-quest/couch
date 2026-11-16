@@ -2956,7 +2956,19 @@ export async function createHub(options: HubOptions) {
           status: state.player.status,
           outputs: outputViews.get(playback)!,
           delivery: deliveryOf(playback),
-          intent: intentOf(playback) ?? "relaxed",
+          mode:
+            intentOf(playback) === "live"
+              ? "live"
+              : deliveryOf(playback) === "scheduled"
+                ? "relaxed"
+                : "direct",
+          plays: !source
+            ? "media"
+            : source.kind === "airplay"
+              ? "airplay"
+              : source.video
+                ? "screen"
+                : "sound",
           ...(mpvPlayback === playback ? { hostOnly: true } : {}),
           ...(common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}),
           ...(playback.held ? { held: playback.held } : {}),

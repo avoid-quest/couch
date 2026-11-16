@@ -124,6 +124,8 @@ export type Output = {
   state?: ReceiverState;
   error?: string;
 };
+// mode: Direct (one device plays it), Relaxed (several devices in step) or Live. plays: what it plays,
+// media from the queue or a capture: a sound, a screen or AirPlay.
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
@@ -139,7 +141,8 @@ export type PlaybackSummary = {
   choosing?: number;
   held?: Output;
   inSync?: boolean;
-  intent?: "relaxed" | "live";
+  mode: "direct" | "relaxed" | "live";
+  plays: "media" | "sound" | "screen" | "airplay";
   delivery?: "direct" | "scheduled" | "webrtc" | "mpv";
 };
 export type PlaybackControls = {
