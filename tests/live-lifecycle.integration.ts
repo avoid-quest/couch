@@ -145,6 +145,30 @@ test(
 );
 
 test(
+  "a listener that connects again starts at its new need, not the step its last session reached",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = await fixture(t),
+      first = await f.listener(1, AudioCodec.PCM, 205);
+    assert.equal((await f.host.command(publication)).ok, true);
+    assert.equal(
+      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
+        .ok,
+      true,
+    );
+    const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
+    await until(() => first.frames.length > 20);
+    const earlier = delays(first.frames, input.origin)[0]!;
+    // A reloaded page: its player starts again with no late steps and declares only its need.
+    await first.client.disconnect();
+    const again = await f.listener(1, AudioCodec.PCM, 65);
+    await until(() => again.frames.length > 20);
+    const step = delays(again.frames, input.origin).at(-1)!;
+    assert.ok(step <= earlier - 100_000, `its new step, not ${step} µs after ${earlier} µs`);
+  },
+);
+
+test(
   "two Live shares keep distinct samples, audiences and buffers when one publisher crashes",
   { timeout: 15_000 },
   async (t) => {

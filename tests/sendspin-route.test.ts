@@ -229,6 +229,16 @@ test("a codec change keeps the Media Session that Couch set when the SDK's destr
   }
 });
 
+const join = (origin = credentials.origin) =>
+  sampling(async () => {
+    listen(true, false, { ...credentials, origin }, "Fixture", { codec: "pcm" });
+    await settle();
+  });
+const leave = async () => {
+  listen(false, false, credentials, "Fixture");
+  await settle();
+};
+
 test("a listener steps for chunks it received and couldn't play, not for chunks Core never sent", async () => {
   useWebAudio();
   const tick = await sampling(async () => {
@@ -294,6 +304,11 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   // seconds after it show whether loss still recurs.
   for (let i = 0; i < 9; i++) await second(50, 10, false, 105);
   expect(player.buffers).toEqual([42, 52]);
+  // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
+  await leave();
+  stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));
+  (await join())(2);
+  expect(players.at(-1)!.buffers).toEqual([42]);
 });
 
 test("a listener steps when its player runs dry holding chunks, not for a gap Core left or a late arrival", async () => {
@@ -349,77 +364,6 @@ test("a listener steps when its player runs dry holding chunks, not for a gap Co
   expect(player.buffers).toEqual([42]);
   second("dry");
   expect(player.buffers).toEqual([42, 52]);
-});
-
-const key = "couch.live-steps:http://localhost";
-const join = (origin = credentials.origin) =>
-  sampling(async () => {
-    listen(true, false, { ...credentials, origin }, "Fixture", { codec: "pcm" });
-    await settle();
-  });
-const leave = async () => {
-  listen(false, false, credentials, "Fixture");
-  await settle();
-};
-
-test("a listener that joins again starts at the steps it remembered with that Couch", async () => {
-  stored.set(key, JSON.stringify({ steps: 2, spare: 0 }));
-  let tick = await join();
-  tick(2);
-  // Its own need, 27 + 15, and two steps.
-  expect(players.at(-1)!.buffers).toEqual([62]);
-  await leave();
-  // Another Couch starts from its own.
-  tick = await join("http://elsewhere");
-  tick(2);
-  expect(players.at(-1)!.buffers).toEqual([42]);
-  await leave();
-  // What storage holds that isn't what a device remembers counts as nothing.
-  stored.set(key, "not steps");
-  tick = await join();
-  tick(2);
-  expect(players.at(-1)!.buffers).toEqual([42]);
-});
-
-test("a minute with two steps' slack starts the next listen a step earlier; a lost chunk undoes it at once", async () => {
-  useWebAudio();
-  stored.set(key, JSON.stringify({ steps: 1, spare: 0 }));
-  const tick = await join();
-  const player = players.at(-1)!,
-    context = new Context(),
-    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
-    core = new FixtureCore(),
-    outputUs = player.syncInfo.outputLatencyMs * 1000;
-  scheduler.initAudioContext();
-  // The context's clock is the synced clock. Each chunk is sent 95 ms and received 100 ms before
-  // its stamp, so the player starts it 73 ms before its start passes. `late` arrives after it.
-  const second = (late?: number) => {
-    for (let chunk = 0; chunk < 50; chunk++) {
-      serverNowUs += 20_000;
-      context.currentTime = serverNowUs / 1e6;
-      const header = new DataView(new ArrayBuffer(13));
-      header.setUint8(0, 4);
-      header.setUint32(9, 95_000);
-      core.handleBinaryMessage(header.buffer);
-      scheduler.handleDecodedChunk({ serverTimeUs: serverNowUs + (chunk === late ? 0 : 100_000) });
-      scheduler.processAudioQueue(outputUs);
-    }
-    tick(1);
-  };
-  for (let i = 0; i < 40; i++) second();
-  expect(player.buffers).toEqual([52]);
-  // Counted from the first declaration, which takes the first two seconds.
-  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 38 });
-  // A lost chunk: what storage holds is undone that second, so a reload can't use it.
-  second(10);
-  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 0 });
-  for (let i = 0; i < 60; i++) second();
-  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 1, spare: 60 });
-  await leave();
-  const again = await join();
-  again(2);
-  expect(players.at(-1)!.buffers).toEqual([42]);
-  expect(JSON.parse(stored.get(key)!)).toEqual({ steps: 0, spare: 0 });
 });
 
 test("chunks a guarded cutover discards never count, even when a sample comes before the next start", async () => {

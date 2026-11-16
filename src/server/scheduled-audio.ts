@@ -386,9 +386,12 @@ export function createScheduledAudio(options: {
         wire = session && wireOf(session);
       const member = members.find((member) => member.deviceId === clientId);
       if (!member) return;
+      // A session that ended or was replaced ends its Live step: a reloaded page starts with no late
+      // steps, so Core places it afresh too. A player that only reconnected declares the steps it kept.
       for (const previous of run?.cursors.keys() ?? [])
         if (previous.getClientId() === clientId && previous !== session) {
           run!.cursors.delete(previous);
+          run!.live?.left(clientId);
           previous.sendStreamClear();
         }
       if (!session || !run || run.timelineOnly || run.base === undefined) return;

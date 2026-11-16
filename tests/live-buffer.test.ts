@@ -1,13 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   declareLiveBuffer,
-  nextEvidence,
   nextLateSteps,
   noLateSteps,
-  restoredLateSteps,
-  startingSteps,
   withLateSteps,
-  type Evidence,
   type LateSteps,
   type LossSecond,
 } from "../src/client/session/live-buffer";
@@ -82,19 +78,18 @@ test("a step counts as applied only when Core sends its chunks a step further ah
   late = run(late, [second(20, 105)]);
   expect(late).toMatchObject({
     steps: 1,
-    kept: 1,
     caused: { measure: "chunks", count: 4 },
     seconds: [],
     phase: { kind: "watching" },
   });
 });
 
-test("a step Core didn't apply (at its limit) isn't judged or kept, and recurring loss steps again", () => {
+test("a step Core didn't apply (at its limit) isn't judged, and recurring loss steps again", () => {
   let late = run(noLateSteps, [...recurring(2), ...repeat(3, second(1))]);
-  expect(late).toMatchObject({ steps: 1, kept: 0, phase: { kind: "watching" } });
+  expect(late).toMatchObject({ steps: 1, phase: { kind: "watching" } });
   expect(late.caused).toBeUndefined();
   late = run(late, [second(1)]);
-  expect(late).toMatchObject({ steps: 2, kept: 0, phase: { kind: "moving" } });
+  expect(late).toMatchObject({ steps: 2, phase: { kind: "moving" } });
 });
 
 test("a step after which loss doesn't recur is kept", () => {
@@ -259,127 +254,6 @@ test("each late step adds 10 ms to the declaration, within Core's limit", () => 
   expect(withLateSteps(75, 0)).toBe(75);
   expect(withLateSteps(75, 1)).toBe(85);
   expect(withLateSteps(4990, 1)).toBe(5000);
-});
-
-// One listen of `count` seconds from what the device stored, where Core applies each step the
-// listener declares by the next second. `at` gives each second, by the steps Core plays it at.
-const listenFor = (
-  saved: unknown,
-  count: number,
-  at: (index: number, applied: number) => LossSecond,
-) => {
-  let evidence: Evidence = startingSteps(JSON.parse(JSON.stringify(saved ?? null)));
-  let late = restoredLateSteps(evidence.steps);
-  let applied = late.steps,
-    highest = late.steps;
-  for (let index = 0; index < count; index++) {
-    const each = at(index, applied);
-    late = nextLateSteps(late, each);
-    evidence = nextEvidence(evidence, late, each);
-    // Core only moves a listener later while it listens.
-    applied = Math.max(applied, late.steps);
-    highest = Math.max(highest, late.steps);
-  }
-  // What storage keeps.
-  return { saved: { steps: evidence.steps, spare: evidence.spare }, late, highest };
-};
-const placed =
-  (lost: (index: number, applied: number) => number) => (index: number, applied: number) =>
-    second(lost(index, applied), 95 + 10 * applied);
-
-test("a device remembers the steps that cured its loss, and starts there next time", () => {
-  // Two spells of 4 chunks every ten seconds; one step halves them, two cure them.
-  const curedByTwo = placed((index, applied) =>
-    applied >= 2 || index % 5 !== 4 ? 0 : applied === 1 ? 1 : 4,
-  );
-  const first = listenFor(undefined, 180, curedByTwo);
-  expect(first.late.steps).toBe(2);
-  expect(first.saved.steps).toBe(2);
-  const again = listenFor(first.saved, 120, curedByTwo);
-  expect(again).toMatchObject({ highest: 2, saved: { steps: 2 } });
-  expect(again.late.unhelpful).toBe(0);
-  // A listen that ends before its last step held a minute remembers only the one before it.
-  expect(listenFor(undefined, 60, curedByTwo).saved.steps).toBe(1);
-});
-
-test("loss no step cures doesn't ratchet across joins beyond what one listen reaches", () => {
-  const steady = placed(() => 1);
-  // A spell of 2 chunks every 20 s, whatever the step: three in a minute.
-  const spells = placed((index) => (index % 20 === 19 ? 2 : 0));
-  for (const loss of [steady, spells])
-    for (const length of [12, 30, 90, 300]) {
-      const once = listenFor(undefined, length, loss);
-      let saved: unknown,
-        highest = 0;
-      for (let join = 0; join < 200; join++) {
-        const listened = listenFor(saved, length, loss);
-        saved = listened.saved;
-        highest = Math.max(highest, listened.highest);
-      }
-      expect(highest).toBeLessThanOrEqual(once.highest);
-      expect(saved).toEqual(once.saved);
-    }
-  // Spells of 1 to 5 chunks at random, one every 20 s on average. A step the halving rule judges
-  // helpful by chance is kept, in one listen as across joins; joins still climb less.
-  for (const length of [90, 300]) {
-    let seed = 7;
-    const random = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31;
-    const spell = placed(() => (random() < 1 / 20 ? 1 + Math.floor(random() * 5) : 0));
-    let saved: unknown,
-      highest = 0;
-    for (let join = 0; join < 100; join++) {
-      const listened = listenFor(saved, length, spell);
-      saved = listened.saved;
-      highest = Math.max(highest, listened.highest);
-    }
-    seed = 7;
-    const once = listenFor(undefined, 100 * length, spell).highest;
-    expect(highest).toBeLessThan(once);
-  }
-});
-
-test("a remembered step comes off only after a minute in which a step earlier would have lost nothing", () => {
-  // Each step adds 10 ms to every chunk's slack.
-  const slack =
-    (worstMs: (index: number) => number) =>
-    (index: number, applied: number): LossSecond => ({
-      ...second(0, 95 + 10 * applied),
-      slackMs: worstMs(index) + 10 * applied,
-    });
-  // Settled at two steps: once in 20 s a chunk starts with only 10 ms to spare, under a step's
-  // slack one step earlier. However many listens, it stays.
-  const tails = slack((index) => (index % 20 === 19 ? -10 : 30));
-  let saved: unknown = { steps: 2, spare: 0 };
-  for (let join = 0; join < 100; join++) saved = listenFor(saved, 45, tails).saved;
-  expect(saved).toMatchObject({ steps: 2 });
-  // Two steps' slack for every chunk: a minute of it over short listens starts the next listen a
-  // step earlier, once; there each chunk has 15 ms, so it stays.
-  const roomy = slack(() => 5);
-  saved = { steps: 2, spare: 0 };
-  for (let join = 0; join < 3; join++) saved = listenFor(saved, 20, roomy).saved;
-  expect(saved).toEqual({ steps: 2, spare: 60 });
-  expect(listenFor(saved, 1, roomy).highest).toBe(1);
-  for (let join = 0; join < 100; join++) saved = listenFor(saved, 20, roomy).saved;
-  expect(saved).toEqual({ steps: 1, spare: 0 });
-  // A lost chunk, or Core placing it elsewhere, starts the minute again.
-  const at = (sendAheadMs: number, lost = 0) => ({ ...second(lost, sendAheadMs), slackMs: 80 });
-  const counted = [at(115), at(115)].reduce(
-    (evidence: Evidence, each) => nextEvidence(evidence, restoredLateSteps(2), each),
-    { steps: 2, spare: 50 },
-  );
-  expect(counted).toEqual({ steps: 2, spare: 52, sendAheadMs: 115 });
-  expect(nextEvidence(counted, restoredLateSteps(2), at(145, 1))).toEqual({ steps: 2, spare: 0 });
-  expect(nextEvidence(counted, restoredLateSteps(2), at(125))).toEqual({ steps: 2, spare: 0 });
-  // Anything else stored counts as nothing learned.
-  for (const stored of [
-    null,
-    "2",
-    { steps: 2, quietSeconds: 60 },
-    { steps: -1, spare: 0 },
-    { steps: 1.5, spare: 0 },
-    { steps: 501, spare: 0 },
-  ])
-    expect(startingSteps(stored)).toEqual({ steps: 0, spare: 0 });
 });
 
 test("each late step moves a listener 10 ms later", () => {

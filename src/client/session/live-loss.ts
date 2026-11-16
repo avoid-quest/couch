@@ -17,9 +17,6 @@ import type { LossSecond } from "./live-buffer";
 // sync recorrection or a Sync delay or clock change): it starts nothing in its 0.3 s guard and
 // drops what falls in it, however early it arrived. They're excused from the cutover on, so a
 // sample before the player starts its next chunk can't count them.
-// Each start also measures the chunk's slack: how long before it had to start (where the chunk
-// before it ended, when it follows on from it) the player started it. It covers the network,
-// decoding and the player's batch, so a step earlier takes exactly a step off it.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
@@ -34,8 +31,6 @@ let chain: { end: number; stampEndUs: number } | undefined;
 // this, two chunks join. Well under a chunk (15 or 20 ms), so a chunk Core never sent never joins.
 const joinSec = 0.001;
 let dried = 0;
-// The least slack of the chunks started since the last sample (s).
-let slack = Infinity;
 // The stamps each recent guarded cutover may have discarded (µs).
 let cuts: { fromUs: number; toUs: number }[] = [];
 // RECORRECTION_CUTOVER_GUARD_SEC (recorrection-monitor.js), which the SDK doesn't export.
@@ -154,7 +149,6 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
       const [when = 0, offset = 0] = args,
         now = this.context.currentTime;
       const follows = chain && Math.abs(chunk.stampUs - chain.stampEndUs) <= joinSec * 1e6;
-      slack = Math.min(slack, (follows ? chain!.end : when) - now);
       if (follows && chunk.at <= chain!.end && now > chain!.end + joinSec) dried++;
       chain = {
         end: Math.max(when, now) + (buffer.duration - offset) / this.playbackRate.value,
@@ -173,12 +167,11 @@ export function countingLiveLoss(on: boolean) {
   chain = undefined;
   cuts = [];
   dried = 0;
-  slack = Infinity;
 }
 
 // Once a second: the chunks received since the last sample, those lost (dropped or started after a
 // silence), how far ahead of their stamps Core sent them (the median rises when Core moves this
-// listener a step later), and the least slack of those started. Undefined when the second can't be
+// listener a step later). Undefined when the second can't be
 // counted: the listener wasn't playing on a context that ran throughout it.
 export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
   const context = scheduler?.getAudioContext();
@@ -199,11 +192,9 @@ export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond |
     chunks: received,
     lost: lost + dried,
     sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
-    slackMs: Number.isFinite(slack) ? slack * 1000 : undefined,
   };
   received = 0;
   dried = 0;
-  slack = Infinity;
   sendAheads = [];
   interrupted = false;
   return sounding ? second : undefined;

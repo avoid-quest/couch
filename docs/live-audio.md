@@ -80,9 +80,7 @@ wrong clock still shows the right time.
   change, which starts nothing for 0.3 s) never count: from the cutover on,
   stamps from the first whose start hadn't passed to the guard's end, plus the
   100 ms grace, are excused, so a sample before the player's next start can't
-  count them. Each start also measures the chunk's slack: how long before it had
-  to start (where the chunk before it ended, when it follows on) the player
-  started it, network, decoding and the player's batch included.
+  count them.
 - A Receiver that keeps losing chunks declares one more 10 ms step
   (`nextLateSteps`) when loss recurs: the last ten seconds lost chunks in two
   separate spells, or three seconds running, or the last minute lost chunks in
@@ -91,8 +89,8 @@ wrong clock still shows the right time.
   samples. Core has applied a step when its chunks leave it half a step further
   ahead of their stamps (Sendspin's `send_ahead`, which Core writes as it sends,
   so the network can't move it). Core applies every step a listener asks for,
-  short of its 5 s limit; one not seen within three seconds isn't judged or
-  remembered. An applied step is judged
+  short of its 5 s limit; one not seen within three seconds isn't judged. An
+  applied step is judged
   when loss recurs after it: the chunks lost in the ten seconds that show it
   against those of the ten seconds that caused it. Half as many or fewer: it
   helped, and the next step follows. Spells over a minute never show that a step
@@ -106,20 +104,9 @@ wrong clock still shows the right time.
   that listener at most one step later, which the player takes by playing
   slightly slower for about 8 s. Steps that don't help stay about nine an hour
   (90 ms) in a long listen.
-- A device remembers one number per Couch (by origin), in the browser storage
-  the SDK keeps its Sync delay in (`couch.live-steps:<origin>`): the late steps
-  its last listen ended at that held. A step holds when Core applied it and it
-  wasn't judged unhelpful: it helped, or the last minute, all of it after the
-  step, lost nothing. A listen that ends before its step is judged can't tell
-  whether loss would have recurred, so only a lossless minute keeps it, and loss
-  no step cures doesn't climb across joins. The next listen declares them from
-  its first declaration as steps never doubted, with no pause, verdict or cause
-  carried over. A remembered step comes off only on evidence: a minute of
-  listening at it at one placement (the same `send_ahead`), over any number of
-  listens and from each listen's first declaration, in which no chunk was lost
-  and every chunk started had two steps' slack starts the next listen a step
-  earlier. There each would still have had a step's slack. The evidence is
-  stored as it changes, so a loss undoes it before a reload could use it.
+- Each listen starts with no late steps and learns its own: nothing is
+  remembered across listens, so a step one listen needed never holds a later
+  one back, and loss no step cures can't climb across joins.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
   the highest of each second, set and raised by the same rule. The first second
@@ -130,8 +117,8 @@ wrong clock still shows the right time.
   few ms apart. It hears
   nothing until the input-side time and its own need are known (about two
   seconds), so it moves once. Its step only rises while it listens; Core forgets
-  it when it leaves or the input restarts, and the listener declares its
-  remembered steps again when it comes back. When
+  it when it leaves, when its session ends or is replaced (a reload starts with
+  no late steps), or when the input restarts. When
   the capture restarts, the last input-side time stands in until the new
   encoder's is measured, so listeners keep their steps. A player that reports
   its state without declaring a buffer (another Sendspin player) needs at least

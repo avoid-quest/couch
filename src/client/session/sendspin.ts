@@ -5,16 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import {
-  declareLiveBuffer,
-  nextEvidence,
-  nextLateSteps,
-  noLateSteps,
-  restoredLateSteps,
-  startingSteps,
-  withLateSteps,
-  type Evidence,
-} from "./live-buffer";
+import { declareLiveBuffer, nextLateSteps, noLateSteps, withLateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 import { logLiveMargins, noteLiveDropped } from "./live-margin";
 import { countingLiveLoss, countLiveLoss, reportsOutputLatency, sampleLiveLoss } from "./live-loss";
@@ -74,22 +65,6 @@ let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
 let lastLatency: number | undefined;
 let lateSteps = noLateSteps;
-// What this device remembers with the Couch it listens to, in the storage the SDK keeps its Sync
-// delay in: written whenever it changes, so a reload never starts from evidence a loss had undone.
-let remembered: Evidence = { steps: 0, spare: 0 };
-let rememberedKey: string | undefined;
-const remember = (next: Evidence) => {
-  if (rememberedKey && (next.steps !== remembered.steps || next.spare !== remembered.spare))
-    storage.setItem(rememberedKey, JSON.stringify({ steps: next.steps, spare: next.spare }));
-  remembered = next;
-};
-const rememberedIn = (key: string) => {
-  try {
-    return JSON.parse(storage.getItem(key) ?? "null") as unknown;
-  } catch {
-    return undefined;
-  }
-};
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
 // The player whose sound this tab unlocked. Until then its context is suspended and reports only
 // its base latency, too little a need; Core sends a listener nothing before it has declared one,
@@ -117,9 +92,6 @@ const updateBuffer = (created: SendspinPlayer, sample = false) => {
     const second = sampleLiveLoss(created, playing);
     noteLiveDropped(second?.lost ?? 0);
     if (second) lateSteps = nextLateSteps(lateSteps, second);
-    // Until its first declaration, a listener plays where Core put it before it knew its need.
-    if (second && declaredBufferMs !== undefined)
-      remember(nextEvidence(remembered, lateSteps, second));
   }
   needMs = declareLiveBuffer(needMs, latencyReadings);
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.steps);
@@ -142,13 +114,7 @@ export function listen(
     bufferScope = scope;
     latencyReadings = [];
     lastLatency = undefined;
-    rememberedKey = scope && credentials ? `couch.live-steps:${credentials.origin}` : undefined;
-    const saved = rememberedKey ? rememberedIn(rememberedKey) : null;
-    remembered = startingSteps(saved);
-    // A step taken off is stored at once, so a reload starts from it rather than lowering again.
-    if (rememberedKey && saved !== null && JSON.stringify(remembered) !== JSON.stringify(saved))
-      storage.setItem(rememberedKey, JSON.stringify(remembered));
-    lateSteps = restoredLateSteps(remembered.steps);
+    lateSteps = noLateSteps;
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
