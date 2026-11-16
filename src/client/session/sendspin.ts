@@ -5,7 +5,7 @@ import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer } from "./live-buffer";
+import { declareLiveBuffer, keepsLosing, withLateSteps } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
@@ -39,33 +39,55 @@ const useOutputTimestamps = (use: boolean) => {
 // frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
 // Starting a chunk on its nearest frame moves it by at most half a sample and joins it exactly.
 // A chunk the player speeds up or slows down has a fractional length, so it keeps its own start.
+// The same place sees late chunks: the player drops one whose start has passed (scheduler.js) and
+// counts nothing, and the next chunk then starts after the sound already ran out.
 let framesAligned = false;
+let played: { context: BaseAudioContext; end: number } | undefined;
+let lostSound = false;
 const alignStartsToFrames = () => {
   if (framesAligned || typeof AudioBufferSourceNode === "undefined") return;
   framesAligned = true;
   const start = AudioBufferSourceNode.prototype.start;
-  AudioBufferSourceNode.prototype.start = function (this: AudioBufferSourceNode, when, ...rest) {
-    const rate = this.context.sampleRate;
-    const aligned =
-      when === undefined || this.playbackRate.value !== 1 ? when : Math.round(when * rate) / rate;
-    return start.call(this, aligned, ...rest);
+  AudioBufferSourceNode.prototype.start = function (
+    this: AudioBufferSourceNode,
+    when?: number,
+    offset = 0,
+    ...rest
+  ) {
+    const rate = this.context.sampleRate,
+      speed = this.playbackRate.value,
+      now = this.context.currentTime;
+    const aligned = when === undefined || speed !== 1 ? when : Math.round(when * rate) / rate;
+    if (played?.context === this.context && played.end < now) lostSound = true;
+    const length = this.buffer ? (this.buffer.duration - offset) / speed : 0;
+    played = { context: this.context, end: Math.max(aligned ?? now, now) + length };
+    return start.call(this, aligned, offset, ...rest);
   };
 };
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
+let needMs: number | undefined;
 let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
+let lostSeconds: boolean[] = [];
+let lateSteps = 0;
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
-// sample: add this second's output reading. The room's delay is the host's and isn't declared here.
+// sample: add this second's readings. The room's delay is the host's and isn't declared here.
 const updateBuffer = (created: SendspinPlayer, sample = false) => {
   if (connected !== created || !liveSettings) return;
-  const latency =
-    sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced
-      ? created.syncInfo.outputLatencyMs
-      : NaN;
+  const playing =
+    sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced;
+  const latency = playing ? created.syncInfo.outputLatencyMs : NaN;
   if (Number.isFinite(latency) && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
-  const next = declareLiveBuffer(declaredBufferMs, latencyReadings);
+  if (playing) lostSeconds = [...lostSeconds, lostSound].slice(-liveReadings);
+  if (sample) lostSound = false;
+  if (keepsLosing(lostSeconds)) {
+    lateSteps++;
+    lostSeconds = [];
+  }
+  needMs = declareLiveBuffer(needMs, latencyReadings);
+  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps);
   if (next === undefined || next === declaredBufferMs) return;
   declaredBufferMs = next;
   created.setMinBufferMs(next);
@@ -84,7 +106,10 @@ export function listen(
   if (scope !== bufferScope) {
     bufferScope = scope;
     latencyReadings = [];
-    declaredBufferMs = undefined;
+    lostSeconds = [];
+    lostSound = false;
+    lateSteps = 0;
+    needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
   useOutputTimestamps(Boolean(live));
