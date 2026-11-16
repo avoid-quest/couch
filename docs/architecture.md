@@ -106,7 +106,7 @@ the official player (`@sendspin/sendspin-js`).
 - For ordinary media, one FFmpeg per Playback decodes the audio once and encodes
   once per wire format: Opus in 60 ms packets, or 100 ms PCM chunks for players
   without Opus (Firefox). Captured sources (Live, audio inputs, AirPlay) have one
-  encoder per source with 20 ms Opus frames and 15 ms PCM chunks ([Live audio](live-audio.md)). Every speaker gets the same timestamped chunk and applies its own
+  encoder per source with 5 ms Opus frames and 5 ms PCM chunks ([Live audio](live-audio.md)). Every speaker gets the same timestamped chunk and applies its own
   volume and delay.
 - Pause, seek and speed restart FFmpeg where the Playback is.
 - Screens showing a synced picture fetch the video themselves, play it muted and

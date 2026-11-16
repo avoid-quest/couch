@@ -316,9 +316,9 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   socket.pause();
   const before = frames.length;
   await sleep(4000);
-  // Live PCM chunks are 15 ms: three of the four seconds.
+  // Live PCM chunks are 5 ms: two and a half of the four seconds.
   assert.ok(
-    frames.length > before + 200,
+    frames.length > before + 500,
     "the healthy listener keeps receiving while another stalls",
   );
   assert.ok(writes < 10, `Core stops queueing audio for the stalled listener (${writes} writes)`);

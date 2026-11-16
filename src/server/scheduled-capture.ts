@@ -32,10 +32,17 @@ function captureWaveHeader(sampleRate: number, channels: number) {
   return header;
 }
 
-// Live frames are the spec's size: chunks of at least 15 ms (Opus has no 15 ms frame; it takes 2.5,
-// 5, 10, 20, 40 or 60). 5 ms frames cost a frame's fill less, but three or four times the packets and encrypted
-// writes per listener, and the player's per-chunk sync correction as much more often, which smears the sound.
-const liveFrameMs = { opus: 20, pcm: 15 };
+// Live frames are 5 ms: each listener's delay includes a whole frame's fill, so 20 ms Opus and 15 ms
+// PCM frames cost every listener 10 to 15 ms more. Smaller than the spec's 15 ms chunks, at four
+// times the packets and encrypted writes per listener, and the player's per-chunk sync correction
+// four times as often.
+const liveFrameMs = { opus: 5, pcm: 5 };
+// Constant bitrate: variable bitrate encodes silence as 3-byte packets, and FFmpeg's MPEG-TS muxer
+// gathers Opus packets until 170 bytes or 120 ms, so after any silence every frame left about 100 ms
+// late and Core's input side (which only rises) kept that for the run. A Live 5 ms frame at 320 kb/s
+// is 200 bytes and leaves at once; at 160 kb/s (100 bytes) each waited for the next. A relaxed
+// capture's 60 ms frames are 1200 bytes at 160 kb/s.
+const liveOpusBitrate = "320k";
 // Couch reads the Opus stream from the one MPEG-TS PID it asks FFmpeg for.
 const opusPid = 0x100;
 
@@ -124,11 +131,7 @@ export function createScheduledCapture(
           "libopus",
           ...(relaxed ? [] : ["-application", "lowdelay"]),
           "-b:a",
-          "160k",
-          // Constant bitrate: variable bitrate encodes silence as 3-byte packets, and FFmpeg's MPEG-TS
-          // muxer gathers Opus packets until 170 bytes or 120 ms, so after any silence every frame
-          // left about 100 ms late and Core's input side (which only rises) kept that for the run.
-          // At 160 kb/s each frame is 400 bytes or more and leaves at once.
+          relaxed ? "160k" : liveOpusBitrate,
           "-vbr",
           "off",
           "-frame_duration",
