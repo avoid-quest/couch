@@ -437,10 +437,48 @@ export function createScheduledAudio(options: {
         else session.sendStreamClear();
       });
     };
+    // Plays the timeline with no decoder: a picture-only item, or a live one whose pictures can't
+    // follow its timestamps.
+    const timelineOnly = (current: SyncedLoad) => {
+      const next: Run = {
+        timelineOnly: true,
+        start: state.position,
+        anchored: true,
+        speed: state.speed ?? 1,
+        queues: { opus: [], pcm: [] },
+        sent: { opus: [], pcm: [] },
+        cursors: new Map(),
+        pipes: {},
+        base: serverNowUs() + leadUs,
+        released: Infinity,
+        timer: setInterval(() => tick(next), 50),
+      };
+      run = next;
+      state = {
+        ...state,
+        // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
+        duration: current.live ? null : (current.duration ?? state.duration),
+        seekable: !current.live,
+        timeline: {
+          mapping: current.live ? "unavailable" : "media",
+          ...(current.live
+            ? { error: "This picture-only broadcast has no source timestamp mapping." }
+            : {}),
+        },
+      };
+      report();
+    };
     const fail = (message: string) => {
       if (logError) logError(load?.audioSource ?? load?.source, message);
       else if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
       else logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
+      // A decoder that runs only for its pictures' clock (no speaker) costs them only that clock,
+      // whatever failed (a stream with no sound, a link): they play on the plain timeline.
+      if (load && !members.length && !load.liveSourceId && !run?.timelineOnly) {
+        halt();
+        timelineOnly(load);
+        return;
+      }
       halt("end");
       state = { ...state, status: "error", buffering: false, error: message };
       report();
@@ -471,33 +509,7 @@ export function createScheduledAudio(options: {
         // pictures follow. Raw MPEG-TS screens can't map them, so those keep the plain timeline.
         const clock = !!current.live && !current.radio && !current.mpegts;
         if (((!members.length && !clock) || current.hasAudio === false) && !current.liveSourceId) {
-          const next: Run = {
-            timelineOnly: true,
-            start: state.position,
-            anchored: true,
-            speed: state.speed ?? 1,
-            queues: { opus: [], pcm: [] },
-            sent: { opus: [], pcm: [] },
-            cursors: new Map(),
-            pipes: {},
-            base: serverNowUs() + leadUs,
-            released: Infinity,
-            timer: setInterval(() => tick(next), 50),
-          };
-          run = next;
-          state = {
-            ...state,
-            // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
-            duration: current.live ? null : (current.duration ?? state.duration),
-            seekable: !current.live,
-            timeline: {
-              mapping: current.live ? "unavailable" : "media",
-              ...(current.live
-                ? { error: "This picture-only broadcast has no source timestamp mapping." }
-                : {}),
-            },
-          };
-          report();
+          timelineOnly(current);
           return;
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {

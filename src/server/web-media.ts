@@ -45,12 +45,18 @@ export type WebMediaSource = {
   metadata?: WebMediaMetadata;
   expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> };
   // The same resolution run again, for a link that expires or is refused: Core's relay swaps the
-  // fresh one in under the same item (pass-through.ts). current: the resolution in use.
+  // fresh one in under the same item (pass-through.ts). current: the resolution in use; headers:
+  // its request headers, which stay on Core. tried: the addresses that already renewed it.
+  // failed: one renewal failed, so the next is the last try. dead: spent, and still refused.
   renewal?: {
     current: Pick<WebMediaSource, "source" | "audioSource" | "hlsSelection">;
     renew: (signal: AbortSignal) => Promise<WebMediaSource>;
+    headers?: Record<string, string>;
     pending?: Promise<boolean>;
+    tried?: Set<string>;
+    failed?: boolean;
     spent?: boolean;
+    dead?: boolean;
   };
 };
 

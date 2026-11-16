@@ -589,3 +589,208 @@ test("a refused playlist renews the item once, and the links Core gave read the 
   destination(variant, "playlist", renewed);
   expect(runs).toBe(1);
 });
+
+// The first relay link in a rewritten playlist, read through Core.
+const firstLink = async (f: ReturnType<typeof fixture>, link: string) =>
+  (await (await f.serve(link)).text()).split("\n").find((line) => line && !line.startsWith("#"))!;
+
+test("a renewal reads a master whose address stayed the same afresh, with the renewed headers", async () => {
+  const f = fixture();
+  const stale = "https://media.example/720p.m3u8?sig=old";
+  const renewed = "https://media.example/720p.m3u8?sig=new";
+  f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${stale}\n`);
+  f.replies.set(stale, () => response(stale, "", { status: 403 }));
+  f.manifest(renewed, "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nhttps://media.example/9.ts\n");
+  let runs = 0;
+  const renewal = {
+    current: { source },
+    renew: async () => {
+      runs++;
+      f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${renewed}\n`);
+      return { source, headers: { Cookie: "session=renewed" } };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    { Cookie: "session=old" },
+    target,
+    signal(),
+  );
+  const link = await firstLink(f, media.source);
+  const answer = await f.serve(link);
+  expect(answer.status).toBe(200);
+  expect(await answer.text()).toContain("9.ts");
+  expect(runs).toBe(1);
+  const read = f.requests.findLast((request) => request.url === renewed)!;
+  expect(read.headers.get("cookie")).toBe("session=renewed");
+  // A late screen's own headers are the old ones; Core reads with the renewed ones.
+  const late = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    { Cookie: "session=old" },
+    target,
+    signal(),
+  );
+  await f.serve(late.source);
+  expect(f.requests.findLast((request) => request.url === source)!.headers.get("cookie")).toBe(
+    "session=renewed",
+  );
+});
+
+test("a finished playlist's refused segment renews the item and reads its renewed segment", async () => {
+  const f = fixture();
+  const variant = "https://media.example/vod.m3u8";
+  const segments = (sig: string) =>
+    `#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nhttps://media.example/1.ts?sig=${sig}\n#EXTINF:2,\nhttps://media.example/2.ts?sig=${sig}\n#EXT-X-ENDLIST\n`;
+  f.manifest(source, `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3300000\n${variant}\n`);
+  f.manifest(variant, segments("old"));
+  let runs = 0;
+  const renewal = {
+    current: { source },
+    renew: async () => {
+      runs++;
+      f.manifest(variant, segments("new"));
+      for (const index of [1, 2])
+        f.replies.set(`https://media.example/${index}.ts?sig=old`, (init) =>
+          response(String(index), "", { status: 403, headers: init?.headers as HeadersInit }),
+        );
+      return { source };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  const segment = await firstLink(f, await firstLink(f, media.source));
+  destination(segment, "bytes", "https://media.example/1.ts?sig=old");
+  // Paused past expiry: the old links are refused now.
+  f.replies.set("https://media.example/1.ts?sig=old", () =>
+    response("https://media.example/1.ts?sig=old", "", { status: 403 }),
+  );
+  const answer = await f.serve(segment);
+  expect(answer.status).toBe(200);
+  expect(runs).toBe(1);
+  expect(f.requests.at(-1)!.url).toBe("https://media.example/1.ts?sig=new");
+});
+
+test("an address renews the item once: a refused retry or an unchanged expiring address ends it", async () => {
+  const f = fixture();
+  const file = "https://media.example/video.mp4";
+  f.replies.set(file, () => response(file, "", { status: 403 }));
+  let runs = 0;
+  const renewal = {
+    current: { source: file },
+    renew: async () => {
+      runs++;
+      return { source: file };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source: file, publicNetwork: true, renewal },
+    {},
+    { ...target, relay: true },
+    signal(),
+  );
+  for (let request = 0; request < 3; request++)
+    expect((await f.serve(media.source)).status).toBe(403);
+  expect(runs).toBe(1);
+
+  // An endless playlist whose own address expires within a minute, and a renewal that keeps it.
+  const g = fixture();
+  const expiring = `https://media.example/live.m3u8?expires=${Math.floor(Date.now() / 1000) + 30}`;
+  g.manifest(
+    expiring,
+    "#EXTM3U\n#EXT-X-TARGETDURATION:0.002\n#EXTINF:2,\nhttps://media.example/1.ts\n",
+  );
+  let again = 0;
+  const live = await g.relay.prepare(
+    "playing",
+    {
+      source: expiring,
+      publicNetwork: true,
+      renewal: {
+        current: { source: expiring },
+        renew: async () => {
+          again++;
+          return { source: expiring };
+        },
+      },
+    },
+    {},
+    target,
+    signal(),
+  );
+  for (let reload = 0; reload < 4; reload++) {
+    expect((await g.serve(live.source)).status).toBe(200);
+    await Bun.sleep(5);
+  }
+  expect(again).toBe(1);
+});
+
+test("a 404 renews only when a fresh read repeats it", async () => {
+  const f = fixture();
+  let answers = 0;
+  f.replies.set(source, () =>
+    answers++
+      ? response(source, "#EXTM3U\n#EXT-X-ENDLIST\n", {
+          headers: { "Content-Type": "application/vnd.apple.mpegurl" },
+        })
+      : response(source, "", { status: 404 }),
+  );
+  let runs = 0;
+  const renewal = {
+    current: { source },
+    renew: async () => {
+      runs++;
+      return { source };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source, publicNetwork: true, renewal },
+    {},
+    target,
+    signal(),
+  );
+  expect((await f.serve(media.source)).status).toBe(200);
+  expect(runs).toBe(0);
+});
+
+test("a failed renewal is tried once more; a spent one that's refused lets a later load resolve afresh", async () => {
+  const f = fixture();
+  const stale = "https://media.example/video.mp4?sig=old",
+    fresh = "https://media.example/video.mp4?sig=new";
+  f.replies.set(stale, () => response(stale, "", { status: 403 }));
+  let runs = 0;
+  const renewal: NonNullable<Parameters<typeof f.relay.prepare>[1]["renewal"]> = {
+    current: { source: stale },
+    renew: async () => {
+      if (runs++ === 0) throw new Error("yt-dlp timed out");
+      return { source: fresh };
+    },
+  };
+  const media = await f.relay.prepare(
+    "playing",
+    { source: stale, publicNetwork: true, renewal },
+    {},
+    { ...target, relay: true },
+    signal(),
+  );
+  expect((await f.serve(media.source)).status).toBe(403);
+  expect(renewal.spent).toBeFalsy();
+  expect((await f.serve(media.source)).status).toBe(200);
+  expect(runs).toBe(2);
+  // The renewed link is refused too: the renewal is spent, and the item dead until resolved again.
+  f.replies.set(fresh, () => response(fresh, "", { status: 403 }));
+  expect((await f.serve(media.source)).status).toBe(403);
+  expect(runs).toBe(3);
+  expect((await f.serve(media.source)).status).toBe(403);
+  expect(runs).toBe(3);
+  expect(renewal.spent).toBe(true);
+  expect(renewal.dead).toBe(true);
+});

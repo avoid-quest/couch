@@ -432,6 +432,8 @@ export async function createHub(options: HubOptions) {
     hostMpv?: Set<string>;
     screens: Map<Socket<SocketData>, { playbackId: string; generation?: number; error?: string }>;
     heard?: PlayerState;
+    // The item whose group clock has no source timestamps (scheduled-audio's timeline-only run).
+    unmapped?: string;
     seen?: PlayerState;
     delivery?: string;
     pending?: {
@@ -481,6 +483,10 @@ export async function createHub(options: HubOptions) {
   ) =>
     (!wanted.picture || available?.picture !== false) &&
     (!wanted.sound || available?.sound !== false);
+  // A resolution whose renewal is spent and still refused: the next load resolves the item afresh.
+  const renewals = new WeakMap<Promise<unknown>, NonNullable<MediaSource["renewal"]>>();
+  const reusable = (resolved: NonNullable<Playback["resolved"]>) =>
+    !renewals.get(resolved.media)?.dead;
   const cachedResolution = (
     playback: Playback,
     playbackId: string,
@@ -489,6 +495,7 @@ export async function createHub(options: HubOptions) {
   ) => {
     const resolved = playback.resolved;
     return resolved?.playbackId === playbackId &&
+      reusable(resolved) &&
       (!tab || resolved.vp9 === tab.data.vp9) &&
       coversOutput(resolved.output, output)
       ? resolved
@@ -508,6 +515,7 @@ export async function createHub(options: HubOptions) {
     const found = [playback.resolved, ...(playback.resolutions ?? [])].find(
       (item) =>
         item?.playbackId === playbackId &&
+        reusable(item) &&
         (!tab || item.vp9 === tab.data.vp9) &&
         coversOutput(item.output, output),
     );
@@ -1002,10 +1010,29 @@ export async function createHub(options: HubOptions) {
     return liveStreams.ready(source.id, signal);
   };
   const newGroup = (playback: Playback) => {
+    playback.unmapped = undefined;
     const group = sendspin.group(playback.id, (player) => {
       if (playback.synced !== group) return;
+      const mapped = followOf(playback).timeline?.mapping;
       playback.heard = player;
+      playback.unmapped =
+        (player.timeline?.mapping === "unavailable" && player.playbackId) || undefined;
       observeSynced(playback);
+      // Core's decoder for the clock alone failed, and the group plays on (scheduled-audio.ts):
+      // its screens stop mapping timestamps, and a speaker that joins needs a resolution with sound.
+      if (mapped !== "hls" || followOf(playback).timeline?.mapping !== "unavailable") return;
+      if (playback.resolved?.output)
+        playback.resolved.output = { ...playback.resolved.output, sound: false };
+      for (const tab of playback.screens.keys())
+        if (browserLoads.get(tab)?.playbackId === player.playbackId)
+          send(
+            tab,
+            playerCommand({
+              type: "follow",
+              playbackId: player.playbackId!,
+              follow: followOf(playback),
+            }),
+          );
     });
     return group;
   };
@@ -1420,7 +1447,9 @@ export async function createHub(options: HubOptions) {
       kind: playback.media?.live ? "source-pts" : "position",
       generation: playback.loaded?.playbackId ?? stateOf(playback).player.playbackId ?? playback.id,
       mapping: playback.media?.live
-        ? playback.loaded?.mpegts || (!sourceOf(playback) && playback.media.hasAudio === false)
+        ? playback.loaded?.mpegts ||
+          (!sourceOf(playback) && playback.media.hasAudio === false) ||
+          (!!playback.unmapped && playback.unmapped === playback.loaded?.playbackId)
           ? "unavailable"
           : "hls"
         : "media",
@@ -3190,7 +3219,16 @@ export async function createHub(options: HubOptions) {
   };
   const mpv = createMpv((player) => mpvPlayback?.session.observe(player));
   const passThrough = createPassThrough((playbackId) => !!playing(playbackId));
-  async function resolveEntry(
+  // Each resolution keeps its renewal where a later load can see whether it is dead (reusable).
+  function resolveEntry(...args: Parameters<typeof resolveEntryOnce>) {
+    const media = resolveEntryOnce(...args);
+    void media.then(
+      ({ renewal }) => renewal && renewals.set(media, renewal),
+      () => {},
+    );
+    return media;
+  }
+  async function resolveEntryOnce(
     entry: QueueEntry,
     playbackId: string,
     signal: AbortSignal,
