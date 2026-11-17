@@ -70,7 +70,8 @@ type Run = {
   speed: number;
   queues: Record<Wire, Chunk[]>;
   sent: Record<Wire, { at: number; end: number; data: Buffer }[]>;
-  cursors: Map<SendspinSession, { start: number; sent?: number }>;
+  // measuring: it hasn't declared its need, and plays none of the chunks it's sent.
+  cursors: Map<SendspinSession, { start: number; sent?: number; measuring?: boolean }>;
   pipes: Partial<Record<Wire, Readable>>;
   base?: number;
   // A buffered source can resume after a gap. Earlier sound keeps its original play times.
@@ -81,6 +82,9 @@ type Run = {
   timer: ReturnType<typeof setInterval>;
 };
 
+// A speaker has been sent sound to play, not chunks to measure.
+const soundSent = (cursor: { sent?: number; measuring?: boolean }) =>
+  cursor.sent !== undefined && !cursor.measuring;
 // Relaxed's least send-ahead: screens follow the clock too, and they declare nothing. Live has none.
 const leadUs = 1_000_000;
 // Chunks go out this far ahead of their play time, within each player's buffer_capacity: Sendspin prefers
@@ -980,29 +984,42 @@ export function createScheduledAudio(options: {
         const list = current.queues[wire],
           sent = current.sent[wire];
         // Each Live listener gets the same chunks, stamped later by its own step.
-        // Couch's own listener declares a buffer of 0 until it has measured its output: it has no
-        // need yet, nor has a player that hasn't reported its state. One whose state declares no
-        // buffer at all (another Sendspin player) needs at least Core's input side.
-        const later = new Map<SendspinSession, number>();
-        for (const session of current.cursors.keys())
-          if (wireOf(session) === wire)
-            later.set(
-              session,
-              current.live
-                ? current.live.leadMs(
-                    session.getClientId()!,
-                    wire,
-                    session.getPlayerTiming().minBufferMs === 0 ||
-                      session.isAvailable() === undefined
-                      ? undefined
-                      : playerLead(session, 0),
-                    session.getClientName() ?? session.getClientId()!,
-                  ) * 1000
-                : 0,
-            );
-        // Chunks stay until the latest listener on this wire has played them.
+        // Couch's own listener declares a buffer of 0 until it has measured its output and how late
+        // chunks reach it: it has no need yet, nor has a player that hasn't reported its state. One
+        // whose state declares no buffer at all (another Sendspin player) needs at least Core's
+        // input side. Couch's gets its chunks to measure, stamped well past any need (measureMs),
+        // and plays none of them.
+        const later = new Map<SendspinSession, number>(),
+          measuring = new Set<SendspinSession>();
+        for (const session of current.cursors.keys()) {
+          if (wireOf(session) !== wire) continue;
+          if (!current.live) {
+            later.set(session, 0);
+            continue;
+          }
+          const clientId = session.getClientId()!,
+            available = session.isAvailable() !== undefined,
+            undeclared = session.getPlayerTiming().minBufferMs === 0;
+          if (undeclared && available) {
+            measuring.add(session);
+            // Before the input side is known every chunk would be late: it gets none.
+            const ms = current.live.measureMs(wire);
+            later.set(session, ms === undefined ? 0 : (ms + playerLead(session, 0)) * 1000);
+            continue;
+          }
+          const ms = current.live.leadMs(
+            clientId,
+            wire,
+            undeclared || !available ? undefined : playerLead(session, 0),
+            session.getClientName() ?? clientId,
+          );
+          later.set(session, ms * 1000);
+        }
+        // Chunks stay until the latest listener on this wire has played them, or measured them.
         const kept = Math.max(0, ...later.values());
-        latest = Math.max(latest, kept);
+        // How late the latest listener that plays them plays.
+        for (const [session, lateUs] of later)
+          if (!measuring.has(session)) latest = Math.max(latest, lateUs);
         while (sent[0] && sent[0].end + kept <= now) sent.shift();
         while (list[0] && (current.fixed || current.base + list[0].offset - sendUs <= now)) {
           const chunk = list.shift()!,
@@ -1025,9 +1042,16 @@ export function createScheduledAudio(options: {
             session.sendStreamStart(wireFormat(wire));
             if (!session.getActiveStreams().includes("player")) continue;
           }
+          // It declared its need: what it was sent to measure isn't for hearing, and what follows is
+          // stamped at its step.
+          if (cursor.measuring && !measuring.has(session)) {
+            session.sendStreamClear();
+            cursor.measuring = false;
+          }
+          if (measuring.has(session)) cursor.measuring = true;
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          const first = cursor.sent === undefined,
+          const first = !soundSent(cursor),
             before = cursor.sent;
           let held = (socket?.bufferedAmount ?? 0) > backlogBytes;
           for (const chunk of sent) {
@@ -1047,12 +1071,13 @@ export function createScheduledAudio(options: {
               timestampUs: chunk.at + lateUs,
               durationUs: chunk.end - chunk.at,
             });
-            current.margins?.(
-              session.getClientName() ?? session.getClientId()!,
-              chunk.at + lateUs,
-              socket?.bufferedAmount ?? 0,
-              serverNowUs(),
-            );
+            if (!cursor.measuring)
+              current.margins?.(
+                session.getClientName() ?? session.getClientId()!,
+                chunk.at + lateUs,
+                socket?.bufferedAmount ?? 0,
+                serverNowUs(),
+              );
             cursor.sent = chunk.at;
           }
           // A speaker at level 0 is silent, so Chrome may run a hidden tab's timers once a minute
@@ -1063,7 +1088,7 @@ export function createScheduledAudio(options: {
             serverNowUs() - (heard.get(socket) ?? 0) > quietUs;
           took(session.getClientId()!, { held, sent: cursor.sent !== before, quiet }, now);
           // Its first sound in this run: it no longer joins.
-          if (first && cursor.sent !== undefined) options.changed();
+          if (first && soundSent(cursor)) options.changed();
         }
         if (
           current.pipes[wire]?.isPaused() &&
@@ -1104,7 +1129,7 @@ export function createScheduledAudio(options: {
       // Whether this speaker has been sent sound in the current run.
       started: (clientId: string) =>
         [...(run?.cursors ?? [])].some(
-          ([session, cursor]) => session.getClientId() === clientId && cursor.sent !== undefined,
+          ([session, cursor]) => session.getClientId() === clientId && soundSent(cursor),
         ),
       sourceChanged(sourceId: string) {
         if (load?.liveSourceId === sourceId) each((session) => session.sendMetadata(metadata()));

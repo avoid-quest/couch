@@ -1,5 +1,5 @@
 import type * as Sendspin from "@sendspin/sendspin-js";
-import type { LossSecond } from "./live-buffer";
+import { arrivalLateMs, type LossSecond } from "./live-buffer";
 
 // Which Live chunks an Android or iOS listener lost to its own lateness, chunk by chunk: there Live plays
 // with the SDK's player (sendspin.ts); elsewhere Couch's worklet counts them (live-timeline.ts).
@@ -22,6 +22,9 @@ import type { LossSecond } from "./live-buffer";
 // How late a dropped chunk was: how far its start had passed when the player's batch dropped it.
 // That's what a step must add for the batch to start it. A started-late chunk has no lateness: it
 // wasn't late, the page was busy.
+// Before its first sound the listener only measures how late chunks reach it (live-buffer.ts
+// measureSeconds): each decoded chunk is measured and never reaches the player, which plays nothing
+// until Core places the listener and clears its stream.
 // Couch wraps the SDK's exported AudioScheduler and Web Audio's prototypes; the SDK is unchanged.
 type Player = Sendspin.SendspinPlayer;
 
@@ -56,6 +59,13 @@ let received = 0;
 let sendAheads: number[] = [];
 // The context left or resumed running since the last sample.
 let interrupted = false;
+// "measuring" while the listener measures, "placing" once it declared its need, until Core clears or
+// starts its stream to place it there.
+let measure: "measuring" | "placing" | undefined;
+// While it measures: each received chunk's send_ahead, by its stamp, until it's decoded; and how late
+// the latest chunk measured since the last sample arrived (ms).
+const measured = new Map<number, number>();
+let arrival: number | undefined;
 const interrupt = () => {
   interrupted = true;
   chain = undefined;
@@ -93,14 +103,30 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
   if (message)
     sendspin.SendspinCore.prototype.handleBinaryMessage = function (data) {
       const view = new DataView(data);
-      if (counting && view.byteLength >= 13 && view.getUint8(0) === 4)
-        sendAheads.push(view.getUint32(9) / 1000);
+      if (counting && view.byteLength >= 13 && view.getUint8(0) === 4) {
+        const sendAheadMs = view.getUint32(9) / 1000;
+        sendAheads.push(sendAheadMs);
+        if (measure) measured.set(Number(view.getBigInt64(1)), sendAheadMs);
+      }
       message.call(this, data);
     };
   const decoded = scheduling.handleDecodedChunk;
   scheduling.handleDecodedChunk = function (chunk) {
     heard(this);
     const listener = counting ? player() : null;
+    if (counting && measure) {
+      const sendAheadMs = measured.get(chunk.serverTimeUs);
+      measured.delete(chunk.serverTimeUs);
+      if (sendAheadMs !== undefined && listener?.timeSyncInfo.synced) {
+        const late = arrivalLateMs(
+          sendAheadMs,
+          chunk.serverTimeUs,
+          listener.getCurrentServerTimeUs(),
+        );
+        arrival = Math.max(arrival ?? -Infinity, late);
+      }
+      return;
+    }
     if (!listener?.timeSyncInfo.synced) return decoded.call(this, chunk);
     decoding = chunk.serverTimeUs;
     try {
@@ -144,8 +170,11 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
         lateness.set(buffer, (nowUs - stampUs + lead) / 1000);
   };
   const clear = scheduling.clearBuffers;
+  // On a stream clear, start or end (index.js), and as the player stops.
   scheduling.clearBuffers = function () {
     pending.clear();
+    measured.clear();
+    if (measure === "placing") measure = undefined;
     clear.call(this);
   };
   const createBuffer = BaseAudioContext.prototype.createBuffer;
@@ -182,6 +211,25 @@ export function countLiveLoss(sendspin: typeof Sendspin, current: () => Player |
     }
     return start.apply(this, args);
   };
+}
+
+// A listen whose player starts with no need declared measures first.
+export function measureLiveArrivals(on: boolean) {
+  measure = on ? "measuring" : undefined;
+  measured.clear();
+  arrival = undefined;
+}
+// Whether it still measures, or waits to be placed: the player plays nothing.
+export const liveMeasuring = () => measure !== undefined;
+// It declared its need: its next stream clear or start is Core placing it there.
+export function declaredLive() {
+  if (measure === "measuring") measure = "placing";
+}
+// Once a second while it measures: how late the latest chunk since the last sample arrived.
+export function sampleLiveArrival() {
+  const latest = arrival;
+  arrival = undefined;
+  return latest;
 }
 
 // Count only while a Live listen samples it, so nothing piles up otherwise.
