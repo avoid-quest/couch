@@ -126,11 +126,13 @@ wrong clock still shows the right time.
 - A step is as large as the lateness that recurred, rounded up to the next
   10 ms. A lost chunk's lateness is what a step must add for it to reach the
   player in time. Each spell is as
-  late as its latest lost chunk, and the step follows the second latest spell
-  that caused it (or, for one spell three seconds running, its second latest
-  second): one spell can't set a step however late it was, only lateness two
-  spells reached. Loss with no lateness measured (the sound ran out early, with
-  nothing late) counts as 0, so it steps 10 ms. On the rig,
+  late as its latest lost chunk, and the step follows the second latest of the
+  spells that caused it, counting only spells with two clean seconds or more
+  between them: one stall's loss can fall either side of a clean second, and a
+  stall three seconds or more running is one spell. So one stall can't set a
+  step however late or long it was, only lateness two spells apart reached; one
+  stall steps 10 ms. Loss with no lateness measured (the sound ran out early,
+  with nothing late) counts as 0, so it steps 10 ms too. On the rig,
   10 ms steps took the phone from 75 to 125 ms one step at a time, losing
   chunks at each; a step sized by the lateness reaches the same place in one.
 - Core has applied a step when its chunks leave it half that step further

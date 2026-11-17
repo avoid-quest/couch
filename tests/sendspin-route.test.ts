@@ -312,15 +312,20 @@ test("a listener steps as late as the loss its player counted, never for a secon
   player.next = () => undefined;
   tick(10);
   expect(player.buffers).toEqual([27]);
-  // Every chunk reaches the worklet 17 ms after it was due, three seconds running: a 20 ms step.
-  player.next = () => ({ ...clean, lost: 200, lateMs: 17 });
+  // Chunks reach the worklet 17 ms after they were due, in two spells two clean seconds apart: a
+  // 20 ms step.
+  const late = { ...clean, lost: 200, lateMs: 17 };
+  player.next = () => late;
+  tick(1);
+  player.next = () => clean;
   tick(2);
   expect(player.buffers).toEqual([27]);
+  player.next = () => late;
   tick(1);
   expect(player.buffers).toEqual([27, 47]);
   // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
   // seconds after it show whether loss still recurs.
-  player.next = () => ({ ...clean, lost: 200, lateMs: 17, sendAheadMs: 115 });
+  player.next = () => ({ ...late, sendAheadMs: 115 });
   tick(9);
   expect(player.buffers).toEqual([27, 47]);
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
@@ -417,10 +422,11 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
     await second(0, 0);
   }
   expect(player.buffers).toEqual([42]);
-  // Every chunk arrives after its start: the listener plays nothing, and steps once it lost chunks
-  // three seconds running. Each arrives 10 ms before its stamp, 17 ms after its start (output 27):
-  // a 20 ms step, asked of Core 10 ms at a time.
-  for (let i = 0; i < 2; i++) await second(50, 10);
+  // Chunks arrive after their starts in two spells (the first counted over two samples), two clean
+  // seconds apart. Each arrives 10 ms before its stamp, 17 ms after its start (output 27): a 20 ms
+  // step, asked of Core 10 ms at a time.
+  await second(50, 10);
+  for (let i = 0; i < 3; i++) await second(50, 100);
   expect(player.buffers).toEqual([42]);
   await second(50, 10);
   expect(player.buffers).toEqual([42, 52]);

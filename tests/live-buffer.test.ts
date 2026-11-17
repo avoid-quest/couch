@@ -256,9 +256,14 @@ test("a step is as large as the lateness that recurred, rounded up to 10 ms", ()
   expect(late).toMatchObject({ lateMs: 40, phase: { kind: "moving" } });
   late = run(late, [second(0, 135), ...repeat(600, second(0, 135))]);
   expect(late).toMatchObject({ lateMs: 40, unhelpful: 0, phase: { kind: "watching" } });
-  // Loss three seconds running steps by the second latest of its seconds.
+  // Two spells with clean seconds between them: as late as the less late of the two.
   expect(
-    run(noLateSteps, [...repeat(7, second()), ...[12, 21, 18].map((ms) => second(5, 95, ms))]),
+    run(noLateSteps, [
+      ...repeat(5, second()),
+      second(2, 95, 25),
+      ...repeat(3, second()),
+      second(2, 95, 12),
+    ]),
   ).toMatchObject({ lateMs: 20 });
   // Spells over a minute: by the second latest of them.
   const spells = sparse(60, 20).map((each, at) => ({
@@ -283,6 +288,25 @@ test("dry-outs and loss with no lateness measured step 10 ms", () => {
       second(2),
     ]),
   ).toMatchObject({ lateMs: 10 });
+});
+
+test("one stall steps 10 ms, however late and long, and however a clean second splits it", () => {
+  // Three seconds running, or a stall a clean second splits.
+  expect(
+    run(noLateSteps, [...repeat(7, second()), ...[120, 210, 180].map((ms) => second(5, 95, ms))]),
+  ).toMatchObject({ lateMs: 10 });
+  const split = (clean: number) => [
+    ...repeat(9 - clean, second()),
+    second(5, 95, 45),
+    ...repeat(clean, second()),
+    second(5, 95, 38),
+  ];
+  expect(run(noLateSteps, split(1))).toMatchObject({ lateMs: 10 });
+  // Two clean seconds between them: two spells, and lateness they both reached recurred.
+  expect(run(noLateSteps, split(2))).toMatchObject({
+    lateMs: 40,
+    phase: { caused: { stepMs: 40 } },
+  });
 });
 
 test("one spell, however late, doesn't set a step unless it recurs", () => {
@@ -322,8 +346,8 @@ test("a step judged helped doesn't give back what the hour's steps added; only t
   expect(late).toMatchObject({ lateMs: 130, unhelpful: 0, caused: undefined });
   late = run(late, repeat(3609 - 21, second(2, 225, 1000)));
   expect(late.lateMs).toBe(130);
-  // An hour after the step, the hour has room again.
-  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 260 });
+  // An hour after the step, the hour has room again (10 ms: an hour of loss is one spell).
+  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 140 });
 });
 
 test("a step that didn't help pauses as long as its 10 ms parts would have", () => {

@@ -35,10 +35,11 @@ export function declareLiveBuffer(
 //   twice in ten seconds, and 25 ms more would have cut most of it; three spells in a minute is a
 //   pattern, not a one-off.
 // - A step is as large as the lateness that recurred, rounded up to 10 ms (liveLateStepMs): the
-//   second latest of the spells that caused it, each as late as its latest lost chunk, or of the
-//   seconds of one spell that ran three seconds or more. The second latest, so one spell can't set
-//   it, however late: only lateness two spells reached recurs. A dry-out, or loss with no lateness
-//   measured, is 0, so loss without two late spells steps 10 ms. On the rig, 10 ms steps took the
+//   second latest of the spells that caused it, each as late as its latest lost chunk, counting only
+//   spells with two clean seconds or more between them. The second latest, so one spell can't set
+//   it, however late: only lateness two spells reached recurs. One stall's loss can fall either
+//   side of a clean second, and one stall of three seconds or more is one spell. A dry-out, or loss
+//   with no lateness measured, is 0, so loss without two late spells apart steps 10 ms. On the rig, 10 ms steps took the
 //   phone from 75 to 125 ms over two minutes of gaps, one step at a time; a step sized by what it
 //   missed by reaches the same place in one. A listener still ends at most 10 ms past the lateness
 //   that recurred.
@@ -142,6 +143,7 @@ const settledMs = 8;
 // another reason, and the step ends with the parts Core applied.
 const slewSeconds = 10;
 const windowSeconds = 10;
+const apartSeconds = 2;
 const horizonSeconds = 60;
 const horizonSpells = 3;
 // Core stamps its next chunk with a new declaration, which reaches the listener after its transit
@@ -155,24 +157,30 @@ const hourSeconds = 3600;
 const lostIn = (seconds: LossSecond[]) => seconds.reduce((sum, second) => sum + second.lost, 0);
 const median = (values: number[]) =>
   values.length ? [...values].sort((a, b) => a - b)[values.length >> 1] : undefined;
-// Separate spells (a clean second between them), each as late as its latest second, and the
-// lateness of the seconds of the longest run of lossy seconds.
+// Separate spells (a clean second between them), the longest run of lossy seconds, and how late
+// the spells that lie apart were (two clean seconds or more between them), each as late as its
+// latest second. One stall's loss can fall either side of a clean second, and a stall of three
+// seconds or more is one spell however long: only lateness spells apart reached recurred.
 function spellsIn(seconds: LossSecond[]) {
-  const spells: number[] = [];
-  let run: number[] = [],
-    longest: number[] = [];
+  const apart: number[] = [];
+  let spells = 0,
+    run = 0,
+    longest = 0,
+    clean = apartSeconds;
   for (const second of seconds) {
     if (second.lost === 0) {
-      run = [];
+      run = 0;
+      clean++;
       continue;
     }
     const lateMs = second.lateMs ?? 0;
-    if (!run.length) spells.push(lateMs);
-    else spells[spells.length - 1] = Math.max(spells.at(-1)!, lateMs);
-    run.push(lateMs);
-    if (run.length > longest.length) longest = run;
+    if (!run) spells++;
+    if (clean >= apartSeconds) apart.push(lateMs);
+    else apart[apart.length - 1] = Math.max(apart.at(-1)!, lateMs);
+    clean = 0;
+    longest = Math.max(longest, ++run);
   }
-  return { spells, longest };
+  return { spells, longest, apart };
 }
 // The step for loss as late as the second latest of these (a lone one is 0), in 10 ms.
 function stepFor(lateMs: number[]) {
@@ -183,21 +191,11 @@ function recurs(seconds: LossSecond[]): Recurring | undefined {
   if (seconds.length < windowSeconds) return undefined;
   const window = seconds.slice(-windowSeconds);
   const recent = spellsIn(window);
-  if (recent.spells.length >= 2)
-    return {
-      measure: "chunks",
-      count: lostIn(window),
-      stepMs: stepFor(recent.spells),
-    };
-  if (recent.longest.length >= 3)
-    return {
-      measure: "chunks",
-      count: lostIn(window),
-      stepMs: stepFor(recent.longest),
-    };
-  const { spells } = spellsIn(seconds);
-  return spells.length >= horizonSpells
-    ? { measure: "spells", count: spells.length, stepMs: stepFor(spells) }
+  if (recent.spells >= 2 || recent.longest >= 3)
+    return { measure: "chunks", count: lostIn(window), stepMs: stepFor(recent.apart) };
+  const { spells, apart } = spellsIn(seconds);
+  return spells >= horizonSpells
+    ? { measure: "spells", count: spells, stepMs: stepFor(apart) }
     : undefined;
 }
 
