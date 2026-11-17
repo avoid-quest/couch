@@ -405,7 +405,9 @@ const prepareCompression = (settings: CompressorSettings) => {
   if (!processing && settings.enabled) {
     let context: AudioContext | undefined;
     try {
-      context = new AudioContext();
+      // The default, asked for: on Android, relaxed sound makes contexts that ask for none "playback"
+      // (sendspin.ts), whose longer buffers would put this sound behind the picture.
+      context = new AudioContext({ latencyHint: "interactive" });
       const graph = createCompressor(context, settings);
       const source = context.createMediaElementSource(split() ? audio : video);
       source.connect(graph.input);
