@@ -240,14 +240,16 @@ const climb = (lossy: (at: number) => boolean, lateMs?: number, start = noLateSt
   return hours;
 };
 
-test("loss that no step changes climbs at most 130 ms in the first hour and 90 ms an hour after, however late", () => {
+test("loss that no step changes climbs at most 130 ms an hour, and 90 ms an hour after the first unless it runs", () => {
   for (const lateMs of [undefined, 15, 35, 95, 250, 1000])
-    for (const lossy of [() => true, (at: number) => at % 20 === 19])
-      for (const start of [noLateSteps, sdkLateSteps]) {
-        const [first, second] = climb(lossy, lateMs, start);
-        expect(first).toBeLessThanOrEqual(130);
-        expect(second).toBeLessThanOrEqual(90);
-      }
+    for (const start of [noLateSteps, sdkLateSteps]) {
+      // Spells: the pauses bound it.
+      const [first, second] = climb((at) => at % 20 === 19, lateMs, start);
+      expect(first).toBeLessThanOrEqual(130);
+      expect(second).toBeLessThanOrEqual(90);
+      // Loss in every second doesn't pause: only the hour bounds it.
+      for (const hour of climb(() => true, lateMs, start)) expect(hour).toBeLessThanOrEqual(130);
+    }
 });
 
 test("a step is as large as the lateness that recurred, rounded up to 10 ms", () => {
@@ -290,11 +292,7 @@ test("dry-outs and loss with no lateness measured step 10 ms", () => {
   ).toMatchObject({ lateMs: 10 });
 });
 
-test("one stall steps 10 ms, however late and long, and however a clean second splits it", () => {
-  // Three seconds running, or a stall a clean second splits.
-  expect(
-    run(noLateSteps, [...repeat(7, second()), ...[120, 210, 180].map((ms) => second(5, 95, ms))]),
-  ).toMatchObject({ lateMs: 10 });
+test("one stall steps 10 ms, however late, and however a clean second splits it", () => {
   const split = (clean: number) => [
     ...repeat(9 - clean, second()),
     second(5, 95, 45),
@@ -346,8 +344,8 @@ test("a step judged helped doesn't give back what the hour's steps added; only t
   expect(late).toMatchObject({ lateMs: 130, unhelpful: 0, caused: undefined });
   late = run(late, repeat(3609 - 21, second(2, 225, 1000)));
   expect(late.lateMs).toBe(130);
-  // An hour after the step, the hour has room again (10 ms: an hour of loss is one spell).
-  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 140 });
+  // An hour after the step, the hour has room again.
+  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 260 });
 });
 
 test("a step that didn't help pauses as long as its 10 ms parts would have", () => {
@@ -423,6 +421,55 @@ test("on the SDK's player a step ends with its applied parts when the player doe
   late = run(late, repeat(3, slewing(0, 105)));
   expect(late).toMatchObject({ lateMs: 20, phase: { kind: "watching" } });
   expect(late.caused).toBeUndefined();
+});
+
+test("on the SDK's player a part it can't be seen slewing to follows the last after ten seconds", () => {
+  // A 40 ms step, of which Core applies the first part; the player reports no sync error.
+  let late = run(sdkLateSteps, [...recurring(2, 95, 35), second(0, 105)]);
+  late = run(late, repeat(9, second(0, 105)));
+  expect(late).toMatchObject({ lateMs: 10, phase: { kind: "moving", landedMs: 10 } });
+  late = run(late, [second(0, 105)]);
+  expect(late).toMatchObject({ lateMs: 20, phase: { kind: "moving", caused: { stepMs: 40 } } });
+  // Each part the same way, until the step is taken in full.
+  for (const sendAheadMs of [115, 125]) late = run(late, repeat(11, second(0, sendAheadMs)));
+  expect(late.lateMs).toBe(40);
+  late = run(late, [second(0, 135)]);
+  expect(late).toMatchObject({ lateMs: 40, caused: { stepMs: 40 }, phase: { kind: "watching" } });
+});
+
+test("loss in every second steps at once, again each time a step lands, until it stops", () => {
+  // On the SDK's player, 20 s of chunks lost 25 ms late every second, then none. Core applies
+  // each part a second after it's asked; the player is 10 ms off as it lands, then within 8 ms.
+  let late = sdkLateSteps,
+    applied = 0;
+  const lateMs: number[] = [];
+  for (let at = 0; at < 80; at++) {
+    const landing = late.lateMs > applied,
+      lost = at < 20 ? 3 : 0;
+    applied = late.lateMs;
+    late = nextLateSteps(late, {
+      chunks: 50,
+      lost,
+      sendAheadMs: 95 + applied,
+      lateMs: lost ? 25 : undefined,
+      syncErrorMs: landing ? -10 : -2,
+    });
+    lateMs.push(late.lateMs);
+    expect(late.phase.kind).not.toBe("pausing");
+  }
+  // The third lossy second asks for 30 ms, and it's taken part by part.
+  expect(lateMs.slice(0, 9)).toEqual([0, 0, 10, 10, 20, 20, 30, 30, 30]);
+  // Three seconds after the player slewed to it, loss still runs: the next step.
+  expect(lateMs.slice(9, 18)).toEqual([30, 30, 40, 40, 50, 50, 60, 60, 60]);
+  // Once it stops, no other follows.
+  expect(new Set(lateMs.slice(18))).toEqual(new Set([60]));
+  // Nor does a pause that sparser loss started hold it back.
+  const paused: LateSteps = { ...sdkLateSteps, phase: { kind: "pausing", left: 384 } };
+  expect(run(paused, repeat(2, second(1)))).toMatchObject({ lateMs: 0 });
+  expect(run(paused, repeat(3, second(1)))).toMatchObject({
+    lateMs: 10,
+    phase: { kind: "moving" },
+  });
 });
 
 test("late steps add their ms to the declaration, within Core's limit", () => {

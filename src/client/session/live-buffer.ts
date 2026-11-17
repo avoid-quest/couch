@@ -34,6 +34,13 @@ export function declareLiveBuffer(
 //   150 ms lost sound every 20 to 30 s and chunks every 25 to 90 s (late arrivals over Wi-Fi), never
 //   twice in ten seconds, and 25 ms more would have cut most of it; three spells in a minute is a
 //   pattern, not a one-off.
+// - Loss still running (each of the last three seconds lost chunks) is the clearest case for a step:
+//   it steps at once, without ten seconds of history, a pause, or waiting for its last step to be
+//   judged. Its seconds are as late as the least late of those three: what recurred every second
+//   (a late Wi-Fi burst drains over seconds, each less late). On the rig, a phone that lost chunks
+//   in most seconds stayed at 115 ms through a three-minute run, with 65 gaps; at 185 to 220 ms it
+//   had 3 to 10. Its running loss was one spell, so it stepped 10 ms at a time, and each step that
+//   didn't halve it paused 24, 48, then 96 s, as loss no step changes does.
 // - A step is as large as the lateness that recurred, rounded up to 10 ms (liveLateStepMs): the
 //   second latest of the spells that caused it, each as late as its latest lost chunk, counting only
 //   spells with two clean seconds or more between them. The second latest, so one spell can't set
@@ -47,7 +54,8 @@ export function declareLiveBuffer(
 //   (send_ahead, which Core writes as it sends, so the network can't move it). With no room delay
 //   Core applies every step a listener asks for, short of its 5 s limit; one not seen within 3 s
 //   wasn't applied and isn't judged. The SDK's player is asked a step 10 ms at a time, each part
-//   once it slewed to the last (sdkLateSteps): a larger step at once is a gap there.
+//   once it slewed to the last (sdkLateSteps): a larger step at once is a gap there. A part it
+//   can't be seen slewing to (no sync error reported) follows the last after ten seconds.
 // - A step is judged when loss recurs after it: the chunks lost in the ten seconds that show it
 //   against those of the ten seconds that caused it. The same rule picked both, so neither is clean by
 //   construction. The player slews to a step (0.3 % slower plays 10 ms later every 3.3 s), but a
@@ -64,10 +72,11 @@ export function declareLiveBuffer(
 //   hour, less the parts whose pauses fell in the hour before it (mostMs): 130 ms at first. A step
 //   is taken before its pause, so without this a few large ones would each come before the pauses
 //   that bound them. So loss no step changes climbs no faster than with 10 ms steps, however late:
-//   at most 130 ms in a listen's first hour and about 90 ms an hour after, and loss a step would
-//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which the worklet
-//   places its sound again at once (live-timeline.ts) instead of slewing. A step that helped, or 16 minutes
-//   with no recurring loss, starts the pauses from 24 s again, but steps in any hour still add at
+//   at most 130 ms in a listen's first hour and about 90 ms an hour after (130 ms an hour while it
+//   runs: running loss doesn't pause), and loss a step would cure waits at most 6.4 minutes. It
+//   also keeps a step under the 200 ms at which the worklet places its sound again at once
+//   (live-timeline.ts) instead of slewing. A step that helped, or 16 minutes with no recurring
+//   loss, starts the pauses from 24 s again, but steps in any hour still add at
 //   most 130 ms together: a step can halve the loss by chance, and a cap that came back with it let
 //   loss no step changes climb 340 ms in an hour. What a step added comes back only as it falls out
 //   of the hour.
@@ -88,6 +97,7 @@ type Recurring = {
   measure: "chunks" | "spells";
   count: number;
   stepMs: number;
+  running?: boolean;
 };
 type Phase =
   | { kind: "watching" }
@@ -143,6 +153,7 @@ const settledMs = 8;
 // another reason, and the step ends with the parts Core applied.
 const slewSeconds = 10;
 const windowSeconds = 10;
+const runSeconds = 3;
 const apartSeconds = 2;
 const horizonSeconds = 60;
 const horizonSpells = 3;
@@ -182,16 +193,23 @@ function spellsIn(seconds: LossSecond[]) {
   }
   return { spells, longest, apart };
 }
-// The step for loss as late as the second latest of these (a lone one is 0), in 10 ms.
-function stepFor(lateMs: number[]) {
-  const recurred = [...lateMs].sort((a, b) => b - a)[1] ?? 0;
-  return Math.max(1, Math.ceil(recurred / liveLateStepMs)) * liveLateStepMs;
-}
+// The step for loss this late, in 10 ms.
+const stepOf = (lateMs: number) => Math.max(1, Math.ceil(lateMs / liveLateStepMs)) * liveLateStepMs;
+// The step for loss as late as the second latest of these (a lone one is 0).
+const stepFor = (lateMs: number[]) => stepOf([...lateMs].sort((a, b) => b - a)[1] ?? 0);
 function recurs(seconds: LossSecond[]): Recurring | undefined {
+  const window = seconds.slice(-windowSeconds),
+    run = window.slice(-runSeconds);
+  if (run.length === runSeconds && run.every((second) => second.lost > 0))
+    return {
+      measure: "chunks",
+      count: lostIn(window),
+      stepMs: stepOf(Math.min(...run.map((second) => second.lateMs ?? 0))),
+      running: true,
+    };
   if (seconds.length < windowSeconds) return undefined;
-  const window = seconds.slice(-windowSeconds);
   const recent = spellsIn(window);
-  if (recent.spells >= 2 || recent.longest >= 3)
+  if (recent.spells >= 2 || recent.longest >= runSeconds)
     return { measure: "chunks", count: lostIn(window), stepMs: stepFor(recent.apart) };
   const { spells, apart } = spellsIn(seconds);
   return spells >= horizonSpells
@@ -281,9 +299,13 @@ function move(late: LateSteps, phase: Moving, second: LossSecond): LateSteps {
       return done(phase.askedMs);
     return { ...late, seconds, phase: { ...phase, landedMs: phase.askedMs, waited: 0 } };
   }
-  const settled = (second.syncErrorMs ?? 0) > -settledMs;
+  const { syncErrorMs } = second,
+    settled = syncErrorMs !== undefined && syncErrorMs > -settledMs;
   if (!settled && phase.waited + 1 < slewSeconds) return waiting;
-  if (settled && phase.landedMs < phase.caused.stepMs) return ask({ ...late, seconds }, phase);
+  // A player that reports no sync error can't show it slewed, but any part has by now: the next
+  // part follows. One still 8 ms off is off for another reason: the step ends.
+  if ((settled || syncErrorMs === undefined) && phase.landedMs < phase.caused.stepMs)
+    return ask({ ...late, seconds }, phase);
   return done(phase.landedMs);
 }
 
@@ -298,14 +320,14 @@ export function nextLateSteps(before: LateSteps, second: LossSecond): LateSteps 
     clean >= forgetSeconds
       ? { ...late, seconds, clean, unhelpful: 0, caused: undefined }
       : { ...late, seconds, clean };
-  if (phase.kind === "pausing")
+  if (phase.kind === "pausing" && !recurring?.running)
     return {
       ...next,
       phase: phase.left > 1 ? { kind: "pausing", left: phase.left - 1 } : watching,
     };
   if (!recurring) return next;
   const { caused } = next;
-  if (caused === undefined) return step(next, seconds, recurring);
+  if (caused === undefined || recurring.running) return step(next, seconds, recurring);
   if (
     recurring.measure === "chunks" &&
     caused.measure === "chunks" &&

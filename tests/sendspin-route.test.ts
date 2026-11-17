@@ -323,11 +323,13 @@ test("a listener steps as late as the loss its player counted, never for a secon
   player.next = () => late;
   tick(1);
   expect(player.buffers).toEqual([27, 47]);
-  // Core sends its chunks a step further ahead: it applied the step, which is judged only once ten
-  // seconds after it show whether loss still recurs.
+  // Core sends its chunks a step further ahead: it applied the step. The same loss still runs in
+  // every second after it: once three seconds show that, another 20 ms step.
   player.next = () => ({ ...late, sendAheadMs: 115 });
-  tick(9);
+  tick(3);
   expect(player.buffers).toEqual([27, 47]);
+  tick(1);
+  expect(player.buffers).toEqual([27, 47, 67]);
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
   await leave();
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));
@@ -437,10 +439,12 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   player.syncInfo.syncErrorMs = -5;
   await second(50, 10, false, 105);
   expect(player.buffers).toEqual([42, 52, 62]);
-  // Core sends its chunks the whole step further ahead: it applied the step, which is judged only
-  // once ten seconds after the player slewed to it show whether loss still recurs.
-  for (let i = 0; i < 9; i++) await second(50, 10, false, 115);
+  // Core sends its chunks the whole step further ahead and the player slewed to it. The same loss
+  // still runs in every second after it: once three seconds show that, the next step's first part.
+  for (let i = 0; i < 4; i++) await second(50, 10, false, 115);
   expect(player.buffers).toEqual([42, 52, 62]);
+  await second(50, 10, false, 115);
+  expect(player.buffers).toEqual([42, 52, 62, 72]);
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
   await leave();
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));

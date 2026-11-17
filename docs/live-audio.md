@@ -123,6 +123,12 @@ wrong clock still shows the right time.
   three seconds running, or the last minute lost chunks in three separate
   spells (loss that keeps coming back, as late Wi-Fi arrivals do on a phone).
   One stall doesn't step: a burst's late chunks fall within two samples.
+- Loss still running, in each of the last three seconds, is the clearest case
+  for a step: it steps at once, without ten seconds of history, a pause, or
+  waiting for the last step to be judged, as late as the least late of those
+  three seconds (what recurred every second). On the rig a phone that lost
+  chunks in most seconds stayed at 115 ms with 65 gaps in three minutes: one
+  running spell stepped 10 ms, and each step that didn't halve it paused.
 - A step is as large as the lateness that recurred, rounded up to the next
   10 ms. A lost chunk's lateness is what a step must add for it to reach the
   player in time. Each spell is as
@@ -152,7 +158,8 @@ wrong clock still shows the right time.
   are asked and slewed to happens short of the step and isn't judged: the step
   is judged from once the player slewed to its last part. A player still 8 ms
   or more off ten seconds after a part (30 ms slews to 8 in under 8 s) is off
-  for another reason, and the step ends with the parts Core applied.
+  for another reason, and the step ends with the parts Core applied. One that
+  reports no sync error has slewed any part by then, and the next part follows.
 - An applied step is judged when loss recurs after it: the chunks lost in the ten
   seconds that show it against those of the ten seconds that caused it. Half as
   many or fewer: it helped, and the next step follows. Spells over a minute
@@ -164,7 +171,8 @@ wrong clock still shows the right time.
   that don't help could add in an hour, less the 10 ms parts whose pauses fell
   in the hour before it: 130 ms at first, then as little as 10 ms. So loss no
   step changes climbs no faster than with 10 ms steps, however late: at most
-  130 ms in a listen's first hour and about 90 ms an hour after. The cap also
+  130 ms in a listen's first hour and about 90 ms an hour after, or 130 ms an
+  hour while it runs (running loss doesn't pause). The cap also
   keeps every step under the 200 ms at which the worklet places its sound
   again at once instead of slewing. A step that helped, or sixteen minutes with
   no recurring loss, starts the pauses from 24 s again, but steps in any hour
