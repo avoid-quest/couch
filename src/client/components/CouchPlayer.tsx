@@ -17,7 +17,7 @@ import { isRadio } from "../../shared/radio";
 import { CouchMedia, type CouchMediaSource } from "@/session/couch-media";
 import { PlaybackClockContext, type PlaybackClock } from "@/session/playback-clock";
 import { localMedia, useBufferedEnd } from "@/session/buffered";
-import { playbackControls } from "@/session/playback-controls";
+import { livePlayback, playbackControls } from "@/session/playback-controls";
 import type { ClientSessionState } from "@/session/session";
 import { muted } from "./PlaybackTransport";
 
@@ -60,11 +60,15 @@ function AttachCouchMedia({ state, run }: Props) {
   const loaded = useBufferedEnd(state?.player.playbackId);
   const source = couchMediaSource(state, clock, loaded);
   const [media] = useState(() => new CouchMedia(source, run));
+  // Live shows no timeline or Play button (PlaybackTransport), so nothing reads Video.js's state there. Attached, its
+  // time feature reads the time every animation frame while it plays: a frame each, on the thread Live is heard from.
+  const live = livePlayback(state);
   useLayoutEffect(() => media.update(source, run));
   useLayoutEffect(() => {
+    if (live) return;
     attach?.(media);
     return () => attach?.(null);
-  }, [attach, media]);
+  }, [attach, media, live]);
   return null;
 }
 

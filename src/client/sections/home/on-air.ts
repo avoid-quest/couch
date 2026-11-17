@@ -3,7 +3,7 @@ import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
-import { useRadioClock } from "@/radio-clock";
+import { useRadioBoundaryClock } from "@/radio-clock";
 import { usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -48,7 +48,9 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
     enabled: programmesShown,
     refetchInterval: 60_000,
   });
-  const now = useRadioClock(Object.values(programmes.data ?? {}));
+  // Tiles say what's on; progress lines keep their own clock (RadioProgress). Ticking for progress here, or in
+  // useStationShow, would render all of Home every 15 s.
+  const now = useRadioBoundaryClock(Object.values(programmes.data ?? {}));
   const show = (id: string) => radioNow(programmes.data?.[id], id, now);
   const playing = (station: RadioStation) =>
     current?.kind === "radio" &&
@@ -152,7 +154,7 @@ export function useStationShow(): RadioProgrammeDetails | null {
     enabled: connected && !!station,
     refetchInterval: 60_000,
   });
-  const now = useRadioClock(Object.values(programmes.data ?? {}), programme);
+  const now = useRadioBoundaryClock(Object.values(programmes.data ?? {}), programme);
   if (
     programme &&
     programme.playbackId === state?.player.playbackId &&
