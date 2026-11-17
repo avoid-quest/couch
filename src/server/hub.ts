@@ -62,6 +62,7 @@ import {
   parsePlayer,
 } from "./validation";
 import { createLiveInputs } from "./live-input";
+import { createForwarder } from "./live-forward";
 import { createAirPlay } from "./airplay";
 import { AIRPLAY_PUBLISHER, heldOutOf, liveTitle, type LiveSource } from "../shared/live-input";
 import { serveLiveStun } from "./live-stun";
@@ -580,9 +581,25 @@ export async function createHub(options: HubOptions) {
       broadcast();
     },
   });
+  // Screen shares reach viewers through the relay helper's forwarding job. It gathers its own relay candidates
+  // only through an external TURN server: the bundled one runs on this computer's LAN address, which it already has.
+  const forwarder = createForwarder({
+    executable: options.relayExecutable,
+    iceServers: () => (localRelay.state().enabled || !externalRelay() ? [] : [externalRelay()!]),
+    signal: (peerId, signal) => live.forwarded(peerId, signal),
+    failed: (peerId, error) => liveFailed(live.unreachable(undefined, peerId), error),
+  });
   const live = createLiveInputs<Socket<SocketData>>({
     deviceOf,
     nameOf,
+    forwarder,
+    reroute: (sourceId) => {
+      log(
+        `live ${sourceId.slice(0, 8)}: the share couldn't reach Couch's forwarding relay; viewers connect to the sharer.`,
+      );
+      for (const playback of all()) if (sourceOf(playback) === sourceId) reconcile(playback);
+      broadcast();
+    },
     send: (socket, message) => send(socket, JSON.stringify(message)),
     ended: (source, publisherName = nameOf(source.deviceId)) => {
       const sourceId = source.id;
@@ -1809,6 +1826,21 @@ export async function createHub(options: HubOptions) {
         relay === null ? [] : [{ ...receiver, relay }],
       ),
     );
+  };
+  // A receiver whose connection failed plays Core's buffered stream instead.
+  const liveFailed = (peer: ReturnType<typeof live.unreachable>, error: string) => {
+    const playback = peer && playbacks.get(peer.playbackId);
+    if (!peer || !playback) return;
+    log(
+      `live fallback ${playback.id.slice(0, 8)}: ${safePlaybackError(`Direct connection to ${nameOf(peer.deviceId)} failed (${error}); trying Couch's buffered stream.`)}`,
+    );
+    if (
+      sourceOf(playback) === peer.sourceId &&
+      playback.outputs.some((output) => output.deviceId === peer.deviceId)
+    ) {
+      reconcile(playback);
+      broadcast();
+    }
   };
   // A level reaches every player: a group's speakers, each receiver of a Direct live input at its own, else the renderer.
   const level = (playback: Playback) => {
@@ -4909,18 +4941,7 @@ export async function createHub(options: HubOptions) {
             socket.close(1008, "No permission for that live peer.");
             return;
           }
-          const playback = peer && playbacks.get(peer.playbackId);
-          if (!peer || !playback) return;
-          log(
-            `live fallback ${playback.id.slice(0, 8)}: ${safePlaybackError(`Direct connection to ${nameOf(peer.deviceId)} failed (${unreachable.error}); trying Couch's buffered stream.`)}`,
-          );
-          if (
-            sourceOf(playback) === peer.sourceId &&
-            playback.outputs.some((output) => output.deviceId === peer.deviceId)
-          ) {
-            reconcile(playback);
-            broadcast();
-          }
+          liveFailed(peer, unreachable.error);
           return;
         }
         const behind = parseBehind(message);
@@ -5751,6 +5772,7 @@ export async function createHub(options: HubOptions) {
       closed = true;
       remote.close();
       live.close();
+      forwarder.stop();
       const bufferedCleanup = liveStreams.close();
       shutdown.abort();
       for (const controller of inspections.values()) controller.abort();

@@ -147,9 +147,13 @@ See [Live audio](live-audio.md).
 
 Live publications belong to the publishing Device's session and end with it;
 AirPlay sources belong to Core and end when the sender leaves.
-Direct playback attaches a WebRTC MediaStream to the receiver's video element;
-Core only relays signaling between the exact two connections, and ICE servers
-(including TURN) go only to paired devices. Only In sync, or for a receiver that
+Direct playback attaches a WebRTC MediaStream to the receiver's video element.
+The publisher sends one stream to the relay helper's forwarding job
+(`couch-relay forward`, Pion WebRTC, `src/server/live-forward.ts`), which passes
+its H.264 and Opus packets to every receiver without decoding them; without the
+bundled helper, or when the publisher can't reach it, each receiver connects to
+the publisher. Core relays signaling only between the exact connections, and ICE
+servers (including TURN) go only to paired devices. Only In sync, or for a receiver that
 couldn't connect directly, does Core ask the publisher for a MediaRecorder upload
 and turn it into rolling HLS with FFmpeg (`src/server/live-stream.ts`)
 ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).

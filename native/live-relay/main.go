@@ -1,5 +1,7 @@
-// Couch's private LAN TURN helper. Pion handles TURN; this process owns only
-// configuration, the LAN boundary, and its lifetime under Core's stdin pipe.
+// Couch's relay helper. By default, the private LAN TURN relay: Pion handles TURN;
+// this process owns only configuration, the LAN boundary, and its lifetime under
+// Core's stdin pipe. With "forward", the forwarding relay for shared screens
+// (forward.go), which Core starts on its own: TURN is a setting, forwarding isn't.
 package main
 
 import (
@@ -142,7 +144,11 @@ func run() error {
 }
 
 func main() {
-	if err := run(); err != nil {
+	job := run
+	if len(os.Args) > 1 && os.Args[1] == "forward" {
+		job = runForward
+	}
+	if err := job(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

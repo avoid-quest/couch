@@ -30,7 +30,9 @@
 Screens and audio without timestamped capture go **directly over WebRTC** to
 each receiver ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)),
 so each device plays as soon as it receives and two rooms can be slightly apart.
-The publisher encodes once per receiver.
+The publisher encodes once, in H.264, and sends that one stream to the Couch
+computer, whose relay helper forwards it to every receiver. A browser that can't
+send H.264, or can't reach the Couch computer, encodes once per receiver instead.
 
 - **In sync** (in **Where it plays**, with more than one receiver) buffers the
   capture through FFmpeg and HLS so devices play together, a few seconds behind.

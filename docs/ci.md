@@ -109,7 +109,7 @@ electron-builder's `afterPack` hook (`scripts/after-pack.ts`, loaded by Node, so
 its imports name their `.ts` extension) builds these for the target platform
 before signing. `bun test tests/package-hooks.test.ts` loads it the same way.
 
-- **Live relay** (`native/live-relay`, Pion TURN): needs Go on `PATH` (the
+- **Live relay** (`native/live-relay`, Pion TURN and WebRTC): needs Go on `PATH` (the
   version in `go.mod`), built with CGO off. For a development Core:
   `bun scripts/build-relay.ts`; Go tests: `(cd native/live-relay && go test ./...)`.
   Network tests skip without a private non-loopback IPv4.
