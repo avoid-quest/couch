@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   declareLiveBuffer,
+  measuredLateMs,
   nextLateSteps,
   noLateSteps,
   sdkLateSteps,
@@ -650,6 +651,31 @@ test("a sustained rise moves listeners 5 ms at a time, two seconds apart, and ne
   expect(lines).toContain("live input side opus: 21 ms, rising to 25 ms");
   measure(lead, 10, 101, 60);
   expect(steps()).toEqual([120, 165]);
+});
+
+test("a listener's need covers how late its chunks arrived in two of the seconds it measured", () => {
+  // Not yet five seconds measured.
+  expect(measuredLateMs([3, 4, 2, 5])).toBeUndefined();
+  // A clean wired listener: well under a millisecond, its bare need.
+  expect(measuredLateMs([0.3, 0.4, 0.2, 0.4, 0.3])).toBe(0);
+  // A 60 ms tail most seconds reach is covered; one second's 300 ms stall doesn't set it.
+  expect(measuredLateMs([58, 61, 300, 12, 59.6])).toBe(61);
+  // Arrivals the synced clock puts before Core sent them add nothing.
+  expect(measuredLateMs([-2, -1, -3, -1, -2])).toBe(0);
+});
+
+test("a listener measuring gets its chunks a second past the input side, and its step is still its need's", () => {
+  const lines: string[] = [];
+  const lead = createLiveLead((line) => lines.push(line));
+  expect(lead.measureMs("opus")).toBeUndefined();
+  measure(lead, 26);
+  expect(lead.measureMs("opus")).toBe(1030);
+  // Nothing was kept: its first step is its need's, and only that one is logged.
+  expect(lead.leadMs("phone", "opus", 55, "Phone")).toBe(85);
+  expect(lines).toEqual([
+    "live input side opus: 26 ms",
+    'live listener "Phone" opus: declares 55 ms, input side 26 ms, plays 85 ms after capture',
+  ]);
 });
 
 test("a listener waits for its need, and needs in the same step play together", () => {

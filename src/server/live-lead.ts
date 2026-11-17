@@ -12,6 +12,13 @@ const inputReadings = 30;
 // (Couch's at 0.3 %, the SDK's a sample per 5 ms chunk). That stays well under the SDK's 30 ms
 // re-place, so a rise is never a jump or a gap.
 const inputPartSeconds = 2;
+// Couch's own listener declares no need until it has measured how late chunks reach it, before its
+// first sound (live-buffer.ts measuredLateMs). Meanwhile Core stamps its chunks this far past the
+// input side. It plays none of them and its measurement doesn't depend on their stamps, so this only
+// decides which chunks Core sends it: every one that reaches Core within a second of its capture,
+// however slow its encoder or the host was, far past any need a listener has shown (the rig's phone
+// ended near 170 ms).
+const measureMs = 1000;
 
 // One Live run's timing, or sender-timed AirPlay's. Every chunk is stamped at its capture time, and
 // each listener plays it at its own need (its declaration and Sync delay, plus Core's measured
@@ -97,6 +104,13 @@ export function createLiveLead(log: (line: string) => void = () => {}, nowMs = (
       }
       listeners.set(clientId, { step, declared: declaredMs });
       return step;
+    },
+    // Where a listener that hasn't declared its need yet gets its chunks while it measures, before
+    // its Sync delay: undefined until the wire's input side is known. Nothing is kept: its first
+    // step is the one its declaration asks for, and only that one shows in the log.
+    measureMs(wire: Wire) {
+      const inputMs = inputs.get(wire)?.ms;
+      return inputMs === undefined ? undefined : liveStep(inputMs + measureMs);
     },
     // The capture restarted (a new generation): its encoder starts again and every listener is
     // placed again. Until the new input side is measured (about two seconds), the last one stands

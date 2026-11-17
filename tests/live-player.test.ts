@@ -4,11 +4,21 @@ import { noStats, type LiveMessage, type LiveStats } from "../src/client/session
 // The SDK's protocol layer, as far as the Live player reaches it.
 class FixtureCore {
   onStreamClear = () => {};
+  onAudioData = (_chunk: unknown) => {};
   timeSyncInfo = { synced: true };
   volume = 100;
   muted = false;
   currentFormat = { sample_rate: 48_000 };
+  // The synced clock (server time, µs).
+  nowUs = 0;
   disconnect() {}
+  handleBinaryMessage(_data: ArrayBuffer) {}
+  getCurrentServerTimeUs() {
+    return this.nowUs;
+  }
+  getSyncDelayMs() {
+    return 0;
+  }
 }
 let cores: FixtureCore[] = [];
 mock.module("@sendspin/sendspin-js", () => ({
@@ -24,10 +34,12 @@ mock.module("../src/client/session/live-worklet.ts?worker&url", () => ({ default
 // The worklet's side of the port: it reports with the epoch of the last reset it was sent.
 class FixtureNode {
   epoch = 0;
+  chunks = 0;
   port = {
     onmessage: (_event: { data: { epoch: number; stats: LiveStats } }) => {},
     postMessage: (message: LiveMessage) => {
       if (message.type === "reset") this.epoch = message.epoch;
+      else this.chunks++;
     },
   };
   constructor() {
@@ -51,6 +63,9 @@ class FixtureContext {
     return { connect() {}, gain: { setTargetAtTime() {} } };
   }
   addEventListener() {}
+  getOutputTimestamp() {
+    return { contextTime: 1, performanceTime: performance.now() };
+  }
   resume() {}
   close() {
     return Promise.resolve();
@@ -72,5 +87,66 @@ test("a stream cleared while the worklet loads still counts the loss the worklet
   await unlocked;
   nodes[0]!.report({ ...noStats(), chunks: 200, lost: 3, slack: -960 });
   expect(player.sampleLoss(true)).toMatchObject({ chunks: 200, lost: 3, lateMs: 20 });
+  player.destroy();
+});
+
+test("a player with no need measures how late chunks arrive and plays none until Core places it", async () => {
+  const player = new LivePlayer({
+    playerId: "fixture",
+    baseUrl: "http://localhost",
+    minBufferMs: 0,
+  });
+  const unlocked = player.unlock();
+  loaded();
+  await unlocked;
+  const core = cores[0]!,
+    node = nodes[0]!;
+  // A chunk Core sent `sendAheadMs` before its stamp, decoded `aheadMs` before it.
+  const chunk = (sendAheadMs: number, aheadMs: number) => {
+    const stampUs = (core.nowUs += 5_000) + aheadMs * 1000,
+      header = new DataView(new ArrayBuffer(13));
+    header.setUint8(0, 4);
+    header.setBigInt64(1, BigInt(stampUs));
+    header.setUint32(9, sendAheadMs * 1000);
+    (core as unknown as { handleBinaryMessage(data: ArrayBuffer): void }).handleBinaryMessage(
+      header.buffer,
+    );
+    core.onAudioData({
+      serverTimeUs: stampUs,
+      sampleRate: 48_000,
+      samples: [new Float32Array(240), new Float32Array(240)],
+    });
+  };
+  expect(player.measuring).toBe(true);
+  chunk(1000, 998);
+  chunk(1000, 940);
+  chunk(1000, 990);
+  // The latest arrived 60 ms after Core sent it, however late Core stamped it.
+  expect(player.sampleArrival()).toBe(60);
+  expect(player.sampleArrival()).toBeUndefined();
+  // A clear before it declared its need is another stream's: it still measures.
+  core.onStreamClear();
+  chunk(1000, 999);
+  expect(player.measuring).toBe(true);
+  player.declared();
+  chunk(1000, 999);
+  expect(node.chunks).toBe(0);
+  expect(player.sampleArrival()).toBe(1);
+  // Core places it and clears its stream: what follows is stamped at its step, and plays.
+  core.onStreamClear();
+  expect(player.measuring).toBe(false);
+  chunk(102, 100);
+  expect(node.chunks).toBe(1);
+  expect(player.sampleArrival()).toBeUndefined();
+  player.destroy();
+});
+
+test("a player created with a need plays at once", async () => {
+  const player = new LivePlayer({
+    playerId: "fixture",
+    baseUrl: "http://localhost",
+    minBufferMs: 60,
+  });
+  expect(player.measuring).toBe(false);
   player.destroy();
 });

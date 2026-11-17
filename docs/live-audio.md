@@ -92,11 +92,30 @@ wrong clock still shows the right time.
     player's 15 ms scheduling batch (`scheduler.js`
     `scheduleQueueProcessing`), which a chunk may wait for.
 
+  Plus how late its chunks arrive, measured before its first sound (below).
   Where the browser reports no output position, the first reading waits for one
   that includes an output latency (or the same twice, on a browser that reports
   none). Later, the median of the last five raises it only when it outgrows it
-  by more than 5 ms. Until then it declares 0 and Core sends it nothing: it
-  hears nothing for its first two seconds or so, then starts at its step.
+  by more than 5 ms.
+- Before its first sound a listener measures its network. It declares 0, and
+  Core sends it every chunk stamped a second past the input side (far past any
+  need; it only decides which chunks Core sends). It plays none of them: each
+  decoded chunk is measured and dropped (`LivePlayer.play`, or `live-loss.ts`
+  in front of the SDK's `AudioScheduler`). A chunk arrived as late as Core's
+  `send_ahead` less its stamp's distance on the synced clock once decoded: the
+  network, the page and decoding, plus any clock error, which its playback has
+  too. It doesn't depend on the stamp, and Core's input side isn't in it. After
+  five seconds measured (as many as the output side's median takes) it adds
+  the second latest of those seconds' latest arrivals to its need, to the
+  nearest ms: lateness two seconds reached, as steps use, so one second's stall
+  doesn't set it. At 200 chunks a second that's about the 99.9th percentile;
+  any lower leaves chunks that would be lost in most seconds, a step at once.
+  It's this device's network measured now, not a fixed allowance: a wired
+  listener adds about nothing. Once it declares, Core places it and clears its
+  stream (Sendspin `stream/clear`), and the player plays from there. It hears
+  nothing for its first five seconds or so ("Waiting for audio…"), then starts
+  at its step, where a listener that learned by losing chunks reached only
+  after one to four minutes of gaps on the rig.
 - `LivePlayer`'s worklet counts lost chunks: a chunk is lost when it arrives
   after its first sample was due, either its frame passed or the sound before
   it ran out and its stamp follows on from that sound's (Core sent nothing in
@@ -116,8 +135,9 @@ wrong clock still shows the right time.
   `performGuardedCutover`, which starts nothing for 0.3 s after a sync
   recorrection or a Sync delay or clock change) never count.
 - With either player, chunks Core never sent, a step's changeover, chunks a
-  stream clear discarded, and anything in a second when the context wasn't
-  running throughout or the clock isn't synced don't count.
+  stream clear discarded, chunks it measured before its first sound, and
+  anything in a second when the context wasn't running throughout or the clock
+  isn't synced don't count.
 - A Receiver that keeps losing chunks declares a late step (`nextLateSteps`)
   when loss recurs: the last ten seconds lost chunks in two separate spells, or
   three seconds running, or the last minute lost chunks in three separate
@@ -203,8 +223,9 @@ wrong clock still shows the right time.
   time, rounded up to the next 5 ms step: the same chunks, stamped later for
   it. Listeners whose needs round up to the same step play together; others a
   few ms apart. It hears
-  nothing until the input-side time and its own need are known (about two
-  seconds), so it moves once. Its step only rises while it listens; Core forgets
+  nothing until the input-side time and its own need are known, so it moves
+  once; meanwhile Couch's own listener gets its chunks to measure, and the
+  Playback waits for audio until one listener plays. Its step only rises while it listens; Core forgets
   it when it leaves, when its session ends or is replaced (a reload starts with
   no late steps), or when the input restarts. When
   the capture restarts, the last input-side time stands in until the new
@@ -213,8 +234,8 @@ wrong clock still shows the right time.
   the input-side time. A rise is a short slew or gap for that listener only.
   Core keeps each chunk until the latest listener has played it.
 - Sync is only as good as the browser's output-latency report; Couch can't
-  correct a misreported output delay. Decoding and the network aren't measured
-  up front: a listener that loses chunks to them steps itself later.
+  correct a misreported output delay. A listener whose network or page gets
+  worse after it measured loses chunks to it and steps itself later.
 - Couch's log gets one line each time a wire's input side changes
   (`live input side opus: 26 ms`, with `, rising to 35 ms` while a rise is
   under way) and one when a listener's declaration or step

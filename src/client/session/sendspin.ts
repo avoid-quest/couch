@@ -13,6 +13,7 @@ import { failed } from "../toasts";
 import { reportBehind } from "./behind";
 import {
   declareLiveBuffer,
+  measuredLateMs,
   nextLateSteps,
   noLateSteps,
   sdkBatchMs,
@@ -21,7 +22,16 @@ import {
 } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
 import type { LivePlayer } from "./live-player";
-import { countingLiveLoss, countLiveLoss, reportsOutputLatency, sampleLiveLoss } from "./live-loss";
+import {
+  countingLiveLoss,
+  countLiveLoss,
+  declaredLive,
+  liveMeasuring,
+  measureLiveArrivals,
+  reportsOutputLatency,
+  sampleLiveArrival,
+  sampleLiveLoss,
+} from "./live-loss";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player, with Couch's stable Device ID. A Live listener plays with Couch's own
@@ -105,11 +115,15 @@ let needMs: number | undefined;
 let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
 let lastLatency: number | undefined;
+// Before its first sound: how late the latest chunk of each second it measured arrived, and what its
+// need adds for that once declared (live-buffer.ts measuredLateMs).
+let arrivals: number[] = [];
+let networkMs: number | undefined;
 let lateSteps = noLateSteps;
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
 // The player whose sound this tab unlocked. Until then its context is suspended and reports only
-// its base latency, too little a need; Core sends a listener nothing before it has declared one,
-// so this reading has to come from a running context.
+// its base latency, too little a need, so readings come from a running context. Its first
+// declaration places it, so that one has to be right.
 let sounding: Player | undefined;
 // sample: add this second's readings.
 const updateBuffer = (created: Player, sample = false) => {
@@ -131,18 +145,35 @@ const updateBuffer = (created: Player, sample = false) => {
   lastLatency = latency;
   if (settled && latency !== undefined && latency >= 0)
     latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
+  const measuring = worklet ? created.measuring : liveMeasuring();
   if (sample) {
-    // A suspended context handles nothing: what it received isn't late, and it plays nothing.
-    const second = worklet ? created.sampleLoss(playing) : sampleLiveLoss(created, playing);
+    const arrival = worklet ? created.sampleArrival() : sampleLiveArrival();
+    if (playing && measuring && arrival !== undefined) arrivals = [...arrivals, arrival];
+    // A suspended context handles nothing: what it received isn't late, and it plays nothing. Nor
+    // does a player that measures.
+    const counted = playing && !measuring;
+    const second = worklet ? created.sampleLoss(counted) : sampleLiveLoss(created, counted);
     if (second) lateSteps = nextLateSteps(lateSteps, second);
     // Losing chunks in most of the last few seconds is what makes it step later: until then it is
     // behind. A step that lands starts its seconds again.
     const lossy = lateSteps.seconds.slice(-liveReadings).filter((counted) => counted.lost > 0);
     reportBehind({ sound: lossy.length > liveReadings / 2 });
   }
-  needMs = declareLiveBuffer(needMs, latencyReadings, worklet ? 0 : sdkBatchMs);
+  // The first declaration waits for the measurement too.
+  const network = networkMs ?? measuredLateMs(arrivals);
+  if (network === undefined) return;
+  needMs = declareLiveBuffer(needMs, latencyReadings, (worklet ? 0 : sdkBatchMs) + network);
+  if (needMs !== undefined) networkMs = network;
   const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.lateMs);
   if (next === undefined || next === declaredBufferMs) return;
+  if (declaredBufferMs === undefined) {
+    if (worklet) created.declared();
+    else declaredLive();
+    console.log(
+      `Couch live measure: latest arrival per second ${arrivals.map((ms) => ms.toFixed(1)).join(", ")} ms` +
+        ` | adds ${network} ms | declares ${next} ms`,
+    );
+  }
   declaredBufferMs = next;
   created.setMinBufferMs(next);
 };
@@ -162,6 +193,8 @@ export function listen(
     bufferScope = scope;
     latencyReadings = [];
     lastLatency = undefined;
+    arrivals = [];
+    networkMs = undefined;
     lateSteps = sdkLive ? sdkLateSteps : noLateSteps;
     needMs = declaredBufferMs = undefined;
   }
@@ -198,8 +231,10 @@ export function listen(
   ])
     .then(async ([sendspin, livePlayer]) => {
       alignStartsToFrames();
-      if (sdkLive)
+      if (sdkLive) {
         countLiveLoss(sendspin, () => (connected && !isLive(connected) ? connected : null));
+        measureLiveArrivals(declaredBufferMs === undefined);
+      }
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
       const options = {

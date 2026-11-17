@@ -4,7 +4,7 @@ import {
   type SendspinCoreConfig,
 } from "@sendspin/sendspin-js";
 import workletUrl from "./live-worklet.ts?worker&url";
-import type { LossSecond } from "./live-buffer";
+import { arrivalLateMs, type LossSecond } from "./live-buffer";
 import { addStats, noStats, type LiveMessage, type LiveStats } from "./live-timeline";
 
 // Couch's player for Live listeners. The SDK's SendspinCore keeps the connection, its encryption,
@@ -18,10 +18,15 @@ import { addStats, noStats, type LiveMessage, type LiveStats } from "./live-time
 // as it sends: half a step more shows Core applied a step (live-buffer.ts).
 class LiveCore extends SendspinCore {
   sendAheads: number[] = [];
+  // While the player measures: each received chunk's send_ahead, by its stamp, until it's decoded.
+  received = new Map<number, number>();
   override handleBinaryMessage(data: ArrayBuffer) {
     const view = new DataView(data);
-    if (view.byteLength >= 13 && view.getUint8(0) === 4)
-      this.sendAheads.push(view.getUint32(9) / 1000);
+    if (view.byteLength >= 13 && view.getUint8(0) === 4) {
+      const sendAheadMs = view.getUint32(9) / 1000;
+      this.sendAheads.push(sendAheadMs);
+      this.received.set(Number(view.getBigInt64(1)), sendAheadMs);
+    }
     super.handleBinaryMessage(data);
   }
 }
@@ -87,15 +92,22 @@ export class LivePlayer {
   private second = noStats();
   private window = noStats();
   private windowStart = performance.now();
+  // Before its first sound (live-buffer.ts measureSeconds): "measuring" while it measures how late
+  // chunks reach it and plays none, "placing" once it declared its need, until Core clears its stream
+  // to place it there (or starts it again). A player created with a need plays at once.
+  private measure: "measuring" | "placing" | undefined;
+  // How late the latest chunk measured since the last sample arrived (ms).
+  private arrival: number | undefined;
 
   constructor(config: SendspinCoreConfig) {
     this.core = new LiveCore(config);
+    this.measure = config.minBufferMs ? undefined : "measuring";
     this.core.onAudioData = (chunk) => this.play(chunk);
     this.core.onStreamStart = (_format, update) => {
-      if (!update) this.reset();
+      if (!update) this.restart();
     };
-    this.core.onStreamClear = () => this.reset();
-    this.core.onStreamEnd = () => this.reset();
+    this.core.onStreamClear = () => this.restart();
+    this.core.onStreamEnd = () => this.restart();
     this.core.onVolumeUpdate = () => this.updateVolume();
   }
 
@@ -146,6 +158,21 @@ export class LivePlayer {
   // The reading includes the output's own latency, not only the context's base latency.
   get measuresOutput() {
     return this.measured;
+  }
+
+  // Whether it still measures, or waits to be placed: it plays nothing.
+  get measuring() {
+    return this.measure !== undefined;
+  }
+  // It declared its need: its next stream clear or start is Core placing it there.
+  declared() {
+    if (this.measure === "measuring") this.measure = "placing";
+  }
+  // Once a second while it measures: how late the latest chunk since the last sample arrived.
+  sampleArrival() {
+    const arrival = this.arrival;
+    this.arrival = undefined;
+    return arrival;
   }
 
   // Once a second: the chunks received since the last sample, those lost, how far ahead of their
@@ -220,6 +247,13 @@ export class LivePlayer {
     this.node?.port.postMessage(message);
   }
 
+  // Core cleared or started its stream: chunks from then on are stamped where it's placed.
+  private restart() {
+    if (this.measure === "placing") this.measure = undefined;
+    this.core.received.clear();
+    this.reset();
+  }
+
   // What the worklet holds belongs to a stream that ended, or to a clock that stopped.
   private reset() {
     this.epoch++;
@@ -248,6 +282,19 @@ export class LivePlayer {
   }
 
   private play(chunk: DecodedAudioChunk) {
+    const sendAheadMs = this.core.received.get(chunk.serverTimeUs);
+    this.core.received.delete(chunk.serverTimeUs);
+    if (this.measure) {
+      if (sendAheadMs !== undefined && this.core.timeSyncInfo.synced) {
+        const late = arrivalLateMs(
+          sendAheadMs,
+          chunk.serverTimeUs,
+          this.core.getCurrentServerTimeUs(),
+        );
+        this.arrival = Math.max(this.arrival ?? -Infinity, late);
+      }
+      return;
+    }
     const context = this.context;
     if (!this.node || context?.state !== "running" || !this.core.timeSyncInfo.synced) return;
     // Core's Live wire is 48 kHz, the rate the context opens at.

@@ -1,4 +1,4 @@
-import { liveLateStepMs, risenNeed } from "../../shared/live-need";
+import { liveLateStepMs, liveReadings, risenNeed } from "../../shared/live-need";
 
 // What a listener declares is its own output-side need; Core adds its measured input-side time and
 // plays it at that need rounded up to a step. The need is how far ahead of its time a sample has to
@@ -9,11 +9,38 @@ import { liveLateStepMs, risenNeed } from "../../shared/live-need";
 // - The SDK's player, which Live uses on Android and iOS (sendspin.ts): syncInfo.outputLatencyMs, plus its
 //   scheduling batch: it handles received chunks 15 ms after the first of them (scheduler.js
 //   scheduleQueueProcessing, setTimeout(..., 15)), so a chunk may wait that long.
-// Decoding and the network aren't measured: a listener that loses chunks to them counts that itself
-// and asks for late steps (nextLateSteps).
+// Plus how late chunks reach it, measured before its first sound (measuredLateMs). A listener whose
+// network or page gets worse later loses chunks to it, counts that itself and asks for late steps
+// (nextLateSteps).
 export const sdkBatchMs = 15;
 // Core and Sendspin bound declarations to 5 s.
 const limitMs = 5000;
+
+// Before its first sound a listener declares 0, and Core sends it its chunks stamped well past any
+// need (live-lead.ts measureMs). It plays none of them: it measures how late each reached its player,
+// decoded, and declares its need from that, so it starts where those chunks would all have played,
+// instead of losing them and stepping later over its first minutes.
+// How late a chunk arrived: Core's send_ahead (its stamp less Core's clock as Core wrote it) less
+// what was left of it once decoded (its stamp less the synced clock): the network, the page and
+// decoding, and any error of the synced clock, which the player's own timing has too. It doesn't
+// depend on how late Core stamped the chunk, and Core's input side isn't in it (Core adds that).
+export const arrivalLateMs = (sendAheadMs: number, stampUs: number, nowUs: number) =>
+  sendAheadMs - (stampUs - nowUs) / 1000;
+// It measures for as many seconds as the output side's median takes (liveReadings), so the wait
+// grows by about three seconds over the two the output side alone took.
+const measureSeconds = liveReadings;
+// What this listener adds to its need: the second latest of its seconds' latest arrivals, to the
+// nearest ms (the synced clock is good to about one).
+// Lateness two seconds reached recurs, as with steps (nextLateSteps); one second's outlier, a single
+// stall, doesn't set it. At 200 chunks a second over five seconds, only the latest chunks of one
+// second arrive later: about the 99.9th percentile. Any lower and the chunks it leaves out are lost
+// in most seconds, which is recurring loss: a step in the first seconds of sound. Undefined until it
+// has measured that long.
+export function measuredLateMs(seconds: number[]) {
+  if (seconds.length < measureSeconds) return undefined;
+  const second = [...seconds].sort((a, b) => b - a)[1]!;
+  return Math.max(0, Math.round(second));
+}
 
 export function declareLiveBuffer(
   declaredMs: number | undefined,

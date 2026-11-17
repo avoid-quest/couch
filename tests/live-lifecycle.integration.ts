@@ -244,23 +244,36 @@ test(
 );
 
 test(
-  "a listener waits for its need, plays at its own step, and the Playback plays",
+  "a listener measures before it plays, then plays at its own step, and the Playback waits for audio until one plays",
   { timeout: 15_000 },
   async (t) => {
     const f = await fixture(t),
       other = await f.connect(2),
-      listener = await f.listener(1, AudioCodec.PCM, 65),
-      // Couch's own listener declares nothing until it has measured its output.
+      // Couch's own listener declares nothing until it has measured its output and how late its
+      // chunks arrive.
       measuring = await f.listener(2, AudioCodec.PCM, 0);
     assert.equal((await f.host.command(publication)).ok, true);
-    for (const receiver of [f.receiver, other])
-      assert.equal(
-        (await receiver.command({ type: "playLive", sourceId: "concert", deviceId: receiver.id }))
-          .ok,
-        true,
-      );
+    assert.equal(
+      (await other.command({ type: "playLive", sourceId: "concert", deviceId: other.id })).ok,
+      true,
+    );
     const input = await f.streamCapture(f.host, "concert", -1, counted(0.25));
-    // Every chunk is late at 0, so the listener hears nothing until its own step.
+    // It gets every chunk to measure, stamped a second past the input side, and plays none: the
+    // Playback still waits for audio.
+    await until(() => measuring.frames.length > 200);
+    assert.deepEqual(moves(measuring.frames), []);
+    const measured = delays(measuring.frames, input.origin)[0]!;
+    assert.ok(measured > 1_000_000 && measured % 5_000 === 0, `not ${measured} µs`);
+    assert.ok(
+      other.state.player.status !== "playing" || other.state.player.buffering,
+      "nobody plays yet",
+    );
+    const listener = await f.listener(1, AudioCodec.PCM, 65);
+    assert.equal(
+      (await f.receiver.command({ type: "playLive", sourceId: "concert", deviceId: f.receiver.id }))
+        .ok,
+      true,
+    );
     await until(() => listener.frames.length > 20);
     assert.deepEqual(moves(listener.frames), []);
     const step = delays(listener.frames, input.origin)[0]!;
@@ -268,12 +281,14 @@ test(
     await until(
       () => f.receiver.state.player.status === "playing" && !f.receiver.state.player.buffering,
     );
-    assert.equal(measuring.frames.length, 0, "a listener with no need yet gets nothing");
-    // The same need plays together; its first chunk is already at its step.
+    // It declares its need: Core clears what it measured, and the same need plays together.
+    const clears = measuring.clears;
     await measuring.client.sendPlayerState({ min_buffer_ms: 65 });
-    await until(() => measuring.frames.length > 20);
-    assert.deepEqual(moves(measuring.frames), []);
-    assert.equal(delays(measuring.frames, input.origin)[0], step);
+    await until(() => measuring.frames.filter((frame) => frame.clears > clears).length > 20);
+    assert.equal(measuring.clears, clears + 1);
+    const placed = measuring.frames.filter((frame) => frame.clears > clears);
+    assert.deepEqual(moves(placed), []);
+    assert.equal(delays(placed, input.origin)[0], step);
   },
 );
 

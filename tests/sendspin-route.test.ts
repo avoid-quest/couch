@@ -26,21 +26,34 @@ class FixturePlayer {
     return serverNowUs;
   }
 }
-// Couch's Live player, as far as the route reads it: its output reading and each second's loss,
-// which its worklet counts (live-timeline.test.ts).
+// Couch's Live player, as far as the route reads it: its output reading, how late chunks arrived
+// while it measured (live-player.test.ts), and each second's loss, which its worklet counts
+// (live-timeline.test.ts).
 class FixtureLivePlayer extends FixturePlayer {
   output: number | undefined = 27;
   measuresOutput = true;
+  // A player with no need declared measures first; Core places it as soon as it declares one.
+  measuring = !this.options.minBufferMs;
+  // How late the latest chunk of each second it measures arrived (ms).
+  arrival: () => number | undefined = () => 0.4;
   // The second each sample reads, as the player counted it.
   next: () => LossSecond | undefined = () => clean;
   outputMs() {
     return this.output;
+  }
+  declared() {
+    this.measuring = false;
+  }
+  sampleArrival() {
+    return this.measuring ? this.arrival() : undefined;
   }
   sampleLoss(counted: boolean) {
     const second = this.next();
     return counted ? second : undefined;
   }
 }
+// A Live listener measures for five seconds before its first sound.
+const measuring = 5;
 // 200 chunks a second, sent 95 ms ahead of their stamps, none lost.
 const clean: LossSecond = { chunks: 200, lost: 0, sendAheadMs: 95 };
 // The SDK's scheduler, as far as Couch reaches it: it makes each decoded chunk a buffer and, at its
@@ -257,8 +270,10 @@ test("the first declaration waits for a settled reading, not a context's base la
   const player = live();
   // A browser that reports no output position: base latency only, then the output's too.
   player.measuresOutput = false;
-  player.output = 5;
-  tick(1);
+  for (let second = 0; second < measuring; second++) {
+    player.output = 5 + second;
+    tick(1);
+  }
   player.output = 40;
   tick(1);
   expect(player.buffers).toEqual([]);
@@ -293,6 +308,32 @@ test("a codec change keeps the Media Session that Couch set when a player's dest
   }
 });
 
+// The SDK's player's first five seconds: Core sends it 50 chunks a second stamped a second past
+// their capture, each reaching it `late(chunk)` ms after Core sent it. It measures them and plays
+// none, then Core clears its stream to place it at the need it declared.
+async function measure(
+  tick: (ticks: number) => void,
+  scheduler: FixtureScheduler,
+  late: (chunk: number) => number = () => 0.4,
+) {
+  const core = new FixtureCore();
+  for (let second = 0; second < measuring; second++) {
+    for (let chunk = 0; chunk < 50; chunk++) {
+      serverNowUs += 20_000;
+      const stampUs = serverNowUs + 1_000_000,
+        header = new DataView(new ArrayBuffer(13));
+      header.setUint8(0, 4);
+      header.setBigInt64(1, BigInt(stampUs));
+      header.setUint32(9, Math.round((1000 + late(second * 50 + chunk)) * 1000));
+      core.handleBinaryMessage(header.buffer);
+      scheduler.handleDecodedChunk({ serverTimeUs: stampUs });
+    }
+    tick(1);
+  }
+  expect(scheduler.queue).toEqual([]);
+  scheduler.clearBuffers();
+}
+
 const join = (origin = credentials.origin) =>
   sampling(async () => {
     listen(true, false, { ...credentials, origin }, "Fixture", { codec: "pcm" });
@@ -306,7 +347,7 @@ const leave = async () => {
 test("a listener steps as late as the loss its player counted, never for a second it couldn't count", async () => {
   const tick = await join();
   const player = live();
-  tick(10);
+  tick(measuring + 10);
   expect(player.buffers).toEqual([27]);
   // Seconds the context didn't run throughout, however much they lost.
   player.next = () => undefined;
@@ -333,14 +374,14 @@ test("a listener steps as late as the loss its player counted, never for a secon
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
   await leave();
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));
-  (await join())(2);
+  (await join())(measuring);
   expect(live().buffers).toEqual([27]);
 });
 
 test("a Live listener is behind while it loses chunks in most of the last 5 seconds", async () => {
   const tick = await join();
   const player = live();
-  tick(10);
+  tick(measuring + 10);
   player.next = () => ({ ...clean, lost: 3, lateMs: 17 });
   tick(2);
   expect(soundBehind).toBe(false);
@@ -356,7 +397,7 @@ test("a Live listener is behind while it loses chunks in most of the last 5 seco
 test("loss with no lateness, the sound running out early, steps 10 ms", async () => {
   const tick = await join();
   const player = live();
-  tick(10);
+  tick(measuring + 10);
   player.next = () => ({ ...clean, lost: 1 });
   tick(1);
   player.next = () => clean;
@@ -381,6 +422,7 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
     outputUs = player.syncInfo.outputLatencyMs * 1000;
   scheduler.initAudioContext();
   const core = new FixtureCore();
+  await measure(tick, scheduler);
   // A second of 50 chunks, each arriving `aheadMs` before its stamp and sent `sendAheadMs` before
   // it; the player's batch runs after each (busy: only after the second's sample).
   const second = async (chunks: number, aheadMs: number, busy = false, sendAheadMs = 95) => {
@@ -448,7 +490,8 @@ test("a listener steps for chunks it received and couldn't play, not for chunks 
   // Its next listen learns its own steps: it starts at its need, whatever an older Couch stored.
   await leave();
   stored.set("couch.live-steps:http://localhost", JSON.stringify({ steps: 2, spare: 0 }));
-  (await join())(2);
+  const again = new FixtureScheduler(context as unknown as BaseAudioContext);
+  await measure(await join(), again);
   expect(players.at(-1)!.buffers).toEqual([42]);
 });
 
@@ -463,6 +506,7 @@ test("a listener steps when its player runs dry holding chunks, not for a gap Co
     context = new Context(),
     scheduler = new FixtureScheduler(context as unknown as BaseAudioContext);
   scheduler.initAudioContext();
+  await measure(tick, scheduler);
   // The context's clock is the synced clock here. Each 20 ms chunk is received 100 ms before its
   // stamp, and the player starts it where the one before it ended.
   let stampUs = serverNowUs + 100_000,
@@ -517,6 +561,7 @@ test("chunks a guarded cutover discards never count, even when a sample comes be
     scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
     outputUs = player.syncInfo.outputLatencyMs * 1000;
   scheduler.initAudioContext();
+  await measure(tick, scheduler);
   // Chunks received 100 ms before their stamps, so each starts 73 ms after it arrives. A cutover
   // ten chunks before the sample discards them all, the first one's start over 100 ms before the
   // sample; the player starts its next chunk only in the next second.
@@ -538,4 +583,59 @@ test("chunks a guarded cutover discards never count, even when a sample comes be
   second(40);
   for (let i = 0; i < 60; i++) second();
   expect(player.buffers).toEqual([42]);
+});
+
+test("a clean wired listener starts at its bare need, and one stall while it measures doesn't move it", async () => {
+  const tick = await join();
+  const player = live();
+  // Its LAN and decoding take under a millisecond; one second stalled 300 ms. Its worklet holds
+  // nothing while it measures, so nothing counts as lost.
+  const arrivals = [0.4, 0.3, 300, 0.2, 0.3];
+  player.arrival = () => arrivals.shift();
+  player.next = () => ({ ...clean, lost: 200, lateMs: 300 });
+  tick(measuring - 1);
+  expect(player.buffers).toEqual([]);
+  tick(1);
+  expect(player.buffers).toEqual([27]);
+  player.next = () => clean;
+  tick(60);
+  expect(player.buffers).toEqual([27]);
+});
+
+test("a listener whose arrivals have a 60 ms tail starts at a placement covering it", async () => {
+  useWebAudio();
+  onAndroid();
+  const tick = await join();
+  const player = players.at(-1)!,
+    context = new Context(),
+    scheduler = new FixtureScheduler(context as unknown as BaseAudioContext),
+    outputUs = player.syncInfo.outputLatencyMs * 1000;
+  scheduler.initAudioContext();
+  // Every tenth chunk reaches it 60 ms after Core sent it, the rest 2 ms.
+  const late = (chunk: number) => (chunk % 10 ? 2 : 60);
+  await measure(tick, scheduler, late);
+  // Output 27 + the player's batch 15 + the 60 ms its chunks took at most in most seconds.
+  expect(player.buffers).toEqual([102]);
+  // Core places it there and its chunks keep arriving the same way: none is late, and it never
+  // steps. At its bare need of 42, every tenth chunk would arrive 18 ms after its start.
+  const core = new FixtureCore();
+  for (let second = 0; second < 60; second++) {
+    for (let chunk = 0; chunk < 50; chunk++) {
+      serverNowUs += 20_000;
+      const sendAheadMs = 102,
+        stampUs = serverNowUs + sendAheadMs * 1000,
+        header = new DataView(new ArrayBuffer(13));
+      header.setUint8(0, 4);
+      header.setBigInt64(1, BigInt(stampUs));
+      header.setUint32(9, sendAheadMs * 1000);
+      core.handleBinaryMessage(header.buffer);
+      const lateMs = late(chunk);
+      serverNowUs += lateMs * 1000;
+      scheduler.handleDecodedChunk({ serverTimeUs: stampUs });
+      scheduler.processAudioQueue(outputUs);
+      serverNowUs -= lateMs * 1000;
+    }
+    tick(1);
+  }
+  expect(player.buffers).toEqual([102]);
 });
