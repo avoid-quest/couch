@@ -37,14 +37,17 @@ export async function until(predicate: () => boolean) {
 // Real hub, HTTP, WebSockets, ownership and output routing. The default replaces
 // FFmpeg with paced PCM; media opts into actual capture-speed WebM/HLS decoding.
 // local pairs "Local" with this process's own client device ID, so client components treat it as This device.
+// forwarding: a relay helper that takes the forwarding job's commands and connects nothing.
 export async function liveFixture({
   local = false,
   media,
   extraDevices = 0,
+  forwarding = false,
 }: {
   local?: boolean;
   media?: { ffmpeg: string; recording: Uint8Array };
   extraDevices?: number;
+  forwarding?: boolean;
 } = {}) {
   const fetchLocal = globalThis.fetch;
   const previousPath = process.env.PATH;
@@ -138,6 +141,11 @@ setInterval(() => {}, 1000);
 `,
       { mode: 0o755 },
     );
+    const relayExecutable = join(directory, executableName("couch-relay"));
+    if (forwarding)
+      writeFileSync(relayExecutable, `#!${process.execPath}\nprocess.stdin.resume();\n`, {
+        mode: 0o755,
+      });
     process.env.PATH = `${directory}${delimiter}${previousPath ?? ""}`;
     // Helper selection is process-global: pick this fixture's executables and keep helper files in its directory.
     startHelpers(join(directory, "helpers"));
@@ -171,6 +179,7 @@ setInterval(() => {}, 1000);
       hostname: "127.0.0.1",
       port: 0,
       advertisedUrls: ["https://receiver.example"],
+      ...(forwarding ? { relayExecutable } : {}),
     };
     hub = await createHub(hubOptions);
     async function connect(index: number, sharing = "", secure = false) {

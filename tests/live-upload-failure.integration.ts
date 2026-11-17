@@ -225,3 +225,92 @@ test(
     }
   },
 );
+
+const clock = "The audio input's capture clock was interrupted.";
+// A relaxed sound input played on the receiver, and its publishing window.
+async function startSound(f: Fixture) {
+  const owner = await f.connect(0);
+  assert.equal(
+    (
+      await owner.command({
+        type: "publishLive",
+        sourceId: "mic",
+        uploadToken: f.uploadToken,
+        kind: "microphone",
+        audio: true,
+        video: false,
+        audioDelivery: "pcm",
+      })
+    ).ok,
+    true,
+  );
+  await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
+  assert.equal(
+    (await owner.command({ type: "playLive", sourceId: "mic", deviceId: f.receiver.id })).ok,
+    true,
+  );
+  await until(() => uploadRequested(owner));
+  return owner;
+}
+const failSound = (owner: Client) =>
+  owner.socket.send(
+    JSON.stringify({
+      type: "liveUploadFailed",
+      sourceId: "mic",
+      uploadId: uploadRequest(owner)!.uploadId,
+      error: clock,
+    }),
+  );
+
+test("a sound input's failed upload ends the share while its speakers play it in step", async () => {
+  const f = await liveFixture();
+  try {
+    const owner = await startSound(f);
+    await until(() => !!owner.state.outputs?.length);
+    failSound(owner);
+    await until(() => !owner.state.liveSources?.length);
+  } finally {
+    await f.close();
+  }
+});
+
+test(
+  "a sound input's failed upload leaves its one speaker playing through the forwarding relay, and a second speaker says why it can't play",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture({ forwarding: true });
+    try {
+      const owner = await startSound(f);
+      await until(() => !!f.receiver.load()?.livePeerId);
+      f.receiver.report();
+      await until(() => owner.state.player.status === "playing");
+      const stops = () =>
+        f.receiver.messages.filter(
+          (message) => message.type === "player" && message.command.type === "stop",
+        ).length;
+      const stopped = stops();
+      failSound(owner);
+      await until(() => !uploadRequested(owner));
+      await barrier(owner);
+      assert.equal(owner.state.liveSources?.[0]?.id, "mic");
+      assert.equal(owner.state.player.status, "playing");
+      assert.equal(owner.state.outputs?.[0]?.error, undefined);
+      assert.equal(stops(), stopped);
+
+      const other = await f.connect(2, "&audio=1");
+      assert.equal(
+        (await owner.command({ type: "output", deviceId: other.id, level: 50 })).ok,
+        true,
+      );
+      await until(
+        () =>
+          owner.state.outputs?.length === 2 &&
+          owner.state.outputs.every((output) => output.error === clock),
+      );
+      assert.equal(owner.state.liveSources?.[0]?.id, "mic");
+      assert.equal(uploadRequested(owner), false, "Core doesn't ask the failed upload again");
+    } finally {
+      await f.close();
+    }
+  },
+);

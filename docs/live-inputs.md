@@ -44,7 +44,10 @@ send H.264, or can't reach the Couch computer, encodes once per receiver instead
   speaker Core moves it to Sendspin's scheduler, so every speaker plays in step
   after a short break, and back when one is left. Without the relay helper, or
   once the share or a speaker couldn't connect through it, it stays on Sendspin.
-  AirPlay always uses Sendspin. **Live audio** on the hosting desktop is
+  Sendspin reads its timestamped upload: if that fails while the share plays
+  only through the relay, the speaker plays on, but the share can't play in
+  step until it is shared again, and its speakers say why; on Sendspin, the
+  share ends. AirPlay always uses Sendspin. **Live audio** on the hosting desktop is
   described in [Live audio](live-audio.md).
 - Receivers can only delay sound, never play it early, so none can line up with
   the original sound on the sharing Mac.

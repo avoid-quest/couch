@@ -1028,6 +1028,8 @@ export async function createHub(options: HubOptions) {
     signal?: AbortSignal,
   ) => {
     if (source.audioDelivery === "pcm") {
+      const failed = live.uploadError(source.id);
+      if (failed) return Promise.reject(new Error(failed));
       live.upload(source.id, true);
       return Promise.resolve();
     }
@@ -4973,13 +4975,22 @@ export async function createHub(options: HubOptions) {
             return;
           }
           if (accepted) {
-            if (live.source(uploadFailure.sourceId)?.audioDelivery === "pcm") {
-              sendspin.endSource(uploadFailure.sourceId);
-              for (const playback of all())
-                if (sourceOf(playback) === uploadFailure.sourceId)
-                  unavailable(playback, uploadFailure.error);
-              live.upload(uploadFailure.sourceId, false);
-            } else liveStreams.fail(uploadFailure.sourceId, uploadFailure.error);
+            const { sourceId, error } = uploadFailure;
+            const playing = all().filter((playback) => sourceOf(playback) === sourceId);
+            // Timestamped audio reaches speakers in step only through its upload, so that share ends with it.
+            // One that plays only through the forwarding relay plays on, and can't play in step again.
+            if (live.source(sourceId)?.audioDelivery !== "pcm") liveStreams.fail(sourceId, error);
+            else if (
+              playing.length &&
+              playing.every((playback) => !playback.synced && deliveryOf(playback) === "webrtc")
+            )
+              live.failUpload(sourceId, error);
+            else {
+              sendspin.endSource(sourceId);
+              for (const playback of playing) unavailable(playback, error);
+              live.upload(sourceId, false);
+              live.end(socket, sourceId);
+            }
           }
           return;
         }

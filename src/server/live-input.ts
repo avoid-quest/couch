@@ -18,6 +18,7 @@ type Receiver<Socket> = {
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
 // uplink: the capturing window's one connection to the forwarding relay, while a viewer gets it from there.
 // direct: that relay failed for this source, so each viewer connects to the capturing window instead.
+// uploadError: its timestamped upload failed while it played through the relay; it can't play in step again.
 type Publication<Socket> = {
   source: LiveSource;
   startedAt: number;
@@ -27,6 +28,7 @@ type Publication<Socket> = {
   uploadId?: string;
   uplink?: string;
   direct?: boolean;
+  uploadError?: string;
 };
 type Peer<Socket> = LivePeer & {
   publisher?: Socket;
@@ -218,6 +220,14 @@ export function createLiveInputs<Socket>(options: {
       // The media socket can close and another receiver retry before an old control message arrives.
       return publication.uploadId === uploadId;
     },
+    failUpload(sourceId: string, error: string) {
+      const publication = sources.get(sourceId);
+      if (!publication) return;
+      publication.uploadError = error;
+      publication.uploadId = undefined;
+      announce(sourceId);
+    },
+    uploadError: (sourceId: string) => sources.get(sourceId)?.uploadError,
     upload(sourceId: string, upload: boolean) {
       const publication = sources.get(sourceId);
       if (!publication || !!publication.uploadId === upload) return;
