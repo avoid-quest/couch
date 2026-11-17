@@ -267,8 +267,10 @@ export async function createHub(options: HubOptions) {
     changed: () => broadcast(),
     sourceFailed: (sourceId, error) => {
       logPlaybackError(sourceId, "Capture", undefined, error);
-      for (const playback of all())
-        if (sourceOf(playback) === sourceId) unavailable(playback, error);
+      const playing = all().filter((playback) => sourceOf(playback) === sourceId);
+      // A share that plays only through the forwarding relay doesn't need its upload (as when the window reports it failed).
+      if (live.source(sourceId) && relayOnly(playing)) live.failUpload(sourceId, error);
+      else for (const playback of playing) unavailable(playback, error);
       broadcast();
     },
   });
@@ -997,6 +999,10 @@ export async function createHub(options: HubOptions) {
         !playback.outputs.some((output) => live.relayed(sourceId, output.deviceId)),
     });
   };
+  // Every playback of a share plays through the forwarding relay, none in step.
+  const relayOnly = (playing: Playback[]) =>
+    playing.length > 0 &&
+    playing.every((playback) => !playback.synced && deliveryOf(playback) === "webrtc");
   const grouped = (playback: Playback) => deliveryOf(playback) === "scheduled";
   // This item's relayed receivers stay failed until this playback retries, even if another restarts the shared stream.
   const bufferFailed = (playback: Playback) =>
@@ -4980,11 +4986,7 @@ export async function createHub(options: HubOptions) {
             // Timestamped audio reaches speakers in step only through its upload, so that share ends with it.
             // One that plays only through the forwarding relay plays on, and can't play in step again.
             if (live.source(sourceId)?.audioDelivery !== "pcm") liveStreams.fail(sourceId, error);
-            else if (
-              playing.length &&
-              playing.every((playback) => !playback.synced && deliveryOf(playback) === "webrtc")
-            )
-              live.failUpload(sourceId, error);
+            else if (relayOnly(playing)) live.failUpload(sourceId, error);
             else {
               sendspin.endSource(sourceId);
               for (const playback of playing) unavailable(playback, error);
