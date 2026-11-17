@@ -10,7 +10,7 @@ import {
   copyFileSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { executableName, nodeExecutables } from "./executable.fixture";
@@ -22,8 +22,8 @@ import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 import { withState } from "./whole-state.fixture";
 
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 3_000;
+async function until(predicate: () => boolean, timeout = 3_000) {
+  const deadline = Date.now() + timeout;
   while (!predicate()) {
     assert.ok(Date.now() < deadline, "Expected routing result.");
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -158,11 +158,25 @@ async function fixture(raw = false) {
     }
   }
   process.env.PATH = `${binary}${delimiter}${originalPath ?? ""}`;
+  const endless = raw ? ["TS_LIVE"] : [];
   const source = createServer((request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
+    // A live channel: H.264 and AAC in real time, a keyframe each second, for as long as it is read.
+    if (request.url === "/TS_LIVE.ts") {
+      const channel = spawn(
+        process.env.COUCH_TEST_FFMPEG!,
+        "-hide_banner -loglevel error -re -f lavfi -i color=s=64x64:r=10 -f lavfi -i sine=r=48000 -c:v libx264 -g 10 -threads 1 -c:a aac -f mpegts pipe:1".split(
+          " ",
+        ),
+        { stdio: ["ignore", "pipe", "ignore"] },
+      );
+      channel.stdout.pipe(response);
+      response.once("close", () => channel.kill("SIGKILL"));
+      return;
+    }
     const body =
       request.url === "/channels.m3u"
-        ? `#EXTM3U\n${[...Object.keys(playlists), ...Object.keys(streams)].map((name) => `#EXTINF:-1 tvg-id="${name}",${name}\n${origin}/${name}.${name in streams ? "ts" : "m3u8"}`).join("\n")}\n`
+        ? `#EXTM3U\n${[...Object.keys(playlists), ...Object.keys(streams), ...endless].map((name) => `#EXTINF:-1 tvg-id="${name}",${name}\n${origin}/${name}.${name in streams || endless.includes(name) ? "ts" : "m3u8"}`).join("\n")}\n`
         : (streams[request.url?.slice(1, -3) ?? ""] ??
           playlists[request.url?.slice(1, -5) ?? ""] ??
           "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\n0.ts\n");
@@ -325,9 +339,9 @@ const loads = (device: Awaited<ReturnType<typeof fixture>>["remote"]) =>
     message.type === "player" && message.command.type === "load" ? [message.command] : [],
   );
 
-async function started(f: Awaited<ReturnType<typeof fixture>>, name: string) {
+async function started(f: Awaited<ReturnType<typeof fixture>>, name: string, timeout?: number) {
   assert.equal((await f.play(name)).status, 200);
-  await until(() => loads(f.remote).length === 1);
+  await until(() => loads(f.remote).length === 1, timeout);
   await until(() => f.remote.state.player.playbackId === loads(f.remote)[0]!.playbackId);
   f.remote.socket.send(
     JSON.stringify({
@@ -520,6 +534,42 @@ test(
         await f.nativeReady();
         assert.equal(loads(f.host).length, 0);
       } else await until(() => loads(f.host).length === 1);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Move here of a raw MPEG-TS channel out of a group with a screen loads the raw channel",
+  {
+    timeout: 60_000,
+    skip: process.env.COUCH_TEST_FFMPEG
+      ? false
+      : "Set COUCH_TEST_FFMPEG for a live raw TS channel.",
+  },
+  async () => {
+    const f = await fixture(true);
+    try {
+      // Probing a live channel reads it in real time.
+      await started(f, "TS_LIVE", 20_000);
+      assert.equal(loads(f.remote)[0]!.mpegts, true);
+      assert.equal(
+        (await f.remote.command({ type: "output", deviceId: f.hostId, picture: true })).ok,
+        true,
+      );
+      // The group's screens play Core's repackaged playlist.
+      await until(() => loads(f.host).some((load) => load.hls), 20_000);
+      const before = loads(f.remote).length;
+      assert.equal((await f.remote.command({ type: "solo", deviceId: f.remoteId })).ok, true);
+      await until(
+        () => loads(f.remote).length > before || f.remote.state.player.status === "error",
+        20_000,
+      );
+      assert.equal(f.remote.state.player.error, null);
+      const moved = loads(f.remote).at(-1)!;
+      assert.equal(moved.mpegts, true);
+      assert.equal(moved.hls, undefined);
     } finally {
       await f.close();
     }

@@ -13,6 +13,9 @@ type Repack = {
   ready?: Promise<string>;
   exited?: Promise<void>;
   stopped: boolean;
+  listed?: boolean;
+  // Callers still waiting for the first listed segment.
+  waiting: number;
 };
 
 // How often a repack whose group ended is noticed and stopped.
@@ -125,7 +128,10 @@ export function createRepacks(wanted: (playbackId: string) => boolean) {
     // own); the caller's signal bounds the wait.
     while (!repack.stopped) {
       const playlist = await readFile(join(directory, "stream.m3u8"), "utf8").catch(() => "");
-      if (playlist.includes("#EXTINF:")) return `${await origin()}/${repack.token}/stream.m3u8`;
+      if (playlist.includes("#EXTINF:")) {
+        repack.listed = true;
+        return `${await origin()}/${repack.token}/stream.m3u8`;
+      }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     throw new Error("Couch couldn't repackage this channel.");
@@ -135,22 +141,34 @@ export function createRepacks(wanted: (playbackId: string) => boolean) {
     // The playlist of this load's channel, started once and shared by every caller.
     async playlist(playbackId: string, source: string, signal: AbortSignal) {
       if (closed) throw new Error("Couch is closing.");
-      let ready = repacks.get(playbackId)?.ready;
-      if (!ready) {
-        const repack: Repack = { token: randomBytes(16).toString("hex"), stopped: false };
-        repacks.set(playbackId, repack);
-        ready = repack.ready = run(repack, source);
-        ready.catch(() => {
-          if (repacks.get(playbackId) === repack) stop(playbackId);
+      let repack = repacks.get(playbackId);
+      if (!repack) {
+        const created: Repack = {
+          token: randomBytes(16).toString("hex"),
+          stopped: false,
+          waiting: 0,
+        };
+        repack = created;
+        repacks.set(playbackId, created);
+        created.ready = run(created, source);
+        created.ready.catch(() => {
+          if (repacks.get(playbackId) === created) stop(playbackId);
         });
       }
-      return await Promise.race([
-        ready,
-        new Promise<never>((_, reject) => {
-          signal.throwIfAborted();
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-        }),
-      ]);
+      repack.waiting++;
+      try {
+        return await Promise.race([
+          repack.ready!,
+          new Promise<never>((_, reject) => {
+            signal.throwIfAborted();
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          }),
+        ]);
+      } finally {
+        // Nobody waits for this playlist any more: stopping FFmpeg also removes its folder.
+        if (!--repack.waiting && !repack.listed && repacks.get(playbackId) === repack)
+          stop(playbackId);
+      }
     },
     async close() {
       closed = true;

@@ -2212,7 +2212,10 @@ export async function createHub(options: HubOptions) {
       signal.throwIfAborted();
       const { playbackId } = pending.resolved;
       const { headers = {}, preview: _preview, ...original } = resolved;
-      const media = await repackaged(playback, playbackId, original, signal);
+      // A move plays on one Device, which reads a raw channel itself; the group it leaves is no reason to repackage.
+      const media = pending.moving
+        ? original
+        : await repackaged(playback, playbackId, original, signal);
       const tab = pending.tab;
       if (
         media.mpv &&
@@ -3361,7 +3364,10 @@ export async function createHub(options: HubOptions) {
   };
   const mpv = createMpv((player) => mpvPlayback?.session.observe(player));
   const passThrough = createPassThrough((playbackId) => !!playing(playbackId));
-  const repacks = createRepacks((playbackId) => !!playing(playbackId)?.synced);
+  const repacks = createRepacks((playbackId) => {
+    const playback = playing(playbackId);
+    return !!playback?.synced && active(stateOf(playback).player.status);
+  });
   // Each resolution keeps its renewal where a later load can see whether it is dead (reusable).
   function resolveEntry(...args: Parameters<typeof resolveEntryOnce>) {
     const media = resolveEntryOnce(...args);
