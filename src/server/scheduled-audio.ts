@@ -22,7 +22,6 @@ import { audioInput, pictureStartOf } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
 import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
 import { createLiveLead } from "./live-lead";
-import { createLiveMarginLog } from "./live-margin";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
 import { liveTitle, type LiveSource } from "../shared/live-input";
@@ -59,7 +58,6 @@ type Run = {
   // A relaxed capture's send-ahead, which only rises; Live audio keeps its own.
   captureLead?: number;
   live?: ReturnType<typeof createLiveLead>;
-  margins?: ReturnType<typeof createLiveMarginLog>;
   timelineOnly?: boolean;
   // An endless URL stream (Twitch, Live TV; not Live audio, which captures) keeps the source's time:
   // a gap is silence on every speaker while the clock and its pictures run on, and audio that
@@ -584,7 +582,6 @@ export function createScheduledAudio(options: {
           const next: Run = {
             fixed: true,
             live: live || details?.senderTimed ? createLiveLead(log) : undefined,
-            margins: live ? createLiveMarginLog(log) : undefined,
             start: 0,
             anchored: true,
             speed: 1,
@@ -1072,13 +1069,6 @@ export function createScheduledAudio(options: {
               timestampUs: chunk.at + lateUs,
               durationUs: chunk.end - chunk.at,
             });
-            if (!cursor.measuring)
-              current.margins?.(
-                session.getClientName() ?? session.getClientId()!,
-                chunk.at + lateUs,
-                socket?.bufferedAmount ?? 0,
-                serverNowUs(),
-              );
             cursor.sent = chunk.at;
           }
           // A speaker at level 0 is silent, so Chrome may run a hidden tab's timers once a minute
