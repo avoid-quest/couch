@@ -122,13 +122,16 @@ export class CouchMedia extends EventTarget {
   /** Called on every render with what Core and this device now say. */
   update(source: CouchMediaSource, run: Run) {
     const before = this.#source;
-    const was = this.#snapshot();
+    let was = this.#snapshot();
     this.#source = source;
     this.#run = run;
     this.#follow(source.local);
     if (before.playbackId !== source.playbackId) {
       this.#endSeek();
       this.#emit("emptied", "loadstart");
+      // As a media element after a new source: what follows loads it from nothing, so Video.js hears play and
+      // playing again and resumes reading the time, even when the old Playback was playing too.
+      was = { ...was, readyState: 0, duration: NaN, paused: true, waiting: false, ended: false };
     }
     const now = this.#snapshot();
     if (!was.readyState && now.readyState) this.#emit("loadedmetadata");
@@ -172,7 +175,9 @@ export class CouchMedia extends EventTarget {
   }
 
   get paused() {
-    const { status, buffering } = this.#source;
+    const { status, buffering, failed } = this.#source;
+    // A failed item waits for Try again, which is Play, also a radio retrying after it dropped mid-buffer.
+    if (failed) return true;
     // A stall mid-watch reports loading with buffering: the item has started, as in Core's session.
     return !(status === "playing" || (status === "loading" && buffering));
   }
