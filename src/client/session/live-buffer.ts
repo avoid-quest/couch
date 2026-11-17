@@ -35,9 +35,10 @@ export function declareLiveBuffer(
 //   twice in ten seconds, and 25 ms more would have cut most of it; three spells in a minute is a
 //   pattern, not a one-off.
 // - Loss still running (each of the last three seconds lost chunks) is the clearest case for a step:
-//   it steps at once, without ten seconds of history, a pause, or waiting for its last step to be
-//   judged. Its seconds are as late as the least late of those three: what recurred every second
-//   (a late Wi-Fi burst drains over seconds, each less late). On the rig, a phone that lost chunks
+//   it steps at once, without ten seconds of history or a pause. Its seconds are as late as the
+//   least late of those three: what recurred every second (a late Wi-Fi burst drains over seconds,
+//   each less late), or the latest when all three were measured within 10 ms of each other (runStep).
+//   On the rig, a phone that lost chunks
 //   in most seconds stayed at 115 ms through a three-minute run, with 65 gaps; at 185 to 220 ms it
 //   had 3 to 10. Its running loss was one spell, so it stepped 10 ms at a time, and each step that
 //   didn't halve it paused 24, 48, then 96 s, as loss no step changes does.
@@ -49,7 +50,7 @@ export function declareLiveBuffer(
 //   with no lateness measured, is 0, so loss without two late spells apart steps 10 ms. On the rig, 10 ms steps took the
 //   phone from 75 to 125 ms over two minutes of gaps, one step at a time; a step sized by what it
 //   missed by reaches the same place in one. A listener still ends at most 10 ms past the lateness
-//   that recurred.
+//   that recurred, or 20 ms past it for running loss whose seconds agreed.
 // - Core has applied a step when its chunks leave it half that step further ahead of their stamps
 //   (send_ahead, which Core writes as it sends, so the network can't move it). With no room delay
 //   Core applies every step a listener asks for, short of its 5 s limit; one not seen within 3 s
@@ -58,28 +59,32 @@ export function declareLiveBuffer(
 //   can't be seen slewing to (no sync error reported) follows the last after ten seconds.
 // - A step is judged when loss recurs after it: the chunks lost in the ten seconds that show it
 //   against those of the ten seconds that caused it. The same rule picked both, so neither is clean by
-//   construction. The player slews to a step (0.3 % slower plays 10 ms later every 3.3 s), but a
+//   construction. A step for running loss is judged only by running loss, its three seconds against
+//   the three that caused it, and helped once a second after it is clean: the loss stopped running.
+//   Any other loss after it comes after such a second, so a step that halved the loss counts as
+//   helped whatever loss shows it. On the rig, judging it by a ten-second window or by spells over a
+//   minute paused a phone whose 30 ms step had cut its loss for the 168 s that followed. The player slews to a step (0.3 % slower plays 10 ms later every 3.3 s), but a
 //   loss on the way places its next chunk at the new step at once, so loss that recurs is the step's.
 //   On the SDK's player the seconds count only once it slewed to the last part: loss while it's
 //   asked part by part happens short of the step.
 //   Half as many or fewer: it helped, and the next step follows. Two windows of loss no step changes
 //   rarely differ that much by chance. Spells over a minute never show that a step helped: each
 //   minute that recurs holds three or more, and one spell's chunks would look like half a ten-second
-//   window's. Otherwise no step for a while; after that, recurring loss steps again. Each 10 ms of
-//   steps judged unhelpful pauses 24, 48, 96, 192, then at most 384 s, and a larger step pauses as
-//   long as its 10 ms parts would have one after another: a 40 ms step that didn't help pauses
-//   24 + 48 + 96 + 192 s. And a step adds at most what 10 ms steps that don't help could add in an
-//   hour, less the parts whose pauses fell in the hour before it (mostMs): 130 ms at first. A step
-//   is taken before its pause, so without this a few large ones would each come before the pauses
-//   that bound them. So loss no step changes climbs no faster than with 10 ms steps, however late:
-//   at most 130 ms in a listen's first hour and about 90 ms an hour after (130 ms an hour while it
-//   runs: running loss doesn't pause), and loss a step would cure waits at most 6.4 minutes. It
-//   also keeps a step under the 200 ms at which the worklet places its sound again at once
-//   (live-timeline.ts) instead of slewing. A step that helped, or 16 minutes with no recurring
-//   loss, starts the pauses from 24 s again, but steps in any hour still add at
-//   most 130 ms together: a step can halve the loss by chance, and a cap that came back with it let
-//   loss no step changes climb 340 ms in an hour. What a step added comes back only as it falls out
-//   of the hour.
+//   window's. Otherwise no step for a while; after that, recurring loss steps again. Running loss
+//   doesn't wait: a step for it that didn't help counts as one, but the next follows at once. Each
+//   10 ms of steps judged unhelpful pauses 24, 48, 96, 192, then at most 384 s, and a larger step
+//   pauses as long as its 10 ms parts would have one after another, up to 384 s: a 40 ms step that
+//   didn't help pauses 24 + 48 + 96 + 192 s. And a step adds at most what 10 ms steps that don't
+//   help could add in an hour, less the parts whose pauses fell in the hour before it (mostMs):
+//   130 ms at first. A step is taken before its pause, so without this a few large ones would each
+//   come before the pauses that bound them. It also keeps a step under the 200 ms at which the
+//   worklet places its sound again at once (live-timeline.ts) instead of slewing. Steps in a
+//   listen's first hour add at most 130 ms together, and in any hour after at most 90 ms: so loss
+//   no step changes, running or not, however late, climbs no faster than with 10 ms steps that
+//   pause, and loss a step would cure waits at most 6.4 minutes. A step that helped, or 16 minutes
+//   with no recurring loss, starts the pauses from 24 s again, but not the hour: a step can halve
+//   the loss by chance, and a cap that came back with it let loss no step changes climb 340 ms in
+//   an hour. What a step added comes back only as it falls out of the hour.
 // Steps only add up: Core never moves a listener earlier while it listens. Each listen starts with
 // none and learns its own: nothing is remembered across listens.
 export type LossSecond = {
@@ -93,11 +98,11 @@ export type LossSecond = {
 };
 // Recurring loss: chunks lost in the ten seconds it recurred in, or spells in the minute, and the
 // step it asks for.
+// Running loss counts the chunks of its three seconds.
 type Recurring = {
-  measure: "chunks" | "spells";
+  measure: "running" | "chunks" | "spells";
   count: number;
   stepMs: number;
-  running?: boolean;
 };
 type Phase =
   | { kind: "watching" }
@@ -197,16 +202,22 @@ function spellsIn(seconds: LossSecond[]) {
 const stepOf = (lateMs: number) => Math.max(1, Math.ceil(lateMs / liveLateStepMs)) * liveLateStepMs;
 // The step for loss as late as the second latest of these (a lone one is 0).
 const stepFor = (lateMs: number[]) => stepOf([...lateMs].sort((a, b) => b - a)[1] ?? 0);
+// The step for running loss: as late as the least late of its seconds, what recurred in each. When
+// all three were measured within 10 ms of each other the lateness held rather than drained: as late
+// as the latest, so lateness the seconds straddle a 10 ms mark with doesn't take a second step.
+function runStep(run: LossSecond[]) {
+  const lateMs = run.map((second) => second.lateMs ?? 0),
+    least = Math.min(...lateMs),
+    latest = Math.max(...lateMs);
+  const held =
+    run.every((second) => second.lateMs !== undefined) && latest - least <= liveLateStepMs;
+  return stepOf(held ? latest : least);
+}
 function recurs(seconds: LossSecond[]): Recurring | undefined {
   const window = seconds.slice(-windowSeconds),
     run = window.slice(-runSeconds);
   if (run.length === runSeconds && run.every((second) => second.lost > 0))
-    return {
-      measure: "chunks",
-      count: lostIn(window),
-      stepMs: stepOf(Math.min(...run.map((second) => second.lateMs ?? 0))),
-      running: true,
-    };
+    return { measure: "running", count: lostIn(run), stepMs: runStep(run) };
   if (seconds.length < windowSeconds) return undefined;
   const recent = spellsIn(window);
   if (recent.spells >= 2 || recent.longest >= runSeconds)
@@ -219,11 +230,13 @@ function recurs(seconds: LossSecond[]): Recurring | undefined {
 
 // The pause after the 10 ms part of steps that didn't help numbered `part`.
 const partPause = (part: number) => Math.min(longestPauseSeconds, pauseSeconds * 2 ** part);
-// The pause after an unhelpful step: its 10 ms parts' pauses, one after another.
+// The pause after an unhelpful step: its 10 ms parts' pauses, one after another, up to the longest:
+// loss a step would cure waits at most 6.4 minutes, however large the step that didn't help. The
+// hour (hourMs) still bounds what steps add.
 function pauseAfter(unhelpful: number, stepMs: number) {
   let left = 0;
   for (let part = 0; part < stepMs / liveLateStepMs; part++) left += partPause(unhelpful + part);
-  return left;
+  return Math.min(longestPauseSeconds, left);
 }
 // The most a step adds: what 10 ms steps that don't help could add in an hour, the first and those
 // whose pauses fit in it, less the parts already added whose pauses fall in the hour before it.
@@ -239,14 +252,19 @@ function mostMs(unhelpful: number) {
   }
   return Math.max(1, parts) * liveLateStepMs;
 }
-// What steps may add in any hour: what 10 ms steps that don't help add in a listen's first.
-const hourMs = mostMs(0);
+// What steps may add in a listen's first hour: what 10 ms steps that don't help add in it (130 ms).
+const firstHourMs = mostMs(0);
+// And in any hour after it: one 10 ms step each longest pause (90 ms), as loss no step changes
+// climbed before running loss stepped without pausing.
+const hourMs = Math.floor(hourSeconds / longestPauseSeconds) * liveLateStepMs;
 
 // A step that's taken is past judging: the one before it helped, or was never judged. With the hour
 // spent, none is taken until its oldest step falls out of it.
 function step(late: LateSteps, seconds: LossSecond[], recurring: Recurring): LateSteps {
   const taken = late.taken.filter(({ at }) => late.counted - at < hourSeconds),
-    leftMs = hourMs - taken.reduce((sum, { ms }) => sum + ms, 0);
+    leftMs =
+      (late.counted <= hourSeconds ? firstHourMs : hourMs) -
+      taken.reduce((sum, { ms }) => sum + ms, 0);
   const stepMs = Math.min(recurring.stepMs, mostMs(late.unhelpful), leftMs);
   if (stepMs <= 0) return { ...late, seconds, taken, caused: undefined };
   return ask(
@@ -309,6 +327,13 @@ function move(late: LateSteps, phase: Moving, second: LossSecond): LateSteps {
   return done(phase.landedMs);
 }
 
+// Whether the step `caused` caused helped, by loss that recurs after it over a window as long as the
+// one that caused it: half as many chunks or fewer. Spells over a minute never show it.
+const halved = (caused: Recurring, recurring: Recurring) =>
+  caused.measure !== "spells" &&
+  caused.measure === recurring.measure &&
+  recurring.count * 2 <= caused.count;
+
 export function nextLateSteps(before: LateSteps, second: LossSecond): LateSteps {
   const late = { ...before, counted: before.counted + 1 },
     { phase } = late;
@@ -316,28 +341,31 @@ export function nextLateSteps(before: LateSteps, second: LossSecond): LateSteps 
   const seconds = [...late.seconds, second].slice(-horizonSeconds);
   const recurring = recurs(seconds);
   const clean = recurring ? 0 : late.clean + 1;
+  // A clean second after a step for running loss: the loss stopped running, and the step helped.
+  const stopped = late.caused?.measure === "running" && second.lost === 0;
   const next: LateSteps =
-    clean >= forgetSeconds
+    clean >= forgetSeconds || stopped
       ? { ...late, seconds, clean, unhelpful: 0, caused: undefined }
       : { ...late, seconds, clean };
-  if (phase.kind === "pausing" && !recurring?.running)
+  const running = recurring?.measure === "running";
+  if (phase.kind === "pausing" && !running)
     return {
       ...next,
       phase: phase.left > 1 ? { kind: "pausing", left: phase.left - 1 } : watching,
     };
   if (!recurring) return next;
   const { caused } = next;
-  if (caused === undefined || recurring.running) return step(next, seconds, recurring);
-  if (
-    recurring.measure === "chunks" &&
-    caused.measure === "chunks" &&
-    recurring.count * 2 <= caused.count
-  )
-    return step({ ...next, unhelpful: 0 }, seconds, recurring);
+  // Running loss after a step for other loss steps unjudged: their windows differ.
+  if (caused === undefined || (running && caused.measure !== "running"))
+    return step(next, seconds, recurring);
+  if (halved(caused, recurring)) return step({ ...next, unhelpful: 0 }, seconds, recurring);
   // Core never moves a listener earlier while it listens: the step stays until the listen ends.
+  const unhelpful = next.unhelpful + caused.stepMs / liveLateStepMs;
+  // Running loss doesn't pause.
+  if (running) return step({ ...next, unhelpful }, seconds, recurring);
   return {
     ...next,
-    unhelpful: next.unhelpful + caused.stepMs / liveLateStepMs,
+    unhelpful,
     caused: undefined,
     phase: { kind: "pausing", left: pauseAfter(next.unhelpful, caused.stepMs) },
   };

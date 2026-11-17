@@ -240,16 +240,18 @@ const climb = (lossy: (at: number) => boolean, lateMs?: number, start = noLateSt
   return hours;
 };
 
-test("loss that no step changes climbs at most 130 ms an hour, and 90 ms an hour after the first unless it runs", () => {
+test("loss that no step changes climbs at most 130 ms in the first hour, and 90 ms an hour after", () => {
   for (const lateMs of [undefined, 15, 35, 95, 250, 1000])
-    for (const start of [noLateSteps, sdkLateSteps]) {
-      // Spells: the pauses bound it.
-      const [first, second] = climb((at) => at % 20 === 19, lateMs, start);
-      expect(first).toBeLessThanOrEqual(130);
-      expect(second).toBeLessThanOrEqual(90);
-      // Loss in every second doesn't pause: only the hour bounds it.
-      for (const hour of climb(() => true, lateMs, start)) expect(hour).toBeLessThanOrEqual(130);
-    }
+    for (const start of [noLateSteps, sdkLateSteps])
+      // Spells, which pause, and loss in every second, which doesn't.
+      for (const lossy of [(at: number) => at % 20 === 19, () => true]) {
+        const [first, second] = climb(lossy, lateMs, start);
+        expect(first).toBeLessThanOrEqual(130);
+        expect(second).toBeLessThanOrEqual(90);
+      }
+  // Dry-outs in every second, which no step cures, climb to both bounds.
+  expect(climb(() => true)).toEqual([130, 90]);
+  expect(climb(() => true, undefined, sdkLateSteps)).toEqual([130, 90]);
 });
 
 test("a step is as large as the lateness that recurred, rounded up to 10 ms", () => {
@@ -344,8 +346,8 @@ test("a step judged helped doesn't give back what the hour's steps added; only t
   expect(late).toMatchObject({ lateMs: 130, unhelpful: 0, caused: undefined });
   late = run(late, repeat(3609 - 21, second(2, 225, 1000)));
   expect(late.lateMs).toBe(130);
-  // An hour after the step, the hour has room again.
-  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 260 });
+  // An hour after the step, the hour has room again: 90 ms, after the listen's first.
+  expect(run(late, [second(2, 225, 1000)])).toMatchObject({ lateMs: 220 });
 });
 
 test("a step that didn't help pauses as long as its 10 ms parts would have", () => {
@@ -470,6 +472,75 @@ test("loss in every second steps at once, again each time a step lands, until it
     lateMs: 10,
     phase: { kind: "moving" },
   });
+});
+
+test("a step for running loss that cut it is helped, and loss after it doesn't pause long", () => {
+  // Two chunks a second lost 55 ms late, running: a 60 ms step, applied the next second.
+  let late = run(noLateSteps, [...repeat(3, second(2, 95, 55)), second(0, 125)]);
+  expect(late).toMatchObject({ lateMs: 60, caused: { measure: "running", count: 6, stepMs: 60 } });
+  // Loss falls by 80 %: one chunk every two or three seconds. The first clean second shows the
+  // step helped; the loss that's left steps again, unjudged, and nothing pauses for minutes.
+  const after = Array.from({ length: 60 }, (_, at) =>
+    second(at % 5 === 1 || at % 5 === 3 ? 1 : 0, 155),
+  );
+  late = run(late, after.slice(0, 1));
+  expect(late).toMatchObject({ lateMs: 60, unhelpful: 0 });
+  expect(late.caused).toBeUndefined();
+  let pausedFor = 0;
+  for (const each of after.slice(1)) {
+    late = nextLateSteps(late, each);
+    if (late.phase.kind === "pausing") pausedFor = Math.max(pausedFor, late.phase.left);
+  }
+  expect(late.lateMs).toBeGreaterThan(60);
+  expect(pausedFor).toBeLessThanOrEqual(24);
+});
+
+test("loss in two of three seconds after a step for running loss steps again, unpaused", () => {
+  let late = run(noLateSteps, [...repeat(3, second(2, 95, 25)), second(0, 125)]);
+  expect(late).toMatchObject({ lateMs: 30, caused: { measure: "running" } });
+  // Lossy, lossy, clean: the loss no longer runs, so the step helped; two spells in the next ten
+  // seconds step again.
+  late = run(
+    late,
+    Array.from({ length: 10 }, (_, at) => second(at % 3 === 2 ? 0 : 2, 125)),
+  );
+  expect(late).toMatchObject({ lateMs: 40, unhelpful: 0, phase: { kind: "moving" } });
+});
+
+test("a step for running loss is judged by running loss over three seconds as well", () => {
+  const stepped = run(noLateSteps, [...repeat(3, second(4, 95, 25)), second(0, 125)]);
+  expect(stepped).toMatchObject({ lateMs: 30, caused: { count: 12 } });
+  // Still running at half: it helped. At more than half: it didn't, but running loss steps at once.
+  expect(run(stepped, repeat(3, second(2, 125, 25)))).toMatchObject({
+    lateMs: 60,
+    unhelpful: 0,
+    phase: { kind: "moving" },
+  });
+  expect(run(stepped, repeat(3, second(3, 125, 25)))).toMatchObject({
+    lateMs: 60,
+    unhelpful: 3,
+    phase: { kind: "moving" },
+  });
+});
+
+test("running loss as late in each of its seconds steps by the latest of them", () => {
+  // Within 10 ms of each other: the lateness held, so the step reaches the latest.
+  const sized = (lateMs: (number | undefined)[]) =>
+    run(
+      noLateSteps,
+      lateMs.map((each) => second(2, 95, each)),
+    ).lateMs;
+  expect(sized([28, 33, 31])).toBe(40);
+  // Draining (further apart), or a second with nothing late: the least late.
+  expect(sized([55, 40, 28])).toBe(30);
+  expect(sized([33, undefined, 31])).toBe(10);
+});
+
+test("a step that didn't help pauses at most 384 s, however large", () => {
+  let late = run(noLateSteps, [...recurring(2, 95, 55), second(0, 155)]);
+  expect(late).toMatchObject({ lateMs: 60, caused: { stepMs: 60 } });
+  late = run(late, recurring(2, 155, 55));
+  expect(late).toMatchObject({ unhelpful: 6, phase: { kind: "pausing", left: 384 } });
 });
 
 test("late steps add their ms to the declaration, within Core's limit", () => {

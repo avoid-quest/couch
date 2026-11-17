@@ -124,9 +124,10 @@ wrong clock still shows the right time.
   spells (loss that keeps coming back, as late Wi-Fi arrivals do on a phone).
   One stall doesn't step: a burst's late chunks fall within two samples.
 - Loss still running, in each of the last three seconds, is the clearest case
-  for a step: it steps at once, without ten seconds of history, a pause, or
-  waiting for the last step to be judged, as late as the least late of those
-  three seconds (what recurred every second). On the rig a phone that lost
+  for a step: it steps at once, without ten seconds of history or a pause, as
+  late as the least late of those three seconds (what recurred every second),
+  or the latest of them when all three were measured within 10 ms of each
+  other (the lateness held, rather than drained). On the rig a phone that lost
   chunks in most seconds stayed at 115 ms with 65 gaps in three minutes: one
   running spell stepped 10 ms, and each step that didn't halve it paused.
 - A step is as large as the lateness that recurred, rounded up to the next
@@ -164,20 +165,26 @@ wrong clock still shows the right time.
   seconds that show it against those of the ten seconds that caused it. Half as
   many or fewer: it helped, and the next step follows. Spells over a minute
   never show that a step helped: each minute that recurs holds three or more.
-  Otherwise no step for a while; after that, recurring loss steps again. Each
-  10 ms of steps that didn't help pauses 24 s, then 48, 96, 192, then at most
-  384 s, and a larger step pauses as long as its 10 ms parts would one after
-  another (40 ms: 24 + 48 + 96 + 192 s). A step adds at most what 10 ms steps
-  that don't help could add in an hour, less the 10 ms parts whose pauses fell
-  in the hour before it: 130 ms at first, then as little as 10 ms. So loss no
-  step changes climbs no faster than with 10 ms steps, however late: at most
-  130 ms in a listen's first hour and about 90 ms an hour after, or 130 ms an
-  hour while it runs (running loss doesn't pause). The cap also
+  A step for running loss is judged only by running loss, its three seconds
+  against the three that caused it, and it helped once a second after it is
+  clean (the loss stopped running), whatever loss comes later. On the rig,
+  judging it by ten seconds or by spells paused a phone whose 30 ms step had
+  cut its loss for 168 s. Otherwise no step for a while; after that, recurring
+  loss steps again. Running loss doesn't wait: a step for it that didn't help
+  counts as one, but the next follows at once. Each 10 ms of steps that didn't
+  help pauses 24 s, then 48, 96, 192, then at most 384 s, and a larger step
+  pauses as long as its 10 ms parts would one after another, up to 384 s
+  (40 ms: 24 + 48 + 96 + 192 s). A step adds at most what 10 ms steps that
+  don't help could add in an hour, less the 10 ms parts whose pauses fell in
+  the hour before it: 130 ms at first, then as little as 10 ms. That also
   keeps every step under the 200 ms at which the worklet places its sound
-  again at once instead of slewing. A step that helped, or sixteen minutes with
-  no recurring loss, starts the pauses from 24 s again, but steps in any hour
-  still add at most 130 ms together: a step can halve the loss by chance, and
-  what a step added comes back only as it falls out of the hour. A step after which loss doesn't recur is
+  again at once instead of slewing. Steps add at most 130 ms in a listen's
+  first hour and 90 ms in any hour after (one 10 ms step each 384 s). So loss
+  no step changes, running or not, climbs no faster than with 10 ms steps that
+  pause, however late, and loss a step would cure waits at most 6.4 minutes. A
+  step that helped, or sixteen minutes with no recurring loss, starts the
+  pauses from 24 s again, but not the hour: a step can halve the loss by
+  chance, and what a step added comes back only as it falls out of the hour. A step after which loss doesn't recur is
   never doubted. Pauses last only as long as the listen. The worklet takes a
   step by playing 0.3 % slower: 10 ms later every 3.3 s. The SDK's player plays
   0.3 % slower while it's over 8 ms off, then corrects a sample at a time.
