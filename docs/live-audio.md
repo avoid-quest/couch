@@ -67,9 +67,15 @@ wrong clock still shows the right time.
   needs Couch's `https://` address (or this computer's own); on the plain HTTP
   address it shows "Live sound needs Couch's https:// address on this device."
   Android's and iOS's Live listeners and relaxed sound don't need it.
-- `LivePlayer` hands each decoded chunk to an AudioWorklet
-  (`live-timeline.ts`) with the context frame it's due at: its stamp on the
-  synced clock, less the Sync delay, mapped to the frame heard then. Chromium's
+- `LivePlayer` runs the SDK's `SendspinCore` in its own Worker
+  (`live-feed.ts`), which hands each decoded chunk straight to an AudioWorklet
+  (`live-timeline.ts`) through a `MessagePort`, with the context frame it's
+  due at: its stamp on the synced clock, less the Sync delay, mapped to the
+  frame heard then. No chunk waits for the page's main thread, where renders
+  and other work hold every message behind them for tens of ms. The page keeps
+  the AudioContext, its output readings and volume, and sends the Worker where
+  the context's clock stands, with its `performance.timeOrigin` so the Worker's
+  clock lines up with it. Chromium's
   `getOutputTimestamp()` gives the frame being heard and when (the median of the
   last second's readings, 20 ms apart); Firefox and Safari give the frame being
   rendered, so their reported `baseLatency` and `outputLatency` stand in.
@@ -100,7 +106,7 @@ wrong clock still shows the right time.
 - Before its first sound a listener measures its network. It declares 0, and
   Core sends it every chunk stamped a second past the input side (far past any
   need; it only decides which chunks Core sends). It plays none of them: each
-  decoded chunk is measured and dropped (`LivePlayer.play`, or `live-loss.ts`
+  decoded chunk is measured and dropped (`LiveFeed.play`, or `live-loss.ts`
   in front of the SDK's `AudioScheduler`). A chunk arrived as late as Core's
   `send_ahead` less its stamp's distance on the synced clock once decoded: the
   network, the page and decoding, plus any clock error, which its playback has

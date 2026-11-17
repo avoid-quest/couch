@@ -1,35 +1,29 @@
-import {
-  SendspinCore,
-  type DecodedAudioChunk,
-  type SendspinCoreConfig,
-} from "@sendspin/sendspin-js";
+import type { SendspinCoreConfig } from "@sendspin/sendspin-js";
 import workletUrl from "./live-worklet.ts?worker&url";
-import { arrivalLateMs, type LossSecond } from "./live-buffer";
-import { addStats, noStats, type LiveMessage, type LiveStats } from "./live-timeline";
+import type { LossSecond } from "./live-buffer";
+import type { FeedStatus, FromFeed, ToFeed } from "./live-feed";
+import { addStats, noStats, type LiveClock } from "./live-timeline";
 
-// Couch's player for Live listeners. The SDK's SendspinCore keeps the connection, its encryption,
-// the clock sync and decoding; this plays what it decodes. The SDK's own player (scheduler.js)
-// handles received chunks in batches 15 ms apart and starts each as its own buffer, so a chunk had
-// to arrive an output latency plus that batch before its time. Here each decoded chunk goes straight
-// to an AudioWorklet (live-timeline.ts) with the context frame it's due at, and needs to reach it
-// only before that frame is rendered.
+// Couch's player for Live listeners. Its feed (live-feed.ts), in its own Worker, keeps the SDK's
+// connection, clock sync and decoding, and hands each decoded chunk straight to an AudioWorklet
+// (live-timeline.ts) with the context frame it's due at; it needs to reach it only before that frame
+// is rendered. The SDK's own player (scheduler.js) handles received chunks in batches 15 ms apart and
+// starts each as its own buffer, so a chunk had to arrive an output latency plus that batch before
+// its time. This page keeps the AudioContext, its output readings, volume and what the listener
+// declares, none of which waits on a chunk.
 
-// Sendspin's audio chunk: type 4, its stamp (int64), then send_ahead (uint32, µs), which Core writes
-// as it sends: half a step more shows Core applied a step (live-buffer.ts).
-class LiveCore extends SendspinCore {
-  sendAheads: number[] = [];
-  // While the player measures: each received chunk's send_ahead, by its stamp, until it's decoded.
-  received = new Map<number, number>();
-  override handleBinaryMessage(data: ArrayBuffer) {
-    const view = new DataView(data);
-    if (view.byteLength >= 13 && view.getUint8(0) === 4) {
-      const sendAheadMs = view.getUint32(9) / 1000;
-      this.sendAheads.push(sendAheadMs);
-      this.received.set(Number(view.getBigInt64(1)), sendAheadMs);
-    }
-    super.handleBinaryMessage(data);
-  }
-}
+// The SDK's storage keys (its identity, volume, Sync delay, pairing and output latency stores). The feed
+// reads them once; what it saves comes back here.
+const sdkKeys = [
+  "sendspin-identity-sk",
+  "sendspin-volume",
+  "sendspin-muted",
+  "sendspin-psks",
+  "sendspin-pairing-psk",
+  "sendspin-pair-failures",
+  "sendspin-static-delay-ms-v2",
+  "sendspin-output-latency-us",
+];
 
 // Chromium's getOutputTimestamp() gives the frame being heard and when; Firefox and Safari give the
 // frame being rendered (the SDK's reportsContextTimeAtRenderPosition, which it doesn't export).
@@ -65,18 +59,34 @@ function heard(context: AudioContext, now: number): Reading | undefined {
   const stamp = context.getOutputTimestamp?.();
   if (!stamp?.contextTime || !stamp.performanceTime) return undefined;
   const offset = stamp.contextTime - stamp.performanceTime / 1000;
-  return { offset, lead: context.currentTime - (offset + now / 1000), measured: true };
+  return {
+    offset,
+    lead: context.currentTime - (offset + now / 1000),
+    measured: true,
+  };
 }
 // Just after resume() a context may report only its base latency; Safari before 18.4 never reports
 // an output latency.
 function reported(context: AudioContext, now: number): Reading {
   const output = context.outputLatency || 0,
     lead = context.baseLatency + output;
-  return { offset: context.currentTime - lead - now / 1000, lead, measured: output > 0 };
+  return {
+    offset: context.currentTime - lead - now / 1000,
+    lead,
+    measured: output > 0,
+  };
 }
 
 export class LivePlayer {
-  private core: LiveCore;
+  private worker: Worker;
+  private storage: SendspinCoreConfig["storage"];
+  private onStateChange: SendspinCoreConfig["onStateChange"];
+  // What the feed last reported, and the promises connect() returned.
+  private feed: FeedStatus | undefined;
+  private connecting: {
+    resolve: () => void;
+    reject: (reason: Error) => void;
+  }[] = [];
   private context: AudioContext | undefined;
   private gain: GainNode | undefined;
   private node: AudioWorkletNode | undefined;
@@ -87,50 +97,63 @@ export class LivePlayer {
   private startedAt: number | undefined;
   private measured = false;
   private reader: ReturnType<typeof setInterval> | undefined;
-  private epoch = 0;
   private interrupted = false;
+  // What the feed reported since the last sample, and since the last status line.
   private second = noStats();
   private window = noStats();
   private windowStart = performance.now();
-  // Before its first sound (live-buffer.ts measureSeconds): "measuring" while it measures how late
-  // chunks reach it and plays none, "placing" once it declared its need, until Core clears its stream
-  // to place it there (or starts it again). A player created with a need plays at once.
-  private measure: "measuring" | "placing" | undefined;
-  // How late the latest chunk measured since the last sample arrived (ms).
+  private sendAheads: number[] = [];
   private arrival: number | undefined;
+  // Whether it measures or waits to be placed (live-feed.ts): what the feed last said, from the start
+  // a player created with no need measures.
+  private measure: boolean;
 
   constructor(config: SendspinCoreConfig) {
-    this.core = new LiveCore(config);
-    this.measure = config.minBufferMs ? undefined : "measuring";
-    this.core.onAudioData = (chunk) => this.play(chunk);
-    this.core.onStreamStart = (_format, update) => {
-      if (!update) this.restart();
+    const { storage, onStateChange, ...rest } = config;
+    this.storage = storage;
+    this.onStateChange = onStateChange;
+    this.measure = !config.minBufferMs;
+    const stored = sdkKeys.flatMap((key) => {
+      const value = storage?.getItem(key);
+      return value == null ? [] : [[key, value] as [string, string]];
+    });
+    this.worker = new Worker(new URL("./live-feed-worker.ts", import.meta.url), { type: "module" });
+    this.worker.onmessage = ({ data }: MessageEvent<FromFeed>) => this.receive(data);
+    this.worker.onerror = () => {
+      for (const { reject } of this.connecting.splice(0))
+        reject(new Error("The Live player stopped."));
     };
-    this.core.onStreamClear = () => this.restart();
-    this.core.onStreamEnd = () => this.restart();
-    this.core.onVolumeUpdate = () => this.updateVolume();
+    this.send({ type: "start", config: rest, stored });
   }
 
   connect() {
-    return this.core.connect();
+    return new Promise<void>((resolve, reject) => {
+      this.connecting.push({ resolve, reject });
+      this.send({ type: "connect" });
+    });
   }
-  setMinBufferMs(value: number) {
-    this.core.setMinBufferMs(value);
+  setMinBufferMs(ms: number) {
+    this.send({ type: "minBuffer", ms });
   }
   get isConnected() {
-    return this.core.isConnected;
+    return this.feed?.connected ?? false;
   }
   get isPlaying() {
-    return this.core.isPlaying;
+    return this.feed?.playing ?? false;
   }
   get timeSyncInfo() {
-    return this.core.timeSyncInfo;
+    return this.feed?.timeSync ?? { synced: false, offset: 0, error: 0 };
   }
+  // Where the track is now: where the feed last read it, moved on since at its speed.
   get trackProgress() {
-    return this.core.trackProgress;
-  }
-  getCurrentServerTimeUs() {
-    return this.core.getCurrentServerTimeUs();
+    const progress = this.feed?.progress;
+    if (!progress) return null;
+    const passedMs = performance.timeOrigin + performance.now() - this.feed!.at,
+      positionMs = progress.positionMs + passedMs * progress.playbackSpeed;
+    return {
+      ...progress,
+      positionMs: progress.durationMs ? Math.min(positionMs, progress.durationMs) : positionMs,
+    };
   }
 
   // Call from a tap, before any other await, as the SDK's unlock().
@@ -142,7 +165,8 @@ export class LivePlayer {
 
   destroy() {
     clearInterval(this.reader);
-    this.core.disconnect("user_request");
+    // The feed says goodbye to Core and closes its Worker.
+    this.send({ type: "destroy" });
     this.node?.disconnect();
     void this.context?.close().catch(() => {});
     this.context = this.gain = this.node = undefined;
@@ -162,11 +186,11 @@ export class LivePlayer {
 
   // Whether it still measures, or waits to be placed: it plays nothing.
   get measuring() {
-    return this.measure !== undefined;
+    return this.measure;
   }
   // It declared its need: its next stream clear or start is Core placing it there.
   declared() {
-    if (this.measure === "measuring") this.measure = "placing";
+    this.send({ type: "declared" });
   }
   // Once a second while it measures: how late the latest chunk since the last sample arrived.
   sampleArrival() {
@@ -184,13 +208,13 @@ export class LivePlayer {
     const sounding =
       counted &&
       !this.interrupted &&
-      this.core.timeSyncInfo.synced &&
+      this.timeSyncInfo.synced &&
       this.context?.state === "running" &&
       !!this.node;
     const { chunks, lost, slack } = this.second;
-    const sendAheadMs = median(this.core.sendAheads);
+    const sendAheadMs = median(this.sendAheads);
     this.second = noStats();
-    this.core.sendAheads = [];
+    this.sendAheads = [];
     this.interrupted = false;
     if (!sounding) return undefined;
     const rate = this.context!.sampleRate;
@@ -202,6 +226,31 @@ export class LivePlayer {
     };
   }
 
+  private send(message: ToFeed, transfer: Transferable[] = []) {
+    this.worker.postMessage(message, transfer);
+  }
+
+  private receive(message: FromFeed) {
+    if (message.type === "state") return this.onStateChange?.(message.state);
+    if (message.type === "store") return this.storage?.setItem(message.key, message.value);
+    if (message.type === "connected") {
+      for (const { resolve, reject } of this.connecting.splice(0))
+        if (message.error) reject(new Error(message.error));
+        else resolve();
+      return;
+    }
+    const status = message.status,
+      volumeChanged = status.volume !== this.feed?.volume || status.muted !== this.feed?.muted;
+    this.feed = status;
+    this.measure = status.measuring;
+    if (status.arrival !== undefined)
+      this.arrival = Math.max(this.arrival ?? -Infinity, status.arrival);
+    this.sendAheads.push(...status.sendAheads);
+    addStats(this.second, status.stats);
+    addStats(this.window, status.stats);
+    if (volumeChanged) this.updateVolume();
+  }
+
   private open() {
     if (this.context) return this.context;
     // Browsers offer AudioWorklet only to secure pages: Couch's HTTPS address, or this computer's own.
@@ -210,7 +259,7 @@ export class LivePlayer {
     const session = (navigator as { audioSession?: { type: string } }).audioSession;
     if (session) session.type = "playback";
     const context = new AudioContext({
-      sampleRate: this.core.currentFormat?.sample_rate ?? 48_000,
+      sampleRate: this.feed?.sampleRate ?? 48_000,
     });
     const gain = context.createGain();
     this.context = context;
@@ -225,39 +274,38 @@ export class LivePlayer {
         numberOfInputs: 0,
         outputChannelCount: [2],
       });
-      node.port.onmessage = ({ data }: MessageEvent<{ epoch: number; stats: LiveStats }>) =>
-        this.report(data.epoch, data.stats);
       node.connect(gain);
       this.node = node;
-      // A stream that cleared while the worklet loaded raised the epoch the reports must carry.
-      this.post({ type: "reset", epoch: this.epoch });
+      // Chunks and the worklet's reports pass between the feed and the worklet directly.
+      const { port1, port2 } = new MessageChannel();
+      node.port.postMessage({ port: port1 }, [port1]);
+      this.send({ type: "port", port: port2 }, [port2]);
+      this.sendClock();
     });
     return context;
   }
 
   private updateVolume() {
     const gain = this.gain,
-      context = this.context;
-    if (!gain || !context) return;
-    const target = gainOf(this.core.volume, this.core.muted);
-    gain.gain.setTargetAtTime(target, context.currentTime, volumeRampSec);
+      context = this.context,
+      feed = this.feed;
+    if (!gain || !context || !feed) return;
+    gain.gain.setTargetAtTime(gainOf(feed.volume, feed.muted), context.currentTime, volumeRampSec);
   }
 
-  private post(message: LiveMessage) {
-    this.node?.port.postMessage(message);
-  }
-
-  // Core cleared or started its stream: chunks from then on are stamped where it's placed.
-  private restart() {
-    if (this.measure === "placing") this.measure = undefined;
-    this.core.received.clear();
-    this.reset();
-  }
-
-  // What the worklet holds belongs to a stream that ended, or to a clock that stopped.
-  private reset() {
-    this.epoch++;
-    this.post({ type: "reset", epoch: this.epoch });
+  // Where the context's clock stands, for the feed to map stamps with; none until it's read.
+  private sendClock() {
+    const context = this.context,
+      offset = this.offset;
+    const clock: LiveClock | undefined =
+      context && offset !== undefined
+        ? {
+            offset,
+            origin: performance.timeOrigin,
+            sampleRate: context.sampleRate,
+          }
+        : undefined;
+    this.send({ type: "clock", clock });
   }
 
   // The context stopped or ran again: its clock no longer stands where the readings put it.
@@ -265,7 +313,8 @@ export class LivePlayer {
     this.interrupted = true;
     this.readings = [];
     this.offset = this.startedAt = undefined;
-    this.reset();
+    this.sendClock();
+    this.send({ type: "reset" });
   }
 
   private read(now = performance.now()) {
@@ -277,47 +326,12 @@ export class LivePlayer {
     this.startedAt ??= now;
     while (this.readings.length && now - this.readings[0]!.at >= windowMs) this.readings.shift();
     this.readings.push({ ...reading, at: now });
-    this.offset = median(this.readings.map(({ offset }) => offset));
-    if (now - this.windowStart >= statusMs) this.status(now);
-  }
-
-  private play(chunk: DecodedAudioChunk) {
-    const sendAheadMs = this.core.received.get(chunk.serverTimeUs);
-    this.core.received.delete(chunk.serverTimeUs);
-    if (this.measure) {
-      if (sendAheadMs !== undefined && this.core.timeSyncInfo.synced) {
-        const late = arrivalLateMs(
-          sendAheadMs,
-          chunk.serverTimeUs,
-          this.core.getCurrentServerTimeUs(),
-        );
-        this.arrival = Math.max(this.arrival ?? -Infinity, late);
-      }
-      return;
+    const offset = median(this.readings.map(({ offset }) => offset));
+    if (offset !== this.offset) {
+      this.offset = offset;
+      this.sendClock();
     }
-    const context = this.context;
-    if (!this.node || context?.state !== "running" || !this.core.timeSyncInfo.synced) return;
-    // Core's Live wire is 48 kHz, the rate the context opens at.
-    if (chunk.sampleRate !== context.sampleRate) return;
-    const now = performance.now();
-    if (this.offset === undefined) this.read(now);
-    const offset = this.offset;
-    if (offset === undefined) return;
-    const heardMs =
-      now +
-      (chunk.serverTimeUs - this.core.getCurrentServerTimeUs()) / 1000 -
-      this.core.getSyncDelayMs();
-    const frame = (offset + heardMs / 1000) * context.sampleRate;
-    this.post({
-      type: "chunk",
-      chunk: { frame, stampUs: chunk.serverTimeUs, channels: chunk.samples },
-    });
-  }
-
-  private report(epoch: number, stats: LiveStats) {
-    if (epoch !== this.epoch) return;
-    addStats(this.second, stats);
-    addStats(this.window, stats);
+    if (now - this.windowStart >= statusMs) this.status(now);
   }
 
   // One console line every 10 s while it plays, as the SDK's player logs its own.

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LiveTimeline, addStats, noStats } from "../src/client/session/live-timeline";
+import { LiveTimeline, addStats, contextFrame, noStats } from "../src/client/session/live-timeline";
 
 const rate = 48_000;
 const chunkFrames = 240;
@@ -126,4 +126,18 @@ test("a clock that moved by more than a slew can take back is placed again, with
   const replaced = sent[100]!.frame;
   expect(left[replaced - 1]).toBe(0);
   expect(left[replaced]).toBe(100 * chunkFrames);
+});
+
+test("the feed's Worker maps an instant to the frame the page's clock puts it at, whatever their time origins", () => {
+  // The page read the context 2.5 s ahead of its own performance clock. The Worker started 1234.5678 ms
+  // later, so the same instant reads that much less on its clock.
+  const page = 1_763_366_400_123.456,
+    worker = page + 1234.5678,
+    clock = { offset: 2.5, origin: page, sampleRate: rate };
+  const pageMs = 5000;
+  expect(contextFrame(clock, pageMs, page)).toBeCloseTo((2.5 + 5) * rate, 6);
+  // Origins counted from 1970 keep about 0.2 µs, a hundredth of a frame.
+  expect(contextFrame(clock, pageMs - 1234.5678, worker)).toBeCloseTo((2.5 + 5) * rate, 1);
+  // A Worker that started first reads more.
+  expect(contextFrame(clock, pageMs + 80.25, page - 80.25)).toBeCloseTo((2.5 + 5) * rate, 1);
 });

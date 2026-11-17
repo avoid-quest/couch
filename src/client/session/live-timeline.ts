@@ -1,6 +1,6 @@
 // The Live player's timeline, as its AudioWorklet runs it (live-worklet.ts). Each decoded chunk comes
 // with the context frame its first sample must be rendered at, so that it's heard at its stamp
-// (live-player.ts maps stamps to frames). Samples play one after another from a short queue:
+// (live-feed.ts maps stamps to frames). Samples play one after another from a short queue:
 // - The first chunk, and the first after the queue ran dry, starts exactly at its frame. What
 //   already passed is skipped, so lateness never shifts the timeline.
 // - While it plays, the timeline follows the frames it was given by playing slightly faster or
@@ -10,6 +10,14 @@
 //   it follows on from ran out before it came (Core sent nothing in between).
 export type LiveChunk = { frame: number; stampUs: number; channels: Float32Array[] };
 export type LiveMessage = { type: "chunk"; chunk: LiveChunk } | { type: "reset"; epoch: number };
+// Where the context's clock stands, as the page reads it: context seconds less performance seconds at
+// the same instant, on the clock of the page whose performance.timeOrigin is `origin`.
+export type LiveClock = { offset: number; origin: number; sampleRate: number };
+// The context frame heard at `atMs` on another realm's performance clock (a Worker's, whose time
+// origin is `ownOrigin`). Each realm's time origin is its start on one shared clock, so origin + now
+// names the same instant in both.
+export const contextFrame = (clock: LiveClock, atMs: number, ownOrigin = performance.timeOrigin) =>
+  (clock.offset + (ownOrigin - clock.origin + atMs) / 1000) * clock.sampleRate;
 export type LiveStats = {
   chunks: number;
   lost: number;

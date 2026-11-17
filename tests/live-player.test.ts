@@ -1,9 +1,11 @@
 import { afterEach, expect, mock, test } from "bun:test";
+import type { FromFeed, LiveFeed as Feed, ToFeed } from "../src/client/session/live-feed";
 import { noStats, type LiveMessage, type LiveStats } from "../src/client/session/live-timeline";
 
 // The SDK's protocol layer, as far as the Live player reaches it.
 class FixtureCore {
   onStreamClear = () => {};
+  onVolumeUpdate = () => {};
   onAudioData = (_chunk: unknown) => {};
   timeSyncInfo = { synced: true };
   volume = 100;
@@ -31,15 +33,51 @@ mock.module("@sendspin/sendspin-js", () => ({
 }));
 mock.module("../src/client/session/live-worklet.ts?worker&url", () => ({ default: "worklet.js" }));
 
-// The worklet's side of the port: it reports with the epoch of the last reset it was sent.
+// MessagePorts that deliver at once, so a test sees what reached the other end.
+class FixturePort {
+  other!: FixturePort;
+  onmessage = (_event: { data: unknown }) => {};
+  postMessage(data: unknown) {
+    this.other.onmessage({ data });
+  }
+  close() {}
+}
+class FixtureChannel {
+  port1 = new FixturePort();
+  port2 = new FixturePort();
+  constructor() {
+    this.port1.other = this.port2;
+    this.port2.other = this.port1;
+  }
+}
+// The feed's Worker, run in this thread: messages go both ways at once.
+class FixtureWorker {
+  onmessage = (_event: { data: FromFeed }) => {};
+  onerror = () => {};
+  feed: Feed | undefined;
+  postMessage(message: ToFeed) {
+    if (message.type === "start")
+      this.feed = new LiveFeed(message.config, message.stored, (data) => this.onmessage({ data }));
+    else this.feed?.handle(message);
+  }
+}
+// The worklet's side of its feed port: it reports with the epoch of the last reset it was sent.
 class FixtureNode {
   epoch = 0;
   chunks = 0;
+  frames: number[] = [];
+  feed: FixturePort | undefined;
   port = {
-    onmessage: (_event: { data: { epoch: number; stats: LiveStats } }) => {},
-    postMessage: (message: LiveMessage) => {
-      if (message.type === "reset") this.epoch = message.epoch;
-      else this.chunks++;
+    postMessage: ({ port }: { port: FixturePort }) => {
+      this.feed = port;
+      port.onmessage = ({ data }) => {
+        const message = data as LiveMessage;
+        if (message.type === "reset") this.epoch = message.epoch;
+        else {
+          this.chunks++;
+          this.frames.push(message.chunk.frame);
+        }
+      };
     },
   };
   constructor() {
@@ -48,7 +86,7 @@ class FixtureNode {
   connect() {}
   disconnect() {}
   report(stats: LiveStats) {
-    this.port.onmessage({ data: { epoch: this.epoch, stats } });
+    this.feed!.postMessage({ epoch: this.epoch, stats });
   }
 }
 let nodes: FixtureNode[] = [];
@@ -71,8 +109,18 @@ class FixtureContext {
     return Promise.resolve();
   }
 }
-Object.assign(globalThis, { AudioContext: FixtureContext, AudioWorkletNode: FixtureNode });
+Object.assign(globalThis, {
+  AudioContext: FixtureContext,
+  AudioWorkletNode: FixtureNode,
+  MessageChannel: FixtureChannel,
+  Worker: FixtureWorker,
+});
+const { LiveFeed } = await import("../src/client/session/live-feed");
 const { LivePlayer } = await import("../src/client/session/live-player");
+// The feed reports at once when the volume changes, as it does ten times a second.
+const flush = (core: FixtureCore) => core.onVolumeUpdate();
+// The page reads its output every 20 ms; the feed maps stamps with the first reading.
+const reading = () => new Promise((resolve) => setTimeout(resolve, 25));
 
 afterEach(() => {
   cores = [];
@@ -86,6 +134,7 @@ test("a stream cleared while the worklet loads still counts the loss the worklet
   loaded();
   await unlocked;
   nodes[0]!.report({ ...noStats(), chunks: 200, lost: 3, slack: -960 });
+  flush(cores[0]!);
   expect(player.sampleLoss(true)).toMatchObject({ chunks: 200, lost: 3, lateMs: 20 });
   player.destroy();
 });
@@ -122,6 +171,7 @@ test("a player with no need measures how late chunks arrive and plays none until
   chunk(1000, 940);
   chunk(1000, 990);
   // The latest arrived 60 ms after Core sent it, however late Core stamped it.
+  flush(core);
   expect(player.sampleArrival()).toBe(60);
   expect(player.sampleArrival()).toBeUndefined();
   // A clear before it declared its need is another stream's: it still measures.
@@ -131,12 +181,16 @@ test("a player with no need measures how late chunks arrive and plays none until
   player.declared();
   chunk(1000, 999);
   expect(node.chunks).toBe(0);
+  flush(core);
   expect(player.sampleArrival()).toBe(1);
   // Core places it and clears its stream: what follows is stamped at its step, and plays.
   core.onStreamClear();
+  flush(core);
   expect(player.measuring).toBe(false);
+  await reading();
   chunk(102, 100);
   expect(node.chunks).toBe(1);
+  flush(core);
   expect(player.sampleArrival()).toBeUndefined();
   player.destroy();
 });

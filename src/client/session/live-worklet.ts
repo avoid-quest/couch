@@ -18,12 +18,18 @@ registerProcessor(
     private epoch = 0;
     private next = currentFrame;
     private reported = currentFrame;
+    // The feed's port (live-feed.ts): chunks come from its Worker and reports go back to it, past the
+    // page's main thread, which only hands the port over.
+    private feed: MessagePort | undefined;
     constructor() {
       super();
-      this.port.onmessage = ({ data }: MessageEvent<LiveMessage>) => {
-        if (data.type === "chunk") return this.timeline.push(data.chunk, this.next);
-        this.timeline.reset();
-        this.epoch = data.epoch;
+      this.port.onmessage = ({ data }: MessageEvent<{ port: MessagePort }>) => {
+        this.feed = data.port;
+        this.feed.onmessage = ({ data }: MessageEvent<LiveMessage>) => {
+          if (data.type === "chunk") return this.timeline.push(data.chunk, this.next);
+          this.timeline.reset();
+          this.epoch = data.epoch;
+        };
       };
     }
     process(_inputs: Float32Array[][], outputs: Float32Array[][]) {
@@ -32,7 +38,7 @@ registerProcessor(
       this.next = currentFrame + (output[0]?.length ?? 0);
       if (this.next - this.reported >= reportFrames) {
         this.reported = this.next;
-        this.port.postMessage({ epoch: this.epoch, stats: this.timeline.takeStats() });
+        this.feed?.postMessage({ epoch: this.epoch, stats: this.timeline.takeStats() });
       }
       return true;
     }
