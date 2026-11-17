@@ -596,8 +596,9 @@ export async function createHub(options: HubOptions) {
     nameOf,
     forwarder,
     reroute: (sourceId) => {
+      // A timestamped capture's receivers play it in step instead (playbackDelivery).
       log(
-        `live ${sourceId.slice(0, 8)}: the share couldn't reach Couch's forwarding relay; viewers connect to the sharer.`,
+        `live ${sourceId.slice(0, 8)}: the share couldn't reach Couch's forwarding relay; ${live.source(sourceId)?.audioDelivery === "pcm" ? "its speakers play it in step" : "viewers connect to the sharer"}.`,
       );
       for (const playback of all()) if (sourceOf(playback) === sourceId) reconcile(playback);
       broadcast();
@@ -983,13 +984,19 @@ export async function createHub(options: HubOptions) {
             100,
         );
   const levelOf = (playback: Playback) => rendered(playback, playback.outputs[0]);
-  const deliveryOf = (playback: Playback) =>
-    playbackDelivery({
-      source: live.source(sourceOf(playback) ?? ""),
+  // A device that couldn't connect through the forwarding relay keeps a timestamped capture on Sendspin.
+  const deliveryOf = (playback: Playback) => {
+    const sourceId = sourceOf(playback) ?? "";
+    return playbackDelivery({
+      source: live.source(sourceId),
       outputs: playback.outputs,
       inSync: playback.inSync,
       mpv: mpvPlayback === playback,
+      forwarding:
+        live.forwardable(sourceId) &&
+        !playback.outputs.some((output) => live.relayed(sourceId, output.deviceId)),
     });
+  };
   const grouped = (playback: Playback) => deliveryOf(playback) === "scheduled";
   // This item's relayed receivers stay failed until this playback retries, even if another restarts the shared stream.
   const bufferFailed = (playback: Playback) =>

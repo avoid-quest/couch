@@ -247,7 +247,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
   });
   return {
     choose: waiting ? `Choose where ${title ?? "it"} plays` : undefined,
-    // PCM audio is already scheduled, even at one receiver; this choice remains for captured A/V.
+    // Core picks PCM audio's delivery by its receivers; this choice remains for captured A/V.
     inSync:
       source &&
       !(source.audioDelivery === "pcm" && !source.video) &&

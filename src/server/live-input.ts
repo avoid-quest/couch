@@ -134,6 +134,11 @@ export function createLiveInputs<Socket>(options: {
   };
   return {
     sources: () => [...sources.values()].map((publication) => publication.source),
+    /** The forwarding relay carries this source: a capturing window's, with the helper, not failed for it. */
+    forwardable: (sourceId: string) => {
+      const publication = sources.get(sourceId);
+      return !!publication && forwards(publication);
+    },
     source: (sourceId: string) => sources.get(sourceId)?.source,
     position: (sourceId: string) => {
       const publication = sources.get(sourceId);
