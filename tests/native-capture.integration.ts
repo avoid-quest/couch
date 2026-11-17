@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { WebSocketServer } from "ws";
 import { serverNowUs } from "@sonn-audio/node-sendspin";
 import { prepareNativeCapture } from "../app/native-capture";
-import { nativeAudioInput } from "../app/native-audio-input";
+import { readNativeInput } from "../app/native-input-process";
 import { acceptCaptureUpload } from "../src/server/capture-ingest";
 import type { CaptureAudioPacket } from "../src/server/capture-audio";
 import { liveFixture, until } from "./live-input.fixture";
@@ -217,7 +217,7 @@ test(
     });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
-    const source = nativeAudioInput(
+    const source = readNativeInput(
       executable,
       { uid: "test", name: "ordered", channels: 4, nominalRate: 48000, ownerHalBufferFrames: 256 },
       48000,

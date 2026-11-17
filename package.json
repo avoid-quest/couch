@@ -102,6 +102,7 @@
     "files": [
       "package.json",
       "build/main.mjs",
+      "build/native-input.mjs",
       "build/preload.cjs",
       "build/core.mjs",
       "build/audio-worker.mjs",

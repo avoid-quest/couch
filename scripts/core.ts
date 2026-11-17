@@ -29,10 +29,12 @@ export async function buildCore(identity?: string) {
   }
 }
 
-// Electron's main process (ESM) and the window's sandboxed preload (CommonJS).
+// Electron's main process (ESM), the native input's reader process (ESM) and the
+// window's sandboxed preload (CommonJS).
 export async function buildApp() {
   for (const [entry, format, output] of [
     ["app/main.ts", "esm", "build/main.mjs"],
+    ["app/native-input-process.ts", "esm", "build/native-input.mjs"],
     ["app/preload.ts", "cjs", "build/preload.cjs"],
   ] as const) {
     const result = await Bun.build({

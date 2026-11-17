@@ -162,6 +162,9 @@ and turn it into rolling HLS with FFmpeg (`src/server/live-stream.ts`)
 
 For Live audio, Main owns capture outside the window's event loop: native Mac
 inputs use the bundled PortAudio helper, browser inputs a hidden capture page.
+A native input's sound goes from the helper to Core through its own utility
+process (`app/native-input-process.ts`), never through Main, so a busy Main
+doesn't stop it; Main keeps the microphone grant and drives that process.
 Screen and window capture take resolution and 30/60/120 FPS targets
 (`defaultLiveFrameRate`, `src/shared/live-input.ts`). See
 [Share a live device](live-inputs.md).
@@ -218,6 +221,7 @@ screen awake** holds a Screen Wake Lock while this device plays.
 src/client     -- Vite -->               dist              (served by Core)
 src/main.ts    -- Bun.build node -->     build/core.mjs    (Core)
 app/main.ts    -- Bun.build -->          build/main.mjs    (Electron main)
+app/native-input-process.ts -- Bun.build --> build/native-input.mjs (native input reader)
 app/preload.ts -- Bun.build -->          build/preload.cjs (sandboxed preload)
 ```
 
