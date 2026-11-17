@@ -3,7 +3,7 @@ import type Mpegts from "mpegts.js";
 import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
 import { soundClock } from "./sendspin";
 import { localDeviceName } from "./device-id";
-import { bufferedEnd, setBuffered } from "./buffered";
+import { bufferedEnd, setBuffered, setLocalMedia } from "./buffered";
 import { createCompressor } from "./compressor";
 import { setPictureMapping } from "./picture-mapping";
 import { reportBehind } from "./behind";
@@ -268,6 +268,8 @@ const sourceFailed = () => fail(video.error?.message || unavailable);
 // Pass-through says whether a source is HLS; without it, the path does.
 const isPlaylist = (command: NonNullable<typeof loading>) =>
   !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
+// A capture's element has no programme time to show.
+setLocalMedia(() => (playbackId && !mediaStream ? { playbackId, media: video } : null));
 // The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
 const buffered = () => {
   let end =

@@ -30,6 +30,7 @@ import {
   PlaybackTransport,
   PlaybackVolume,
 } from "@/components/PlaybackTransport";
+import { CouchPlayer } from "@/components/CouchPlayer";
 import type { Action } from "../../../shared/protocol";
 import type { RemoteTextField } from "../../../shared/remote";
 
@@ -220,15 +221,15 @@ export function RemotePage() {
               />
             )}
             {state && credentials && (
-              <>
+              <CouchPlayer state={state} run={send}>
                 <PlaybackTransport
                   state={state}
                   connected={ready}
                   run={send}
                   participation={false}
                 />
-                {current && <PlaybackTimeline state={state} connected={ready} run={send} />}
-              </>
+                {current && <PlaybackTimeline state={state} connected={ready} />}
+              </CouchPlayer>
             )}
             {volumeState && (
               <PlaybackVolume
