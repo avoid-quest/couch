@@ -3,6 +3,7 @@ import {
   declareLiveBuffer,
   nextLateSteps,
   noLateSteps,
+  sdkLateSteps,
   withLateSteps,
   type LateSteps,
   type LossSecond,
@@ -220,8 +221,8 @@ test("a step for spells that recur in the next minute pauses; fewer spells keep 
 });
 
 // Two hours of loss no step changes: the ms of late steps each hour.
-const climb = (lossy: (at: number) => boolean, lateMs?: number) => {
-  let late = noLateSteps,
+const climb = (lossy: (at: number) => boolean, lateMs?: number, start = noLateSteps) => {
+  let late = start,
     sendAheadMs = 95;
   const hours = [0, 0];
   for (let at = 0; at < 2 * 3600; at++) {
@@ -241,11 +242,12 @@ const climb = (lossy: (at: number) => boolean, lateMs?: number) => {
 
 test("loss that no step changes climbs at most 130 ms in the first hour and 90 ms an hour after, however late", () => {
   for (const lateMs of [undefined, 15, 35, 95, 250, 1000])
-    for (const lossy of [() => true, (at: number) => at % 20 === 19]) {
-      const [first, second] = climb(lossy, lateMs);
-      expect(first).toBeLessThanOrEqual(130);
-      expect(second).toBeLessThanOrEqual(90);
-    }
+    for (const lossy of [() => true, (at: number) => at % 20 === 19])
+      for (const start of [noLateSteps, sdkLateSteps]) {
+        const [first, second] = climb(lossy, lateMs, start);
+        expect(first).toBeLessThanOrEqual(130);
+        expect(second).toBeLessThanOrEqual(90);
+      }
 });
 
 test("a step is as large as the lateness that recurred, rounded up to 10 ms", () => {
@@ -333,6 +335,70 @@ test("a step that didn't help pauses as long as its 10 ms parts would have", () 
     unhelpful: 4,
     phase: { kind: "pausing", left: 24 + 48 + 96 + 192 },
   });
+});
+
+// A second on the SDK's player, which reports its sync error: negative while it slews to a step.
+const slewing = (syncErrorMs: number, sendAheadMs: number, lost = 0): LossSecond => ({
+  ...second(lost, sendAheadMs),
+  syncErrorMs,
+});
+
+test("on the SDK's player a step comes in 10 ms parts, each once the player slewed to the last", () => {
+  // Loss 35 ms late: a 40 ms step, of which Core is asked 10 ms.
+  let late = run(sdkLateSteps, recurring(2, 95, 35));
+  expect(late).toMatchObject({ lateMs: 10, phase: { kind: "moving", caused: { stepMs: 40 } } });
+  // Core applies it (its chunks 10 ms further ahead); the player slews to it, 8 ms or more off.
+  late = run(late, [slewing(-10, 105), slewing(-9, 105), slewing(-8, 105)]);
+  expect(late).toMatchObject({ lateMs: 10, phase: { kind: "moving" } });
+  // Within 8 ms: the next part, at most 18 ms for the player to slew.
+  late = run(late, [slewing(-7, 105)]);
+  expect(late.lateMs).toBe(20);
+  // A part shows only once Core applied it, whatever the player reports.
+  late = run(late, [slewing(0, 105)]);
+  expect(late.lateMs).toBe(20);
+  late = run(late, [slewing(-10, 115), slewing(-5, 115), slewing(-10, 125), slewing(-6, 125)]);
+  expect(late).toMatchObject({ lateMs: 40, phase: { kind: "moving" } });
+  // Applied in full and slewed to: judged from here, as the whole step.
+  late = run(late, [slewing(-10, 135), slewing(-2, 135)]);
+  expect(late).toMatchObject({
+    lateMs: 40,
+    caused: { stepMs: 40 },
+    seconds: [],
+    phase: { kind: "watching" },
+  });
+  // Every part counts towards the hour.
+  expect(late.taken.map(({ ms }) => ms)).toEqual([10, 10, 10, 10]);
+});
+
+test("loss while the SDK's player takes a step in parts isn't the step's", () => {
+  // Loss goes on at the same rate through all four parts of a 40 ms step.
+  let late = run(sdkLateSteps, recurring(2, 95, 35));
+  for (const sendAheadMs of [105, 115, 125, 135])
+    late = run(late, [slewing(-10, sendAheadMs, 2), slewing(-2, sendAheadMs, 2)]);
+  expect(late).toMatchObject({ lateMs: 40, seconds: [], phase: { kind: "watching" } });
+  // It's judged only by loss that recurs after it.
+  expect(run(late, recurring(1, 135))).toMatchObject({ lateMs: 50, unhelpful: 0 });
+  expect(run(late, recurring(2, 135))).toMatchObject({ lateMs: 40, unhelpful: 4 });
+});
+
+test("on the SDK's player a step ends with its applied parts when the player doesn't settle, or Core stops", () => {
+  let late = run(sdkLateSteps, [...recurring(2, 95, 35), slewing(-10, 105)]);
+  // Ten seconds 8 ms or more off: something else moved it. No more parts.
+  late = run(late, repeat(9, slewing(-12, 105)));
+  expect(late).toMatchObject({ lateMs: 10, phase: { kind: "moving" } });
+  late = run(late, [slewing(-12, 105)]);
+  expect(late).toMatchObject({
+    lateMs: 10,
+    caused: { stepMs: 10 },
+    phase: { kind: "watching" },
+  });
+  expect(late.taken.map(({ ms }) => ms)).toEqual([10]);
+  // A part Core doesn't apply within 3 s (at its limit) isn't judged, as a whole step isn't.
+  late = run(sdkLateSteps, [...recurring(2, 95, 35), slewing(-10, 105), slewing(-2, 105)]);
+  expect(late.lateMs).toBe(20);
+  late = run(late, repeat(3, slewing(0, 105)));
+  expect(late).toMatchObject({ lateMs: 20, phase: { kind: "watching" } });
+  expect(late.caused).toBeUndefined();
 });
 
 test("late steps add their ms to the declaration, within Core's limit", () => {

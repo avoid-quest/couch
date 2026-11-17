@@ -136,8 +136,22 @@ wrong clock still shows the right time.
 - Core has applied a step when its chunks leave it half that step further
   ahead of their stamps (Sendspin's `send_ahead`, which Core writes as it sends,
   so the network can't move it). Core applies every step a listener asks for,
-  short of its 5 s limit; one not seen within three seconds isn't judged. An
-  applied step is judged when loss recurs after it: the chunks lost in the ten
+  short of its 5 s limit; one not seen within three seconds isn't judged.
+- The SDK's player plays a step's first chunk where its last one ended and slews
+  to it only while two of its limits hold (`scheduler.js`,
+  `recorrection-monitor.js`): a chunk stamped 100 ms or more past the last one's
+  end is placed again at once, and so is its sound once its smoothed sync error
+  stays 30 ms or more for 0.4 s (a guarded cutover). Either is a gap as long as
+  the step. A step shows as that sync error at once, so on Android and iOS a
+  step is asked of Core 10 ms at a time: each part once Core applied the last
+  and the player slewed to within 8 ms of it (where it stops changing its rate
+  and corrects a sample at a time), so it never has more than 18 ms to slew. A
+  part takes two to four seconds, 130 ms under a minute. Loss while the parts
+  are asked and slewed to happens short of the step and isn't judged: the step
+  is judged from once the player slewed to its last part. A player still 8 ms
+  or more off ten seconds after a part (30 ms slews to 8 in under 8 s) is off
+  for another reason, and the step ends with the parts Core applied.
+- An applied step is judged when loss recurs after it: the chunks lost in the ten
   seconds that show it against those of the ten seconds that caused it. Half as
   many or fewer: it helped, and the next step follows. Spells over a minute
   never show that a step helped: each minute that recurs holds three or more.
@@ -149,15 +163,14 @@ wrong clock still shows the right time.
   in the hour before it: 130 ms at first, then as little as 10 ms. So loss no
   step changes climbs no faster than with 10 ms steps, however late: at most
   130 ms in a listen's first hour and about 90 ms an hour after. The cap also
-  keeps every step under the 200 ms at which either player places its sound
+  keeps every step under the 200 ms at which the worklet places its sound
   again at once instead of slewing. A step that helped, or sixteen minutes with
   no recurring loss, starts the pauses from 24 s again, but steps in any hour
   still add at most 130 ms together: a step can halve the loss by chance, and
   what a step added comes back only as it falls out of the hour. A step after which loss doesn't recur is
   never doubted. Pauses last only as long as the listen. The worklet takes a
   step by playing 0.3 % slower: 10 ms later every 3.3 s. The SDK's player plays
-  0.5 % slower while it's over 35 ms off, 0.3 % over 8 ms, then corrects a
-  sample at a time.
+  0.3 % slower while it's over 8 ms off, then corrects a sample at a time.
 - Each listen starts with no late steps and learns its own: nothing is
   remembered across listens, so a step one listen needed never holds a later
   one back, and loss no step cures can't climb across joins.

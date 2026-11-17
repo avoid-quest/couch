@@ -196,7 +196,7 @@ export function countingLiveLoss(on: boolean) {
 
 // Once a second: the chunks received since the last sample, those lost (dropped or started after a
 // silence), how late the latest dropped one was, how far ahead of their stamps Core sent them (the median rises when Core moves this
-// listener a step later). Undefined when the second can't be
+// listener a step later), and the player's sync error (it slews to a step). Undefined when the second can't be
 // counted: the listener wasn't playing on a context that ran throughout it.
 export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond | undefined {
   const context = scheduler?.getAudioContext();
@@ -222,6 +222,7 @@ export function sampleLiveLoss(listener: Player, counted: boolean): LossSecond |
     lost: lost + dried,
     sendAheadMs: sorted.length ? sorted[sorted.length >> 1] : undefined,
     lateMs,
+    syncErrorMs: listener.syncInfo.syncErrorMs,
   };
   received = 0;
   dried = 0;

@@ -16,6 +16,7 @@ import {
   nextLateSteps,
   noLateSteps,
   sdkBatchMs,
+  sdkLateSteps,
   withLateSteps,
 } from "./live-buffer";
 import { liveReadings } from "../../shared/live-need";
@@ -156,15 +157,15 @@ export function listen(
     live && (on || watch)
       ? JSON.stringify([credentials?.origin, credentials?.token, live.sourceId])
       : undefined;
+  const sdkLive = Boolean(live) && sdkPlays();
   if (scope !== bufferScope) {
     bufferScope = scope;
     latencyReadings = [];
     lastLatency = undefined;
-    lateSteps = noLateSteps;
+    lateSteps = sdkLive ? sdkLateSteps : noLateSteps;
     needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
-  const sdkLive = Boolean(live) && sdkPlays();
   countingLiveLoss(sdkLive && (on || watch));
   useOutputTimestamps(Boolean(live));
   playRelaxed(!live && (on || watch));

@@ -45,11 +45,14 @@ export function declareLiveBuffer(
 // - Core has applied a step when its chunks leave it half that step further ahead of their stamps
 //   (send_ahead, which Core writes as it sends, so the network can't move it). With no room delay
 //   Core applies every step a listener asks for, short of its 5 s limit; one not seen within 3 s
-//   wasn't applied and isn't judged.
+//   wasn't applied and isn't judged. The SDK's player is asked a step 10 ms at a time, each part
+//   once it slewed to the last (sdkLateSteps): a larger step at once is a gap there.
 // - A step is judged when loss recurs after it: the chunks lost in the ten seconds that show it
 //   against those of the ten seconds that caused it. The same rule picked both, so neither is clean by
 //   construction. The player slews to a step (0.3 % slower plays 10 ms later every 3.3 s), but a
 //   loss on the way places its next chunk at the new step at once, so loss that recurs is the step's.
+//   On the SDK's player the seconds count only once it slewed to the last part: loss while it's
+//   asked part by part happens short of the step.
 //   Half as many or fewer: it helped, and the next step follows. Two windows of loss no step changes
 //   rarely differ that much by chance. Spells over a minute never show that a step helped: each
 //   minute that recurs holds three or more, and one spell's chunks would look like half a ten-second
@@ -61,8 +64,8 @@ export function declareLiveBuffer(
 //   is taken before its pause, so without this a few large ones would each come before the pauses
 //   that bound them. So loss no step changes climbs no faster than with 10 ms steps, however late:
 //   at most 130 ms in a listen's first hour and about 90 ms an hour after, and loss a step would
-//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which either player
-//   places its sound again at once (a jump) instead of slewing. A step that helped, or 16 minutes
+//   cure waits at most 6.4 minutes. It also keeps a step under the 200 ms at which the worklet
+//   places its sound again at once (live-timeline.ts) instead of slewing. A step that helped, or 16 minutes
 //   with no recurring loss, starts the pauses from 24 s again, but steps in any hour still add at
 //   most 130 ms together: a step can halve the loss by chance, and a cap that came back with it let
 //   loss no step changes climb 340 ms in an hour. What a step added comes back only as it falls out
@@ -74,6 +77,9 @@ export type LossSecond = {
   lost: number;
   sendAheadMs?: number;
   lateMs?: number;
+  // The SDK's player's sync error at the sample (syncInfo.syncErrorMs): negative while it still
+  // plays earlier than its stamps ask, as it does while it slews to a step. The worklet has none.
+  syncErrorMs?: number;
 };
 // Recurring loss: chunks lost in the ten seconds it recurred in, or spells in the minute, and the
 // step it asks for.
@@ -84,11 +90,21 @@ type Recurring = {
 };
 type Phase =
   | { kind: "watching" }
-  | { kind: "moving"; caused: Recurring; sendAheadMs?: number; waited: number }
+  | {
+      kind: "moving";
+      caused: Recurring;
+      sendAheadMs?: number;
+      // The parts of the step asked of Core so far, and those it applied.
+      askedMs: number;
+      landedMs: number;
+      waited: number;
+    }
   | { kind: "pausing"; left: number };
 export type LateSteps = {
   // The late steps asked for so far, in ms.
   lateMs: number;
+  // The most of a step asked of Core at once; a larger step is asked in parts (sdkLateSteps).
+  partMs?: number;
   // 10 ms parts of steps judged unhelpful since the pauses last started again.
   unhelpful: number;
   // The loss that caused the last step Core applied, until it's judged.
@@ -111,6 +127,20 @@ export const noLateSteps: LateSteps = {
   seconds: [],
   phase: { kind: "watching" },
 };
+// The SDK's player (scheduler.js and recorrection-monitor.js, sendspin-js 6.0.0) places its sound
+// again at once, a gap as long as the step, when a step moves the stamps by 100 ms or more (it
+// chains a chunk only within 0.1 s of the last one's end) and also when its smoothed sync error stays
+// 30 ms or more for 0.4 s (RECORRECTION_TRIGGER_MS, RECORRECTION_SUSTAIN_MS: a guarded cutover).
+// A step shows as that error at once, so it slews only while what it still has to slew stays under
+// 30 ms. So it's asked in 10 ms parts (late steps' unit), each once Core applied the last and the
+// player slewed it to within 8 ms (rate1AboveMs: below it, it corrects a sample at a time): at
+// most 18 ms to slew. It slews 0.3 % (3 ms a second) above 8 ms and a sample each 5 ms chunk
+// (4 ms a second) below, so a part takes two to four seconds, and 130 ms under a minute.
+export const sdkLateSteps: LateSteps = { ...noLateSteps, partMs: liveLateStepMs };
+const settledMs = 8;
+// 30 ms slews to 8 in under 8 s at 0.3 %: a player still not within 8 ms after 10 s is off for
+// another reason, and the step ends with the parts Core applied.
+const slewSeconds = 10;
 const windowSeconds = 10;
 const horizonSeconds = 60;
 const horizonSpells = 3;
@@ -203,36 +233,60 @@ function step(late: LateSteps, seconds: LossSecond[], recurring: Recurring): Lat
     leftMs = hourMs - taken.reduce((sum, { ms }) => sum + ms, 0);
   const stepMs = Math.min(recurring.stepMs, mostMs(late.unhelpful), leftMs);
   if (stepMs <= 0) return { ...late, seconds, taken, caused: undefined };
-  const caused = { ...recurring, stepMs };
-  return {
-    ...late,
-    lateMs: late.lateMs + caused.stepMs,
-    taken: [...taken, { at: late.counted, ms: caused.stepMs }],
-    caused: undefined,
-    seconds,
-    clean: 0,
-    phase: {
+  return ask(
+    { ...late, taken, caused: undefined, seconds, clean: 0 },
+    {
       kind: "moving",
-      caused,
+      caused: { ...recurring, stepMs },
       sendAheadMs: median(seconds.flatMap((second) => second.sendAheadMs ?? [])),
+      askedMs: 0,
+      landedMs: 0,
       waited: 0,
     },
+  );
+}
+// Asks Core for the step's next part.
+function ask(late: LateSteps, phase: Moving): LateSteps {
+  const partMs = Math.min(phase.caused.stepMs - phase.askedMs, late.partMs ?? Infinity);
+  return {
+    ...late,
+    lateMs: late.lateMs + partMs,
+    taken: [...late.taken, { at: late.counted, ms: partMs }],
+    phase: { ...phase, askedMs: phase.askedMs + partMs, waited: 0 },
   };
 }
 
 const watching: Phase = { kind: "watching" };
+type Moving = Phase & { kind: "moving" };
 
-function move(late: LateSteps, phase: Phase & { kind: "moving" }, second: LossSecond): LateSteps {
+// Loss while a step is asked and slewed to isn't the step's: it's judged from when the player
+// plays at all of it, and the seconds before don't count.
+function move(late: LateSteps, phase: Moving, second: LossSecond): LateSteps {
   const seconds = [...late.seconds, second].slice(-horizonSeconds);
-  const applied =
-    phase.sendAheadMs !== undefined &&
-    second.sendAheadMs !== undefined &&
-    second.sendAheadMs >= phase.sendAheadMs + phase.caused.stepMs / 2;
-  // The second it lands in is its changeover.
-  if (applied) return { ...late, caused: phase.caused, seconds: [], phase: watching };
-  if (phase.waited + 1 < movingSeconds)
-    return { ...late, seconds, phase: { ...phase, waited: phase.waited + 1 } };
-  return { ...late, seconds, phase: watching };
+  const waiting = { ...late, seconds, phase: { ...phase, waited: phase.waited + 1 } };
+  const done = (landedMs: number): LateSteps => ({
+    ...late,
+    caused: { ...phase.caused, stepMs: landedMs },
+    seconds: [],
+    phase: watching,
+  });
+  if (phase.askedMs > phase.landedMs) {
+    // Core applied the part: its chunks leave half that part further ahead.
+    const applied =
+      phase.sendAheadMs !== undefined &&
+      second.sendAheadMs !== undefined &&
+      second.sendAheadMs >= phase.sendAheadMs + (phase.askedMs + phase.landedMs) / 2;
+    if (!applied)
+      return phase.waited + 1 < movingSeconds ? waiting : { ...late, seconds, phase: watching };
+    // The second it lands in is its changeover. The worklet reports no slew: it's judged from then.
+    if (second.syncErrorMs === undefined && phase.askedMs === phase.caused.stepMs)
+      return done(phase.askedMs);
+    return { ...late, seconds, phase: { ...phase, landedMs: phase.askedMs, waited: 0 } };
+  }
+  const settled = (second.syncErrorMs ?? 0) > -settledMs;
+  if (!settled && phase.waited + 1 < slewSeconds) return waiting;
+  if (settled && phase.landedMs < phase.caused.stepMs) return ask({ ...late, seconds }, phase);
+  return done(phase.landedMs);
 }
 
 export function nextLateSteps(before: LateSteps, second: LossSecond): LateSteps {
