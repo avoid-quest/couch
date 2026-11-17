@@ -42,6 +42,10 @@ import { rendererStatus } from "./renderer-status";
 // 128 frames cut MacBook Chrome's reported Sendspin output latency from 42 to 27 ms.
 // Linux is unmeasured; Windows' WASAPI warns that mismatched fixed sizes can glitch.
 if (process.platform === "darwin") app.commandLine.appendSwitch("audio-buffer-size", "128");
+// Chromium's tap of the default output reads a 4-output interface's frames as stereo
+// (half speed); tapping all output devices gets macOS's own stereo mix instead.
+if (process.platform === "darwin")
+  app.commandLine.appendSwitch("enable-features", "MacCatapCaptureAllDevices");
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
