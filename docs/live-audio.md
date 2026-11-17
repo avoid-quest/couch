@@ -193,8 +193,12 @@ wrong clock still shows the right time.
   one back, and loss no step cures can't climb across joins.
 - Core measures its own input-side time per run and wire (Opus and PCM frames
   fill at their own pace): capture to the chunk reaching Core from the encoder,
-  the highest of each second, set and raised by the same rule. The first second
-  doesn't count: it holds what was captured while the encoder started.
+  the highest of each second. The first second doesn't count: it holds what was
+  captured while the encoder started. The next one sets it. After that it rises
+  only when the median of the last 30 seconds outgrows it by more than a step,
+  so a few slow seconds on Core's host move nobody. A rise reaches listeners
+  5 ms every two seconds, so both players slew through it instead of jumping.
+  It never falls during a run.
 - Each listener plays at its declaration, Sync delay and its wire's input-side
   time, rounded up to the next 5 ms step: the same chunks, stamped later for
   it. Listeners whose needs round up to the same step play together; others a
@@ -212,7 +216,8 @@ wrong clock still shows the right time.
   correct a misreported output delay. Decoding and the network aren't measured
   up front: a listener that loses chunks to them steps itself later.
 - Couch's log gets one line each time a wire's input side changes
-  (`live input side opus: 26 ms`) and one when a listener's declaration or step
+  (`live input side opus: 26 ms`, with `, rising to 35 ms` while a rise is
+  under way) and one when a listener's declaration or step
   changes (`live listener "Name" opus: declares 55 ms, input side 26 ms, plays
   85 ms after capture`), at most every ten seconds per listener
   unless its step rose.

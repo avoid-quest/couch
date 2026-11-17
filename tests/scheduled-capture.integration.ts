@@ -119,13 +119,17 @@ test(
       async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
       (error) => errors.push(error),
     );
-    const lead = createLiveLead();
+    // A rise needs half a minute of slow seconds, so the silence gets its own lead from 3 s on:
+    // its first reading is the silence's second second, as the noise's is.
+    const lead = createLiveLead(),
+      silent = createLiveLead();
     const nowUs = () => (performance.timeOrigin + performance.now()) * 1000;
     let first: number | undefined;
     source.subscribe((event) => {
       if (event.type !== "chunk") return;
       first ??= Date.now();
       lead.arrived(event.wire, event.at, nowUs());
+      if (Date.now() >= first + 3000) silent.arrived(event.wire, event.at, nowUs());
     });
     // A sound card's 128-frame blocks, each sent once its last sample is captured: two seconds of
     // noise, then digital silence.
@@ -153,13 +157,12 @@ test(
       source.close();
     });
     await until(() => first !== undefined, "the encoder sent nothing");
-    // Core's first reading is the noise's second second; the next five are silence.
     await sleep(first! + 2500 - Date.now());
     const noise = lead.leadMs("noise", "opus", 0);
-    await sleep(first! + 7300 - Date.now());
+    await sleep(first! + 5300 - Date.now());
     assert.deepEqual(errors, []);
     // Silence gathered in the muxer made it ~100 ms later; a busy host moves it a few 5 ms steps.
-    const silence = lead.leadMs("silence", "opus", 0);
+    const silence = silent.leadMs("silence", "opus", 0);
     assert.ok(silence <= noise + 25, `silence plays at ${silence} ms, noise at ${noise} ms`);
   },
 );

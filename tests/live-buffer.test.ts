@@ -618,6 +618,40 @@ test("one slow second doesn't move the input-side time", () => {
   expect(lead.leadMs("wired", "opus", 40)).toBe(50);
 });
 
+test("a slow spell on Core's host moves nobody", () => {
+  // The rig's Core, steady at 16 ms, then slow (25 ms) for a few seconds: three in five used to
+  // move every listener 5–10 ms later for the rest of the run.
+  for (const spell of [2, 3, 14]) {
+    const lead = createLiveLead();
+    measure(lead, 16, 0, 40);
+    expect(lead.leadMs("linux", "opus", 95)).toBe(115);
+    measure(lead, 25, 41, spell - 1);
+    measure(lead, 16, 41 + spell, 60);
+    expect(lead.leadMs("linux", "opus", 95)).toBe(115);
+  }
+});
+
+test("a sustained rise moves listeners 5 ms at a time, two seconds apart, and never falls", () => {
+  const lines: string[] = [];
+  const lead = createLiveLead((line) => lines.push(line));
+  measure(lead, 16, 0, 40);
+  const steps = () => [lead.leadMs("linux", "opus", 95), lead.leadMs("phone", "opus", 139)];
+  expect(steps()).toEqual([115, 155]);
+  const moves: { second: number; by: number }[] = [];
+  for (let second = 41, last = steps(); second <= 100; second++) {
+    measure(lead, 25, second, 0);
+    const now = steps();
+    now.forEach((step, i) => step !== last[i] && moves.push({ second, by: step - last[i]! }));
+    last = now;
+  }
+  expect(steps()).toEqual([120, 165]);
+  expect(moves.every((move) => move.by === 5)).toBe(true);
+  expect(moves.at(-1)!.second - moves[0]!.second).toBeGreaterThanOrEqual(2);
+  expect(lines).toContain("live input side opus: 21 ms, rising to 25 ms");
+  measure(lead, 10, 101, 60);
+  expect(steps()).toEqual([120, 165]);
+});
+
 test("a listener waits for its need, and needs in the same step play together", () => {
   const lines: string[] = [];
   const lead = createLiveLead((line) => lines.push(line));

@@ -1,7 +1,17 @@
-import { liveReadings, liveStep, risenNeed } from "../shared/live-need";
+import { liveStep, liveStepMs, risenNeed } from "../shared/live-need";
 
 type Wire = "opus" | "pcm";
 const logEveryMs = 10_000;
+// Once measured, the input side rises only when the median of the last 30 seconds outgrows it, so
+// more than half of them must agree. A few slow seconds on Core's host (a busy spell, a pause) would
+// otherwise move every listener later for the rest of the run, though the listeners that lose
+// chunks in such a spell already step on their own.
+const inputReadings = 30;
+// A rise reaches listeners one 5 ms step every two seconds, never at once: each listener's step
+// then moves at most 5 ms at a time, which both players slew through within those two seconds
+// (Couch's at 0.3 %, the SDK's a sample per 5 ms chunk). That stays well under the SDK's 30 ms
+// re-place, so a rise is never a jump or a gap.
+const inputPartSeconds = 2;
 
 // One Live run's timing, or sender-timed AirPlay's. Every chunk is stamped at its capture time, and
 // each listener plays it at its own need (its declaration and Sync delay, plus Core's measured
@@ -11,9 +21,18 @@ const logEveryMs = 10_000;
 // its declaration changes, at most every ten seconds per listener unless its step rose, so the
 // delays real devices get can be read from Couch's log and a client can't flood it.
 export function createLiveLead(log: (line: string) => void = () => {}, nowMs = () => Date.now()) {
-  // Each wire has its own input-side time: its frames take their own time to fill. held: kept from
-  // before the capture restarted, until the new encoder's is measured.
-  type Input = { second: number; highest: number; readings: number[]; ms?: number };
+  // Each wire has its own input-side time: its frames take their own time to fill. ms: what
+  // listeners are placed with; risen: what the readings call for, which ms climbs to in parts
+  // (partSecond: the last one). held: kept from before the capture restarted, until the new
+  // encoder's is measured.
+  type Input = {
+    second: number;
+    highest: number;
+    readings: number[];
+    ms?: number;
+    risen?: number;
+    partSecond?: number;
+  };
   const inputs = new Map<Wire, Input & { firstUs?: number; held?: boolean }>();
   const listeners = new Map<string, { step: number; declared: number }>();
   const logged = new Map<string, { step: number; atMs: number }>();
@@ -31,11 +50,26 @@ export function createLiveLead(log: (line: string) => void = () => {}, nowMs = (
         // The first second holds the encoder's start: what was captured while it started arrives
         // late, all at once, and would set every step too high for the rest of the run.
         if (input.second > 0) {
-          input.readings = [...input.readings, input.highest].slice(-liveReadings);
-          const before = input.ms;
-          input.ms = risenNeed(input.held ? undefined : input.ms, input.readings);
-          input.held = false;
-          if (input.ms !== before) log(`live input side ${wire}: ${input.ms} ms`);
+          input.readings = [...input.readings, input.highest].slice(-inputReadings);
+          const before = { ms: input.ms, risen: input.risen };
+          // The first reading places listeners at once (after a restart too: they're placed again).
+          if (input.ms === undefined || input.held) {
+            input.ms = input.risen = risenNeed(undefined, input.readings)!;
+            input.held = false;
+          } else {
+            input.risen = risenNeed(input.risen, input.readings, 0, inputReadings)!;
+            if (
+              input.ms < input.risen &&
+              second - (input.partSecond ?? -Infinity) >= inputPartSeconds
+            ) {
+              input.ms = Math.min(input.risen, input.ms + liveStepMs);
+              input.partSecond = second;
+            }
+          }
+          if (input.ms !== before.ms || input.risen !== before.risen)
+            log(
+              `live input side ${wire}: ${input.ms} ms${input.ms < input.risen ? `, rising to ${input.risen} ms` : ""}`,
+            );
         }
         input.second = second;
         input.highest = -Infinity;
@@ -75,6 +109,7 @@ export function createLiveLead(log: (line: string) => void = () => {}, nowMs = (
           second: 0,
           highest: -Infinity,
           readings: [],
+          partSecond: undefined,
           held,
         });
       }
