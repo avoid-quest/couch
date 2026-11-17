@@ -341,7 +341,7 @@ test(
   async (t) => {
     const audio = createScheduledAudio({
       name: "Held back",
-      admit: (id) => ["healthy", "full", "frozen"].includes(id),
+      admit: (id) => ["healthy", "full", "frozen", "muted"].includes(id),
       changed() {},
       ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
       sourceFailed() {},
@@ -366,9 +366,10 @@ test(
       });
     const healthy = player("healthy", 1 << 20),
       full = player("full", 512),
-      frozen = player("frozen", 1 << 20);
+      frozen = player("frozen", 1 << 20),
+      muted = player("muted", 1 << 20);
     healthy.addAudioChunkListener((timestamp) => frames.push(timestamp));
-    for (const client of [healthy, full, frozen]) {
+    for (const client of [healthy, full, frozen, muted]) {
       await client.connect(url);
       await client.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
     }
@@ -379,6 +380,7 @@ test(
       { deviceId: "healthy", level: 100 },
       { deviceId: "full", level: 100 },
       { deviceId: "frozen", level: 100 },
+      { deviceId: "muted", level: 0 },
     ]);
     group.send({
       type: "load",
@@ -411,19 +413,24 @@ test(
       await healthy.disconnect();
       await full.disconnect();
       await frozen.disconnect();
+      await muted.disconnect();
       sockets.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     });
     await until(() => frames.length > 20);
-    // A frozen tab: its clock-sync requests stop, though its socket keeps taking sound.
-    const clock = frozen as unknown as { scheduleTimeSync(): void; stopTimeSync(): void };
-    clock.scheduleTimeSync = () => {};
-    clock.stopTimeSync();
+    // A frozen tab: its clock-sync requests stop, though its socket keeps taking sound. A muted,
+    // hidden tab's are as sparse (Chrome's timers for a hidden, silent page), and it isn't stalled.
+    for (const client of [frozen, muted]) {
+      const clock = client as unknown as { scheduleTimeSync(): void; stopTimeSync(): void };
+      clock.scheduleTimeSync = () => {};
+      clock.stopTimeSync();
+    }
     await sleep(4000);
     assert.deepEqual(audio.status().stalled, ["full"]);
     // Its last burst was at most 5 s before; 10 s without one, then most of 5 s.
     await sleep(6000);
     await until(() => audio.status().stalled.includes("frozen"));
+    await sleep(4000);
     assert.deepEqual(audio.status().stalled.sort(), ["frozen", "full"]);
   },
 );

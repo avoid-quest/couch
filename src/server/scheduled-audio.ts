@@ -1055,7 +1055,12 @@ export function createScheduledAudio(options: {
             );
             cursor.sent = chunk.at;
           }
-          const quiet = socket !== undefined && serverNowUs() - (heard.get(socket) ?? 0) > quietUs;
+          // A speaker at level 0 is silent, so Chrome may run a hidden tab's timers once a minute
+          // (intensive throttling) and space its bursts far apart: quiet doesn't count for it.
+          const quiet =
+            socket !== undefined &&
+            members.find((member) => member.deviceId === session.getClientId())?.level !== 0 &&
+            serverNowUs() - (heard.get(socket) ?? 0) > quietUs;
           took(session.getClientId()!, { held, sent: cursor.sent !== before, quiet }, now);
           // Its first sound in this run: it no longer joins.
           if (first && cursor.sent !== undefined) options.changed();
