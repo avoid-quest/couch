@@ -35,7 +35,11 @@ export function useRadioBoundaryClock(
   useEffect(() => {
     tick(Date.now());
     if (!Number.isFinite(next)) return;
-    const timer = setTimeout(() => tick(Date.now()), Math.max(1, next - Date.now()));
+    // A timer may fire a little before the wall clock reaches it: the boundary has passed all the same.
+    const timer = setTimeout(
+      () => tick(Math.max(Date.now(), next)),
+      Math.max(1, next - Date.now()),
+    );
     return () => clearTimeout(timer);
   }, [next, previous]);
   return boundaryNow;
