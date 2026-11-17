@@ -13,6 +13,10 @@ class FixtureCore {
   currentFormat = { sample_rate: 48_000 };
   // The synced clock (server time, µs).
   nowUs = 0;
+  // Still connecting: nothing in these tests reaches Core.
+  connect() {
+    return new Promise<void>(() => {});
+  }
   disconnect() {}
   handleBinaryMessage(_data: ArrayBuffer) {}
   getCurrentServerTimeUs() {
@@ -51,10 +55,14 @@ class FixtureChannel {
   }
 }
 // The feed's Worker, run in this thread: messages go both ways at once.
+let workers: FixtureWorker[] = [];
 class FixtureWorker {
   onmessage = (_event: { data: FromFeed }) => {};
   onerror = () => {};
   feed: Feed | undefined;
+  constructor() {
+    workers.push(this);
+  }
   postMessage(message: ToFeed) {
     if (message.type === "start")
       this.feed = new LiveFeed(message.config, message.stored, (data) => this.onmessage({ data }));
@@ -125,6 +133,18 @@ const reading = () => new Promise((resolve) => setTimeout(resolve, 25));
 afterEach(() => {
   cores = [];
   nodes = [];
+  workers = [];
+});
+
+test("a Worker that fails tells its owner, and connecting fails", async () => {
+  const player = new LivePlayer({ playerId: "fixture", baseUrl: "http://localhost" });
+  const stopped: Error[] = [];
+  player.onStopped = (reason) => stopped.push(reason);
+  const connecting = player.connect();
+  workers[0]!.onerror();
+  await expect(connecting).rejects.toThrow("The Live player stopped.");
+  expect(stopped).toHaveLength(1);
+  player.destroy();
 });
 
 test("a stream cleared while the worklet loads still counts the loss the worklet reports", async () => {

@@ -78,6 +78,8 @@ function reported(context: AudioContext, now: number): Reading {
 }
 
 export class LivePlayer {
+  // Told when the Worker fails, so its owner can start a new player.
+  onStopped: ((reason: Error) => void) | undefined;
   private worker: Worker;
   private storage: SendspinCoreConfig["storage"];
   private onStateChange: SendspinCoreConfig["onStateChange"];
@@ -119,9 +121,11 @@ export class LivePlayer {
     });
     this.worker = new Worker(new URL("./live-feed-worker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = ({ data }: MessageEvent<FromFeed>) => this.receive(data);
+    // A Worker whose script didn't load, or that failed later, has no connection left to retry.
     this.worker.onerror = () => {
-      for (const { reject } of this.connecting.splice(0))
-        reject(new Error("The Live player stopped."));
+      const error = new Error("The Live player stopped.");
+      for (const { reject } of this.connecting.splice(0)) reject(error);
+      this.onStopped?.(error);
     };
     this.send({ type: "start", config: rest, stored });
   }

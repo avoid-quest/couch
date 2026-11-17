@@ -257,23 +257,31 @@ export function listen(
           });
       if (player !== current) return created;
       connected = created;
+      if (livePlayer && created instanceof livePlayer.LivePlayer)
+        created.onStopped = (reason) => {
+          stopped(reason);
+          dispose(created);
+        };
       if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);
       void created.connect().catch(() => {});
       return created;
     })
     .catch((reason) => {
-      if (player === current) {
-        player = connected = null;
-        group = undefined;
-        hearing = false;
-        clearInterval(bufferTimer);
-        failed("Couldn't start sound.", reason);
-        waitForTap(() => {
-          if (configuration === next) listen(on, watch, credentials, name, live);
-        });
-      }
+      stopped(reason);
       throw reason;
     }));
+  // The player couldn't start, or its Live Worker failed: a tap starts a new one.
+  function stopped(reason: unknown) {
+    if (player !== current) return;
+    player = connected = null;
+    group = undefined;
+    hearing = false;
+    clearInterval(bufferTimer);
+    failed("Couldn't start sound.", reason);
+    waitForTap(() => {
+      if (configuration === next) listen(on, watch, credentials, name, live);
+    });
+  }
   void current
     .then((created) => {
       if (player === current) updateBuffer(created);
