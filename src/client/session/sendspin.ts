@@ -48,14 +48,34 @@ const dispose = (stopped: Player) => {
 };
 // On Android, relaxed sound keeps the SDK's estimated clock, its fallback without getOutputTimestamp(), as
 // the SDK keeps Cast receivers: their output timestamps make the speed hunt (sendspin-js #85). Live keeps them.
-const outputTimestamp =
+const AndroidAudioContext =
   typeof AudioContext !== "undefined" && /Android/i.test(navigator.userAgent)
-    ? Object.getOwnPropertyDescriptor(AudioContext.prototype, "getOutputTimestamp")
+    ? AudioContext
     : undefined;
+const outputTimestamp =
+  AndroidAudioContext &&
+  Object.getOwnPropertyDescriptor(AndroidAudioContext.prototype, "getOutputTimestamp");
 const useOutputTimestamps = (use: boolean) => {
-  if (!outputTimestamp) return;
+  if (!AndroidAudioContext || !outputTimestamp) return;
   const descriptor = use ? outputTimestamp : { ...outputTimestamp, value: undefined };
-  Object.defineProperty(AudioContext.prototype, "getOutputTimestamp", descriptor);
+  Object.defineProperty(AndroidAudioContext.prototype, "getOutputTimestamp", descriptor);
+};
+// On Android, relaxed sound also asks for a "playback" context, which the SDK's player can't ask for
+// itself: Chrome then renders it in longer buffers than the default's low-latency ones, so a busy phone
+// has more time before it misses one. Each miss is a gap, and the time it costs makes the player correct.
+// Relaxed sound plays 1 s or more ahead anyway, and the player measures the longer output latency.
+// Live, and any other sound, keeps the default.
+let latencyHint: AudioContextLatencyCategory | undefined;
+if (AndroidAudioContext)
+  globalThis.AudioContext = class extends AndroidAudioContext {
+    constructor(options?: AudioContextOptions) {
+      super(
+        latencyHint && options?.latencyHint === undefined ? { ...options, latencyHint } : options,
+      );
+    }
+  };
+const playRelaxed = (relaxed: boolean) => {
+  latencyHint = relaxed ? "playback" : undefined;
 };
 // The player chains each chunk where the last one ended, between two frames. Chrome then renders the
 // frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
@@ -147,6 +167,7 @@ export function listen(
   const sdkLive = Boolean(live) && sdkPlays();
   countingLiveLoss(sdkLive && (on || watch));
   useOutputTimestamps(Boolean(live));
+  playRelaxed(!live && (on || watch));
   const next = JSON.stringify([
     credentials?.origin,
     credentials?.token,
