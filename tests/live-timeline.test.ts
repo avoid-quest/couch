@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { LiveTimeline, addStats, contextFrame, noStats } from "../src/client/session/live-timeline";
+import {
+  LiveTimeline,
+  addStats,
+  contextFrame,
+  noStats,
+  pageClock,
+} from "../src/client/session/live-timeline";
 
 const rate = 48_000;
 const chunkFrames = 240;
@@ -128,16 +134,19 @@ test("a clock that moved by more than a slew can take back is placed again, with
   expect(left[replaced]).toBe(100 * chunkFrames);
 });
 
-test("the feed's Worker maps an instant to the frame the page's clock puts it at, whatever their time origins", () => {
-  // The page read the context 2.5 s ahead of its own performance clock. The Worker started 1234.5678 ms
-  // later, so the same instant reads that much less on its clock.
-  const page = 1_763_366_400_123.456,
-    worker = page + 1234.5678,
-    clock = { offset: 2.5, origin: page, sampleRate: rate };
-  const pageMs = 5000;
-  expect(contextFrame(clock, pageMs, page)).toBeCloseTo((2.5 + 5) * rate, 6);
-  // Origins counted from 1970 keep about 0.2 µs, a hundredth of a frame.
-  expect(contextFrame(clock, pageMs - 1234.5678, worker)).toBeCloseTo((2.5 + 5) * rate, 1);
-  // A Worker that started first reads more.
-  expect(contextFrame(clock, pageMs + 80.25, page - 80.25)).toBeCloseTo((2.5 + 5) * rate, 1);
+test("the feed's Worker maps an instant to the frame the page's clock puts it at, however far apart their clocks read", () => {
+  // The Worker started 1234.5678 ms after the page; a sleep moved the wall clock 5 s in between, so
+  // their time origins don't tell. Messages take 0.3 to 2 ms to arrive.
+  const apartMs = 1234.5678 - 5000,
+    page = pageClock();
+  for (const [pageMs, delayMs] of [
+    [100, 2],
+    [120, 0.3],
+    [140, 1.1],
+  ] as const)
+    page.saw(pageMs, pageMs - apartMs + delayMs);
+  const clock = { offset: 2.5, sampleRate: rate };
+  // An instant the Worker reads at 5000 − apart is 5000 on the page, to the quickest message's delay.
+  expect(page.pageMs(5000 - apartMs)).toBeCloseTo(5000 - 0.3, 6);
+  expect(contextFrame(clock, 5000)).toBeCloseTo((2.5 + 5) * rate, 6);
 });

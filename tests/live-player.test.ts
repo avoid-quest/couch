@@ -65,7 +65,9 @@ class FixtureWorker {
   }
   postMessage(message: ToFeed) {
     if (message.type === "start")
-      this.feed = new LiveFeed(message.config, message.stored, (data) => this.onmessage({ data }));
+      this.feed = new LiveFeed(message.config, message.stored, message.pageMs, (data) =>
+        this.onmessage({ data }),
+      );
     else this.feed?.handle(message);
   }
 }

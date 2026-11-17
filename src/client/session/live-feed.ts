@@ -8,6 +8,7 @@ import {
   addStats,
   contextFrame,
   noStats,
+  pageClock,
   type LiveClock,
   type LiveMessage,
   type LiveStats,
@@ -40,7 +41,7 @@ class LiveCore extends SendspinCore {
 type State = Parameters<NonNullable<SendspinCoreConfig["onStateChange"]>>[0];
 // What the page passes on: the SDK's config without its callbacks and storage, which stay on the page.
 export type FeedConfig = Omit<SendspinCoreConfig, "storage" | "onStateChange">;
-export type ToFeed =
+export type FeedMessage =
   | { type: "start"; config: FeedConfig; stored: [string, string][] }
   | { type: "connect" }
   | { type: "minBuffer"; ms: number }
@@ -52,7 +53,9 @@ export type ToFeed =
   | { type: "reset" }
   | { type: "declared" }
   | { type: "destroy" };
-// What the page reads. `at` is when, on the shared clock (performance.timeOrigin + now).
+// Each with the page's performance.now() as it sent it (pageClock).
+export type ToFeed = FeedMessage & { pageMs: number };
+// What the page reads. `at` is when, on the page's performance clock.
 export type FeedStatus = {
   at: number;
   connected: boolean;
@@ -87,6 +90,7 @@ export class LiveFeed {
   private core: LiveCore;
   private port: MessagePort | undefined;
   private clock: LiveClock | undefined;
+  private page = pageClock();
   private epoch = 0;
   // Before its first sound (live-buffer.ts measureSeconds): "measuring" while it measures how late
   // chunks reach it and plays none, "placing" once it declared its need, until Core clears its stream
@@ -99,8 +103,10 @@ export class LiveFeed {
   constructor(
     config: FeedConfig,
     stored: [string, string][],
+    pageMs: number,
     private post: (message: FromFeed) => void,
   ) {
+    this.page.saw(pageMs);
     // The SDK reads its identity and settings once; what it saves goes back to the page's storage.
     const values = new Map(stored);
     this.core = new LiveCore({
@@ -127,6 +133,7 @@ export class LiveFeed {
   }
 
   handle(message: ToFeed) {
+    this.page.saw(message.pageMs);
     switch (message.type) {
       case "connect":
         return void this.core.connect().then(
@@ -180,7 +187,7 @@ export class LiveFeed {
     this.post({
       type: "status",
       status: {
-        at: performance.timeOrigin + performance.now(),
+        at: this.page.pageMs(),
         connected: core.isConnected,
         playing: core.isPlaying,
         timeSync: core.timeSyncInfo,
@@ -221,7 +228,7 @@ export class LiveFeed {
     this.send({
       type: "chunk",
       chunk: {
-        frame: contextFrame(clock, heardMs),
+        frame: contextFrame(clock, this.page.pageMs(heardMs)),
         stampUs: chunk.serverTimeUs,
         channels: chunk.samples,
       },

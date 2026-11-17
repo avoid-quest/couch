@@ -10,14 +10,27 @@
 //   it follows on from ran out before it came (Core sent nothing in between).
 export type LiveChunk = { frame: number; stampUs: number; channels: Float32Array[] };
 export type LiveMessage = { type: "chunk"; chunk: LiveChunk } | { type: "reset"; epoch: number };
-// Where the context's clock stands, as the page reads it: context seconds less performance seconds at
-// the same instant, on the clock of the page whose performance.timeOrigin is `origin`.
-export type LiveClock = { offset: number; origin: number; sampleRate: number };
-// The context frame heard at `atMs` on another realm's performance clock (a Worker's, whose time
-// origin is `ownOrigin`). Each realm's time origin is its start on one shared clock, so origin + now
-// names the same instant in both.
-export const contextFrame = (clock: LiveClock, atMs: number, ownOrigin = performance.timeOrigin) =>
-  (clock.offset + (ownOrigin - clock.origin + atMs) / 1000) * clock.sampleRate;
+// Where the context's clock stands, as the page reads it: context seconds less the page's performance
+// seconds at the same instant.
+export type LiveClock = { offset: number; sampleRate: number };
+// The context frame heard at `pageMs` on the page's performance clock.
+export const contextFrame = (clock: LiveClock, pageMs: number) =>
+  (clock.offset + pageMs / 1000) * clock.sampleRate;
+// A Worker's performance clock against its page's. Each realm reads the wall clock once, when it
+// starts, for its timeOrigin: after a sleep or a clock change, a Worker started later names a
+// different instant by the same timeOrigin + now. So the Worker measures it: the page sends its own
+// performance.now() with each message, and the least difference to the Worker's (a message only
+// arrives later, never earlier) is how far ahead the Worker's clock reads.
+export function pageClock() {
+  let aheadMs = Infinity;
+  return {
+    saw(pageMs: number, ownMs = performance.now()) {
+      aheadMs = Math.min(aheadMs, ownMs - pageMs);
+    },
+    // The page's time for an instant on this realm's clock.
+    pageMs: (ownMs = performance.now()) => ownMs - aheadMs,
+  };
+}
 export type LiveStats = {
   chunks: number;
   lost: number;

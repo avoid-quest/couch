@@ -1,7 +1,7 @@
 import type { SendspinCoreConfig } from "@sendspin/sendspin-js";
 import workletUrl from "./live-worklet.ts?worker&url";
 import type { LossSecond } from "./live-buffer";
-import type { FeedStatus, FromFeed, ToFeed } from "./live-feed";
+import type { FeedStatus, FromFeed, FeedMessage } from "./live-feed";
 import { addStats, noStats, type LiveClock } from "./live-timeline";
 
 // Couch's player for Live listeners. Its feed (live-feed.ts), in its own Worker, keeps the SDK's
@@ -152,7 +152,7 @@ export class LivePlayer {
   get trackProgress() {
     const progress = this.feed?.progress;
     if (!progress) return null;
-    const passedMs = performance.timeOrigin + performance.now() - this.feed!.at,
+    const passedMs = performance.now() - this.feed!.at,
       positionMs = progress.positionMs + passedMs * progress.playbackSpeed;
     return {
       ...progress,
@@ -230,8 +230,8 @@ export class LivePlayer {
     };
   }
 
-  private send(message: ToFeed, transfer: Transferable[] = []) {
-    this.worker.postMessage(message, transfer);
+  private send(message: FeedMessage, transfer: Transferable[] = []) {
+    this.worker.postMessage({ ...message, pageMs: performance.now() }, transfer);
   }
 
   private receive(message: FromFeed) {
@@ -305,7 +305,6 @@ export class LivePlayer {
       context && offset !== undefined
         ? {
             offset,
-            origin: performance.timeOrigin,
             sampleRate: context.sampleRate,
           }
         : undefined;
