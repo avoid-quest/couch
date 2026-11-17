@@ -51,13 +51,12 @@ export function createForwarder(options: {
       }
       if (typeof event.peer !== "string" || !current.peers.has(event.peer)) return;
       if (event.op === "signal" && event.signal) options.signal(event.peer, event.signal);
-      else if (event.op === "failed") {
-        current.peers.delete(event.peer);
+      // Core drops the peer, and close() tells the helper to let it go.
+      else if (event.op === "failed")
         options.failed(
           event.peer,
           typeof event.error === "string" ? event.error : "The connection through Couch failed.",
         );
-      }
     });
     return current;
   };

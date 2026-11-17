@@ -66,7 +66,12 @@ type forwardPeer struct {
 	source     *forwardSource
 	uplink     bool
 	candidates []webrtc.ICECandidateInit
+	received   int
 }
+
+// A browser sends one candidate per address and kind (host, server-reflexive, relay) on UDP and TCP:
+// a dozen or two even with several networks. Pion pairs each with every local candidate, so more is ignored.
+const forwardCandidates = 64
 
 type forwarder struct {
 	api     *webrtc.API
@@ -315,10 +320,12 @@ func (f *forwarder) signal(command forwardCommand) error {
 		return nil
 	}
 	if candidate := command.Signal.Candidate; candidate != nil && candidate.Candidate != "" {
+		if peer.received >= forwardCandidates {
+			return nil
+		}
+		peer.received++
 		if peer.connection.RemoteDescription() == nil {
-			if len(peer.candidates) < 64 {
-				peer.candidates = append(peer.candidates, *candidate)
-			}
+			peer.candidates = append(peer.candidates, *candidate)
 			return nil
 		}
 		return peer.connection.AddICECandidate(*candidate)
