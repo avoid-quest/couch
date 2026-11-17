@@ -289,6 +289,13 @@ test(
     const placed = measuring.frames.filter((frame) => frame.clears > clears);
     assert.deepEqual(moves(placed), []);
     assert.equal(delays(placed, input.origin)[0], step);
+    // Its first sound is announced: its output no longer joins.
+    await until(
+      () =>
+        other.state.playbacks
+          ?.flatMap((playback) => playback.outputs)
+          .find((output) => output.deviceId === other.id)?.state === "playing",
+    );
   },
 );
 

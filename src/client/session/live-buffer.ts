@@ -29,17 +29,23 @@ export const arrivalLateMs = (sendAheadMs: number, stampUs: number, nowUs: numbe
 // It measures for as many seconds as the output side's median takes (liveReadings), so the wait
 // grows by about three seconds over the two the output side alone took.
 const measureSeconds = liveReadings;
-// What this listener adds to its need: the second latest of its seconds' latest arrivals, to the
-// nearest ms (the synced clock is good to about one).
-// Lateness two seconds reached recurs, as with steps (nextLateSteps); one second's outlier, a single
-// stall, doesn't set it. At 200 chunks a second over five seconds, only the latest chunks of one
-// second arrive later: about the 99.9th percentile. Any lower and the chunks it leaves out are lost
-// in most seconds, which is recurring loss: a step in the first seconds of sound. Undefined until it
-// has measured that long.
+// What this listener adds to its need: the lateness two of its last five seconds reached with a
+// second between them, each second as late as its latest arrival, to the nearest ms (the synced
+// clock is good to about one). Lateness that recurs, as with steps (nextLateSteps): one stall
+// doesn't set it, even one that drains across two seconds. At 200 chunks a second over five
+// seconds, only the latest chunks of a few seconds arrive later. Any lower and the chunks it leaves
+// out are lost in most seconds, which is recurring loss: a step in the first seconds of sound. At
+// most what steps may add in a listen's first hour: Core never moves a listener earlier, so a
+// measurement can't place it later than recurring loss could; steps learn anything beyond.
+// Undefined until it has measured that long.
 export function measuredLateMs(seconds: number[]) {
-  if (seconds.length < measureSeconds) return undefined;
-  const second = [...seconds].sort((a, b) => b - a)[1]!;
-  return Math.max(0, Math.round(second));
+  const last = seconds.slice(-measureSeconds);
+  if (last.length < measureSeconds) return undefined;
+  let lateMs = 0;
+  for (let i = 0; i < last.length; i++)
+    for (let j = i + 2; j < last.length; j++)
+      lateMs = Math.max(lateMs, Math.min(last[i]!, last[j]!));
+  return Math.min(firstHourMs, Math.round(lateMs));
 }
 
 export function declareLiveBuffer(

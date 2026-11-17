@@ -1042,6 +1042,8 @@ export function createScheduledAudio(options: {
             session.sendStreamStart(wireFormat(wire));
             if (!session.getActiveStreams().includes("player")) continue;
           }
+          // Taken before a measuring listener is placed: its first sound is the first chunk after.
+          const first = !soundSent(cursor);
           // It declared its need: what it was sent to measure isn't for hearing, and what follows is
           // stamped at its step.
           if (cursor.measuring && !measuring.has(session)) {
@@ -1051,8 +1053,7 @@ export function createScheduledAudio(options: {
           if (measuring.has(session)) cursor.measuring = true;
           const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          const first = !soundSent(cursor),
-            before = cursor.sent;
+          const before = cursor.sent;
           let held = (socket?.bufferedAmount ?? 0) > backlogBytes;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;

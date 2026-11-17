@@ -658,8 +658,14 @@ test("a listener's need covers how late its chunks arrived in two of the seconds
   expect(measuredLateMs([3, 4, 2, 5])).toBeUndefined();
   // A clean wired listener: well under a millisecond, its bare need.
   expect(measuredLateMs([0.3, 0.4, 0.2, 0.4, 0.3])).toBe(0);
-  // A 60 ms tail most seconds reach is covered; one second's 300 ms stall doesn't set it.
-  expect(measuredLateMs([58, 61, 300, 12, 59.6])).toBe(61);
+  // A 60 ms tail seconds apart reach is covered; one second's 300 ms stall doesn't set it.
+  expect(measuredLateMs([58, 61, 300, 12, 59.6])).toBe(60);
+  // Nor does one stall that drains across two seconds.
+  expect(measuredLateMs([2, 300, 290, 2, 2])).toBe(2);
+  // Only the last five seconds count: an output slow to settle doesn't add older ones.
+  expect(measuredLateMs([300, 300, 1, 1, 1, 1, 1])).toBe(1);
+  // At most what steps may add in a listen's first hour.
+  expect(measuredLateMs([400, 400, 400, 400, 400])).toBe(130);
   // Arrivals the synced clock puts before Core sent them add nothing.
   expect(measuredLateMs([-2, -1, -3, -1, -2])).toBe(0);
 });
