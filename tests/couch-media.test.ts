@@ -136,3 +136,33 @@ test("speed goes to Core, and an endless stream has no timeline to seek", () => 
   expect(radio.media.seekable.length).toBe(0);
   expect(radio.media.streamType).toBe("live");
 });
+
+test("switching between two playing Playbacks tells Video.js the new one plays, so its time keeps moving", () => {
+  const { media, at } = harness();
+  const events: string[] = [];
+  for (const type of ["emptied", "play", "playing", "pause"])
+    media.addEventListener(type, () => events.push(type));
+  // Video.js stops reading the time on emptied and starts again only on play or playing.
+  at(5, { playbackId: "other", entryId: "other" });
+  expect(events).toEqual(["emptied", "play", "playing"]);
+});
+
+test("a radio that drops while buffering waits for Try again, which Video.js's button sends as Play", () => {
+  const radio = {
+    endless: true,
+    seekable: false,
+    length: null,
+    status: "loading",
+    buffering: true,
+  } as const;
+  const { media, at, sent } = harness(source(radio));
+  expect(media.paused).toBe(false);
+  const events: string[] = [];
+  media.addEventListener("pause", () => events.push("pause"));
+  at(30, { failed: true });
+  expect(events).toEqual(["pause"]);
+  // What Video.js's Play button does on a press.
+  if (media.paused) void media.play();
+  else media.pause();
+  expect(sent).toEqual([{ type: "play", entryId: "entry", fromStart: false }]);
+});

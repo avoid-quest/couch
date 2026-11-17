@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlayButton, Time, TimeSlider, useMedia } from "@videojs/react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,17 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
   return length
     ? `ends ${formatEndTime((length - playbackClock.position) / (state.player.speed || 1))}`
     : undefined;
+}
+
+// Video.js's slider drops a drag without onDragEnd when it unmounts mid-drag; release it so later seeks still send.
+function ReleaseDragOnUnmount({ media }: { media: unknown }) {
+  useEffect(
+    () => () => {
+      if (media instanceof CouchMedia) media.scrub(false);
+    },
+    [media],
+  );
+  return null;
 }
 
 /**
@@ -209,6 +220,7 @@ export function PlaybackTimeline({
             />
           </TimeSlider.Preview>
         </TimeSlider.Root>
+        <ReleaseDragOnUnmount media={media} />
         {/* Marks over the track, outside the slider: Video.js restyles the slider's whole subtree on every pointer move. */}
         {canSeek && chapters.length > 0 && (
           <div
