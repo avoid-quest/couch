@@ -85,7 +85,9 @@ tab it chose (the newest one). The Device fetches the source itself:
 - URLs play in `<video>`; YouTube's separate audio plays in an `<audio>` that
   follows it. Couch-hosted HLS uses hls.js (native HLS as fallback); direct
   cross-origin HLS prefers native, because provider segments may not allow CORS.
-  Raw MPEG-TS uses mpegts.js. The app preloads hls.js while idle.
+  Raw MPEG-TS uses mpegts.js; in a group with a screen, Core repackages it once
+  into HLS with FFmpeg, copying its packets (`ts-repack.ts`), and every screen
+  and Core's sound read that playlist. The app preloads hls.js while idle.
 - VP9-capable Devices prefer VP9 and Opus; others need H.264 and AAC. YouTube
   quality caps the smaller dimension, so portrait Shorts work.
 - In the app, Main caps googlevideo's open-ended `Range` requests at 10 MB,
@@ -132,7 +134,7 @@ except on Android and iOS, where it keeps the official player ([Live audio](live
   the clock runs on; audio that arrives after its time is dropped.
 - That mapping has limits: during a Twitch ad each screen shows its own ad; after
   an encoder restart sends timestamps back, pictures can run off the sound by that
-  jump; native HLS and raw MPEG-TS pictures follow only play and pause.
+  jump; native HLS pictures follow only play and pause.
 - Web media on HLS, except YouTube's checked formats, plays its master: each Device
   adapts to its link, capped at the chosen quality, and Core decodes an audio-only
   rendition when there is one.

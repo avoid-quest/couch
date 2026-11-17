@@ -85,6 +85,7 @@ import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { artworkResponse } from "./artwork";
 import { createPassThrough } from "./pass-through";
+import { createRepacks } from "./ts-repack";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
@@ -419,6 +420,7 @@ export async function createHub(options: HubOptions) {
       | "audioSource"
       | "headers"
       | "live"
+      | "mpegts"
       | "publicNetwork"
       | "liveSourceId"
       | "hasAudio"
@@ -1473,7 +1475,7 @@ export async function createHub(options: HubOptions) {
       kind: playback.media?.live ? "source-pts" : "position",
       generation: playback.loaded?.playbackId ?? stateOf(playback).player.playbackId ?? playback.id,
       mapping: playback.media?.live
-        ? playback.loaded?.mpegts ||
+        ? (playback.loaded?.mpegts && !pictureGroup(playback)) ||
           (!sourceOf(playback) && playback.media.hasAudio === false) ||
           (!!playback.unmapped && playback.unmapped === playback.loaded?.playbackId)
           ? "unavailable"
@@ -1481,6 +1483,24 @@ export async function createHub(options: HubOptions) {
         : "media",
     },
   });
+  // Raw MPEG-TS that browsers decode plays on a group's screens from Core's one repackaged
+  // playlist (ts-repack.ts), so they follow the group's clock. mpv channels stay on the host.
+  const pictureGroup = (playback: Playback) =>
+    grouped(playback) && playback.outputs.some((output) => output.picture);
+  const repackaged = async <T extends { source: string; mpegts?: boolean; mpv?: boolean }>(
+    playback: Playback,
+    playbackId: string,
+    media: T,
+    signal: AbortSignal,
+  ): Promise<T & { hls?: boolean }> =>
+    media.mpegts && !media.mpv && pictureGroup(playback)
+      ? {
+          ...media,
+          source: await repacks.playlist(playbackId, media.source, signal),
+          mpegts: undefined,
+          hls: true,
+        }
+      : media;
   // Synced picture (#644 ticket 11): each picture Device's newest tab shows the current item as
   // resolved for its own engine and origin, muted, following the group's clock. Nothing else moves.
   const show = (playback: Playback) => {
@@ -1582,7 +1602,9 @@ export async function createHub(options: HubOptions) {
     const output = { picture: true, sound: false };
     const { headers = {}, ...media } = await (entry.liveSourceId
       ? resolveEntry(entry, loaded.playbackId, signal, tab, playback, output)
-      : sharedResolution(playback, entry, loaded.playbackId, output, tab, signal).media);
+      : sharedResolution(playback, entry, loaded.playbackId, output, tab, signal).media.then(
+          (media) => repackaged(playback, loaded.playbackId, media, signal),
+        ));
     const selected = entry.liveSourceId
       ? media
       : await prepareSource({ ...media, headers }, { picture: true, sound: false }, signal);
@@ -1863,7 +1885,12 @@ export async function createHub(options: HubOptions) {
     const resolved =
       cachedResolution(playback, playbackId, output) ??
       sharedResolution(playback, entry, playbackId, output, tab, signal);
-    const { headers = {}, ...media } = await resolved.media;
+    const { headers = {}, ...media } = await repackaged(
+      playback,
+      playbackId,
+      await resolved.media,
+      signal,
+    );
     const live =
       !!media.metadata?.endless ||
       (playback.media?.playbackId === playbackId && !!playback.media.live);
@@ -1901,6 +1928,7 @@ export async function createHub(options: HubOptions) {
         headers: relay ? {} : headers,
         publicNetwork: media.publicNetwork,
         live,
+        mpegts: media.mpegts,
         audioOnly: media.audioOnly,
         hasAudio: media.hasAudio,
         duration: media.metadata?.duration ?? state.player.duration ?? undefined,
@@ -1929,6 +1957,11 @@ export async function createHub(options: HubOptions) {
         playback.outputs.some((output) => output.sound) &&
         !!player.playbackId &&
         !cachedResolution(playback, player.playbackId, { picture: false, sound: true });
+      // A screen that joins a group whose sound reads a raw MPEG-TS channel moves it to the repackaged one.
+      const missingRepack =
+        pictureGroup(playback) &&
+        !!playback.media?.mpegts &&
+        playback.media.playbackId === player.playbackId;
       const pending = playback.groupPreparation;
       const preparing =
         !!pending &&
@@ -1942,14 +1975,16 @@ export async function createHub(options: HubOptions) {
       // pending selection. Unchanged reconciliations keep the current work.
       if (
         !preparing &&
-        (fresh || missingSound || !!pending) &&
+        (fresh || missingSound || missingRepack || !!pending) &&
         playback.loaded?.playbackId === player.playbackId &&
         active(player.status)
       ) {
-        // The Direct renderer keeps its picture, now muted and following the clock.
+        // The Direct renderer keeps its picture, now muted and following the clock. Raw MPEG-TS
+        // can't follow it, so that screen loads the repackaged playlist instead.
         const renderer = playback.renderer;
         if (
           !source &&
+          !playback.loaded?.mpegts &&
           renderer &&
           playback.outputs.some(
             (output) => output.picture && output.deviceId === deviceOf(renderer),
@@ -2176,7 +2211,8 @@ export async function createHub(options: HubOptions) {
     ) => {
       signal.throwIfAborted();
       const { playbackId } = pending.resolved;
-      const { headers = {}, preview: _preview, ...media } = resolved;
+      const { headers = {}, preview: _preview, ...original } = resolved;
+      const media = await repackaged(playback, playbackId, original, signal);
       const tab = pending.tab;
       if (
         media.mpv &&
@@ -2279,6 +2315,7 @@ export async function createHub(options: HubOptions) {
         headers: coreHeaders,
         publicNetwork: media.publicNetwork,
         live: isLiveMedia,
+        mpegts: media.mpegts,
         audioOnly: media.audioOnly,
         hasAudio: media.hasAudio,
         duration: media.metadata?.duration ?? entry?.duration,
@@ -3324,6 +3361,7 @@ export async function createHub(options: HubOptions) {
   };
   const mpv = createMpv((player) => mpvPlayback?.session.observe(player));
   const passThrough = createPassThrough((playbackId) => !!playing(playbackId));
+  const repacks = createRepacks((playbackId) => !!playing(playbackId)?.synced);
   // Each resolution keeps its renewal where a later load can see whether it is dead (reusable).
   function resolveEntry(...args: Parameters<typeof resolveEntryOnce>) {
     const media = resolveEntryOnce(...args);
@@ -5807,6 +5845,7 @@ export async function createHub(options: HubOptions) {
         localRelay.close(),
         airplay.close(),
         passThrough.close(),
+        repacks.close(),
         server.stop(),
       ]);
       store.close();
