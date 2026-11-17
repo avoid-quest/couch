@@ -56,14 +56,17 @@ class FixtureChannel {
 }
 // The feed's Worker, run in this thread: messages go both ways at once.
 let workers: FixtureWorker[] = [];
+// A Worker whose script won't load runs nothing.
+let unloadable = false;
 class FixtureWorker {
   onmessage = (_event: { data: FromFeed }) => {};
-  onerror = () => {};
+  onerror = (_event: { message: string }) => {};
   feed: Feed | undefined;
   constructor() {
     workers.push(this);
   }
   postMessage(message: ToFeed) {
+    if (unloadable) return;
     if (message.type === "start")
       this.feed = new LiveFeed(message.config, message.stored, message.pageMs, (data) =>
         this.onmessage({ data }),
@@ -138,14 +141,28 @@ afterEach(() => {
   workers = [];
 });
 
-test("a Worker that fails tells its owner, and connecting fails", async () => {
+test("a Worker whose script doesn't load tells its owner, and connecting fails", async () => {
+  unloadable = true;
   const player = new LivePlayer({ playerId: "fixture", baseUrl: "http://localhost" });
   const stopped: Error[] = [];
   player.onStopped = (reason) => stopped.push(reason);
   const connecting = player.connect();
-  workers[0]!.onerror();
+  workers[0]!.onerror({ message: "Failed to fetch" });
   await expect(connecting).rejects.toThrow("The Live player stopped.");
   expect(stopped).toHaveLength(1);
+  player.destroy();
+  unloadable = false;
+});
+
+test("an error in a running Worker doesn't stop its player", () => {
+  const player = new LivePlayer({ playerId: "fixture", baseUrl: "http://localhost" });
+  const stopped: Error[] = [];
+  player.onStopped = (reason) => stopped.push(reason);
+  const logged = console.error;
+  console.error = () => {};
+  workers[0]!.onerror({ message: "Uncaught TypeError" });
+  console.error = logged;
+  expect(stopped).toEqual([]);
   player.destroy();
 });
 

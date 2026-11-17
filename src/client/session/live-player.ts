@@ -121,8 +121,10 @@ export class LivePlayer {
     });
     this.worker = new Worker(new URL("./live-feed-worker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = ({ data }: MessageEvent<FromFeed>) => this.receive(data);
-    // A Worker whose script didn't load, or that failed later, has no connection left to retry.
-    this.worker.onerror = () => {
+    // A Worker whose script didn't load has no connection to retry. Once it runs (it reports ten
+    // times a second), an uncaught error doesn't stop it, so it plays on.
+    this.worker.onerror = (event) => {
+      if (this.feed) return console.error("Couch live feed:", event.message);
       const error = new Error("The Live player stopped.");
       for (const { reject } of this.connecting.splice(0)) reject(error);
       this.onStopped?.(error);

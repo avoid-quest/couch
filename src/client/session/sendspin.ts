@@ -277,6 +277,7 @@ export function listen(
     group = undefined;
     hearing = false;
     clearInterval(bufferTimer);
+    reportBehind({ sound: false });
     failed("Couldn't start sound.", reason);
     waitForTap(() => {
       if (configuration === next) listen(on, watch, credentials, name, live);
