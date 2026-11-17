@@ -44,6 +44,7 @@ import { isAudioOnly } from "./player-presentation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
+import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOnLine, WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
@@ -911,149 +912,150 @@ export function PlayerPage({
       {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
         picture; what it opened returns focus to the picture once it closes, off the TV. A keyboard's click (detail 0)
         keeps focus where the keyboard put it, and what it opened returns focus to its control. */}
-      <div
-        ref={band}
-        hidden={!current}
-        data-player-band={shown ? "shown" : "hidden"}
-        inert={!shown}
-        onClick={(event) => {
-          if (event.detail)
-            requestAnimationFrame(() => {
-              const at = document.activeElement;
-              clickOpened.current =
-                (!tvPresentation && document.querySelector(`.player-band ${opened}`)) || null;
-              if (at && band.current?.contains(at) && !at.matches(opened))
-                surface()?.focus({ preventScroll: true });
-            });
-          else clickOpened.current = null;
-        }}
-        onFocus={(event) => {
-          if (event.target !== clickOpened.current || event.target.matches(opened)) return;
-          clickOpened.current = null;
-          surface()?.focus({ preventScroll: true });
-        }}
-        className={cn(
-          "player-band z-20 pt-1 transition-opacity duration-200 motion-reduce:transition-none",
-          osd && "player-video-controls",
-          !shown && "opacity-0",
-        )}
-      >
-        {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
-          bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
-          gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
-          each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
-          at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
-        <div className="grid gap-1">
-          {state && (
-            <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />
+      {/* Video.js's player for the band's controls; every action goes to Core (CouchPlayer). */}
+      <CouchPlayer state={state} run={run}>
+        <div
+          ref={band}
+          hidden={!current}
+          data-player-band={shown ? "shown" : "hidden"}
+          inert={!shown}
+          onClick={(event) => {
+            if (event.detail)
+              requestAnimationFrame(() => {
+                const at = document.activeElement;
+                clickOpened.current =
+                  (!tvPresentation && document.querySelector(`.player-band ${opened}`)) || null;
+                if (at && band.current?.contains(at) && !at.matches(opened))
+                  surface()?.focus({ preventScroll: true });
+              });
+            else clickOpened.current = null;
+          }}
+          onFocus={(event) => {
+            if (event.target !== clickOpened.current || event.target.matches(opened)) return;
+            clickOpened.current = null;
+            surface()?.focus({ preventScroll: true });
+          }}
+          className={cn(
+            "player-band z-20 pt-1 transition-opacity duration-200 motion-reduce:transition-none",
+            osd && "player-video-controls",
+            !shown && "opacity-0",
           )}
-          <div
-            className="player-controls-scroll"
-            onFocusCapture={(event) =>
-              event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
-            }
-          >
-            <div className="player-control-row [&_[data-size=icon-lg]]:size-(--player-target)">
-              {state && (
-                <PlaybackTransport
-                  state={state}
-                  connected={connected}
-                  run={run}
-                  pageFirst
-                  className="player-transport"
-                />
-              )}
-              <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-                {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
-                  with the same Volume, so the narrowest row leaves it out and keeps one line. */}
+        >
+          {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
+            bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
+            gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
+            each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
+            at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
+          <div className="grid gap-1">
+            {state && <PlaybackTimeline state={state} connected={connected} pageFirst compact />}
+            <div
+              className="player-controls-scroll"
+              onFocusCapture={(event) =>
+                event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+              }
+            >
+              <div className="player-control-row [&_[data-size=icon-lg]]:size-(--player-target)">
                 {state && (
-                  <VolumeButton
+                  <PlaybackTransport
                     state={state}
                     connected={connected}
                     run={run}
-                    className={livePlayback(state) ? undefined : "max-sm:hidden"}
+                    pageFirst
+                    className="player-transport"
                   />
                 )}
-                {state && !livePlayback(state) && (
-                  <WhereItPlays state={state} connected={connected} run={run} />
-                )}
-                <UpNextButton
-                  ref={queueTrigger}
-                  state={state}
-                  aria-expanded={queueOpen}
-                  onClick={() => setQueueOpen(!queueOpen)}
-                />
-                {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
-                  turns subtitles on and off. It opens over the picture above the gear. */}
-                {!livePlayback(state) && (
-                  <Popover
-                    open={panel === "settings"}
-                    onOpenChange={(open) => setPanel(open ? "settings" : null)}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        ref={gear}
-                        data-panel="settings"
-                        variant="ghost"
-                        size="icon-lg"
-                        aria-label="Playback"
-                        title="Playback"
-                        disabled={!settings}
-                      >
-                        <Settings aria-hidden="true" />
-                      </Button>
-                    </PopoverTrigger>
-                    {panel === "settings" && settings && (
-                      <PlaybackMenu
-                        {...settings}
-                        tracks={!audioOnly}
-                        trigger={gear.current}
-                        details={
-                          detailHref && (
-                            <Button asChild variant="ghost" className={playbackMenuRow}>
-                              <Link to={detailHref} aria-label="Details" onClick={openDetails}>
-                                Details
-                                <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                              </Link>
-                            </Button>
-                          )
-                        }
-                      />
-                    )}
-                  </Popover>
-                )}
-                {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
-                  already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
-                {!tvPresentation ? (
-                  <Button
-                    data-player-last
-                    variant="ghost"
-                    size="icon-lg"
-                    disabled={!canFullscreen}
-                    aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    onClick={() => void fullscreen.toggle()}
-                  >
-                    {fullscreen.fullscreen ? (
-                      <Minimize aria-hidden="true" />
-                    ) : (
-                      <Maximize aria-hidden="true" />
-                    )}
-                  </Button>
-                ) : (
-                  !artworkStage && (
-                    <span
-                      data-player-last
-                      aria-hidden="true"
-                      className="size-(--player-target) shrink-0"
+                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                  {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
+                    with the same Volume, so the narrowest row leaves it out and keeps one line. */}
+                  {state && (
+                    <VolumeButton
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className={livePlayback(state) ? undefined : "max-sm:hidden"}
                     />
-                  )
-                )}
+                  )}
+                  {state && !livePlayback(state) && (
+                    <WhereItPlays state={state} connected={connected} run={run} />
+                  )}
+                  <UpNextButton
+                    ref={queueTrigger}
+                    state={state}
+                    aria-expanded={queueOpen}
+                    onClick={() => setQueueOpen(!queueOpen)}
+                  />
+                  {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
+                    turns subtitles on and off. It opens over the picture above the gear. */}
+                  {!livePlayback(state) && (
+                    <Popover
+                      open={panel === "settings"}
+                      onOpenChange={(open) => setPanel(open ? "settings" : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          ref={gear}
+                          data-panel="settings"
+                          variant="ghost"
+                          size="icon-lg"
+                          aria-label="Playback"
+                          title="Playback"
+                          disabled={!settings}
+                        >
+                          <Settings aria-hidden="true" />
+                        </Button>
+                      </PopoverTrigger>
+                      {panel === "settings" && settings && (
+                        <PlaybackMenu
+                          {...settings}
+                          tracks={!audioOnly}
+                          trigger={gear.current}
+                          details={
+                            detailHref && (
+                              <Button asChild variant="ghost" className={playbackMenuRow}>
+                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
+                                  Details
+                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
+                                </Link>
+                              </Button>
+                            )
+                          }
+                        />
+                      )}
+                    </Popover>
+                  )}
+                  {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
+                    already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
+                  {!tvPresentation ? (
+                    <Button
+                      data-player-last
+                      variant="ghost"
+                      size="icon-lg"
+                      disabled={!canFullscreen}
+                      aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      onClick={() => void fullscreen.toggle()}
+                    >
+                      {fullscreen.fullscreen ? (
+                        <Minimize aria-hidden="true" />
+                      ) : (
+                        <Maximize aria-hidden="true" />
+                      )}
+                    </Button>
+                  ) : (
+                    !artworkStage && (
+                      <span
+                        data-player-last
+                        aria-hidden="true"
+                        className="size-(--player-target) shrink-0"
+                      />
+                    )
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </CouchPlayer>
     </section>
   );
 }

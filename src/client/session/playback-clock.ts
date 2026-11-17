@@ -13,7 +13,7 @@ export const emptyPlaybackClock: PlaybackClock = {
 export const PlaybackClockContext = createContext<PlaybackClock>(emptyPlaybackClock);
 
 /** Where the anchor says the Playback is now, never past its end. */
-const positionAt = (clock: PlaybackClock, now = coreNow()) =>
+export const positionAt = (clock: PlaybackClock, now = coreNow()) =>
   Math.min(
     clock.duration ?? Infinity,
     clock.position + (Math.max(0, now - clock.at) / 1000) * clock.rate,

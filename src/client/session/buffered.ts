@@ -32,3 +32,13 @@ export const useBufferedEnd = (playbackId: string | null | undefined) =>
     () => (playbackId && loaded?.playbackId === playbackId ? loaded.end : null),
     () => null,
   );
+
+// The element itself, so the player's controls read its time on this Device. Only the renderer commands it.
+let element: () => { playbackId: string; media: HTMLMediaElement } | null = () => null;
+export const setLocalMedia = (read: typeof element) => {
+  element = read;
+};
+export const localMedia = (playbackId: string | null | undefined) => {
+  const local = element();
+  return playbackId && local?.playbackId === playbackId ? local.media : null;
+};

@@ -1,6 +1,7 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useRef, useState } from "react";
+import { PlayButton, Time, TimeSlider, useMedia } from "@videojs/react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,9 +12,9 @@ import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { RangeControl } from "./RangeControl";
-import { PlaybackSeekBar } from "./PlaybackSeekBar";
+import { PlaybackThumbnail } from "./PlaybackThumbnail";
 import { useDurationClock } from "./DurationBar";
-import { useBufferedEnd } from "@/session/buffered";
+import { CouchMedia } from "@/session/couch-media";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { LiveClock } from "./LiveClock";
 
@@ -99,18 +100,18 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
  * Position, the timeline and "−3:24 ends 20:59", only where a timeline means something: media that seeks,
  * or has a length to seek through once loaded (the slider stays, disabled, meanwhile). Live media that
  * can't seek shows nothing: no bar, no position, no total. A hovering pointer reads the time under it.
+ * Video.js's TimeSlider and Time read the CouchMedia that CouchPlayer attaches; a drag sends one seek on release.
  */
 export function PlaybackTimeline({
   state,
   connected,
-  run,
   pageFirst = false,
   compact = false,
   className,
-}: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
-  const playbackClock = usePlaybackClock(true);
+}: Omit<Props, "run"> & { pageFirst?: boolean; compact?: boolean; className?: string }) {
+  const playbackClock = usePlaybackClock();
+  const media = useMedia();
   const player = state.player;
-  const buffered = useBufferedEnd(player.playbackId);
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current || !playbackControls(state).seek) return null;
@@ -124,39 +125,116 @@ export function PlaybackTimeline({
       (chapter) => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0),
     ) ?? [];
   const chapter = player.chapters?.findLast((item) => item.position <= playbackClock.position);
-  const max = canSeek ? playbackClock.duration! : length;
   const disabled = !transportReady || !canSeek;
+  const scrub = (active: boolean) => {
+    if (media instanceof CouchMedia) media.scrub(active);
+  };
   return (
     <div className={cn("grid gap-1", compact && "player-timeline", className)}>
-      <PlaybackSeekBar
-        key={`${state.playback}:${player.playbackId}:${current.id}:${current.source}`}
-        value={playbackClock.position || 0}
-        max={max}
-        disabled={disabled}
-        playbackId={player.playbackId}
-        buffered={canSeek ? buffered : null}
-        pageFirst={pageFirst}
-        onCommit={async (position) =>
-          player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false
-        }
-      >
-        {canSeek &&
-          chapters.map((item) => (
-            <span
-              key={item.position}
-              data-chapter-tick
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background"
-              style={{ left: `${(item.position / playbackClock.duration!) * 100}%` }}
+      <div className="relative">
+        <TimeSlider.Root
+          data-slot="slider"
+          data-playback-seek
+          label="Playback position"
+          step={10}
+          largeStep={60}
+          disabled={disabled}
+          className="group/slider relative flex h-6 w-full cursor-pointer items-center touch:min-h-11 select-none data-disabled:cursor-default data-disabled:opacity-50"
+          onDragStart={() => scrub(true)}
+          onDragEnd={() => scrub(false)}
+          onKeyDownCapture={(event) => {
+            // Down leaves the timeline for Play/Pause, as on a TV remote, rather than seeking back.
+            if (event.key !== "ArrowDown" || event.altKey || event.ctrlKey || event.metaKey) return;
+            const play = event.currentTarget
+              .closest(".player-page")
+              ?.querySelector<HTMLElement>("[data-play-button]:not(:disabled)");
+            if (!play) return;
+            event.preventDefault();
+            event.stopPropagation();
+            play.focus();
+          }}
+        >
+          <TimeSlider.Track
+            data-slot="slider-track"
+            className="relative h-1 w-full rounded-full bg-muted"
+          >
+            {canSeek && (
+              <TimeSlider.Buffer
+                data-slot="slider-buffered"
+                className="absolute inset-y-0 left-0 w-(--media-slider-buffer) rounded-full bg-foreground/35"
+              />
+            )}
+            <TimeSlider.Fill
+              data-slot="slider-range"
+              className="absolute inset-y-0 left-0 w-(--media-slider-fill) rounded-full bg-primary"
             />
-          ))}
-      </PlaybackSeekBar>
+          </TimeSlider.Track>
+          <TimeSlider.Thumb
+            data-slot="slider-thumb"
+            data-page-first={pageFirst || undefined}
+            className="absolute left-(--media-slider-fill) block size-3 -translate-x-1/2 rounded-full border border-ring bg-foreground ring-ring/30 after:absolute after:-inset-2 group-not-data-disabled/slider:group-hover/slider:ring-2 focus-visible:ring-2 focus-visible:outline-hidden"
+          />
+          <TimeSlider.Preview
+            data-timeline-preview
+            aria-hidden="true"
+            className="bottom-[calc(50%+.5rem)] rounded-sm bg-background text-center text-meta tabular-nums"
+            render={(props, slider) => (
+              <div {...props} hidden={disabled || (!slider.pointing && !slider.dragging)} />
+            )}
+          >
+            {/* The pointer's time, in seconds, picks the preview frame Core serves for this Playback. */}
+            <TimeSlider.Value
+              type="pointer"
+              format={String}
+              render={(props, slider) => {
+                const time =
+                  disabled || (!slider.pointing && !slider.dragging)
+                    ? null
+                    : Number(props.children);
+                return (
+                  <div>
+                    {player.playbackId && (
+                      <PlaybackThumbnail playbackId={player.playbackId} time={time} />
+                    )}
+                    <output
+                      {...props}
+                      data-hover-time={time === null ? undefined : ""}
+                      className="block px-1.5 py-0.5"
+                    >
+                      {time === null ? null : formatDuration(Math.round(time))}
+                    </output>
+                  </div>
+                );
+              }}
+            />
+          </TimeSlider.Preview>
+        </TimeSlider.Root>
+        {/* Marks over the track, outside the slider: Video.js restyles the slider's whole subtree on every pointer move. */}
+        {canSeek && chapters.length > 0 && (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2",
+              disabled && "opacity-50",
+            )}
+          >
+            {chapters.map((item) => (
+              <span
+                key={item.position}
+                data-chapter-tick
+                className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background"
+                style={{ left: `${(item.position / playbackClock.duration!) * 100}%` }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
       <div
         data-time-labels
         className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground"
       >
         <span className="min-w-0 truncate">
-          <span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>
+          <Time.Value type="current" className="text-foreground" />
           {chapter && (
             <span data-current-chapter className="ml-3">
               {chapter.title}
@@ -166,7 +244,7 @@ export function PlaybackTimeline({
         <span className="shrink-0">
           {!live && length ? (
             <>
-              −{formatDuration(remaining)}
+              <Time.Value type="remaining" negativeSign="−" />
               <span data-end-time> ends {formatEndTime(remaining)}</span>
             </>
           ) : null}
@@ -175,6 +253,9 @@ export function PlaybackTimeline({
     </div>
   );
 }
+
+const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean) =>
+  failed ? "Try again" : button.ended ? "Replay" : button.paused ? "Play" : "Pause";
 
 /**
  * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar, Home's hero and the remote pad,
@@ -199,7 +280,7 @@ export function PlaybackTransport({
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
-  const { available, playing, transportReady, pausable, stoppable, nextReady, hasNext, programme } =
+  const { available, transportReady, pausable, stoppable, nextReady, hasNext, programme } =
     playbackCapabilities(state, connected);
   if (livePlayback(state))
     return participation ? (
@@ -217,8 +298,6 @@ export function PlaybackTransport({
       (player.status === "error" ||
         (player.status === "loading" && state.radioRetry?.retryAt != null)) &&
       !!current;
-  const pause = playing || !pausable;
-  const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
   const enabled = [
     ended || failed ? available && programme : transportReady && pausable,
     stoppable,
@@ -231,30 +310,31 @@ export function PlaybackTransport({
       role="group"
       aria-label="Playback controls"
     >
-      <Button
-        data-page-first={first(0)}
-        data-play-button
-        variant="ghost"
-        size="icon-lg"
-        className={transportInk}
-        aria-label={label}
-        title={label}
+      {/* Video.js's own Play button: CouchMedia sends Play, Pause, Replay and Try again to Core. */}
+      <PlayButton
         disabled={!enabled[0]}
-        onClick={() => {
-          if ((ended || failed) && current)
-            void run({ type: "play", entryId: current.id, fromStart: ended });
-          else if (player.playbackId)
-            void run({ type: "pause", playbackId: player.playbackId, paused: playing });
-        }}
-      >
-        {ended || failed ? (
-          <RotateCcw aria-hidden="true" />
-        ) : pause ? (
-          <Pause aria-hidden="true" className="fill-current" />
-        ) : (
-          <Play aria-hidden="true" className="fill-current" />
+        label={(button) => slotLabel(button, failed)}
+        render={(props, button) => (
+          <Button
+            {...props}
+            data-page-first={first(0)}
+            data-play-button
+            variant="ghost"
+            size="icon-lg"
+            className={transportInk}
+            title={slotLabel(button, failed)}
+            disabled={!enabled[0]}
+          >
+            {button.ended || failed ? (
+              <RotateCcw aria-hidden="true" />
+            ) : button.paused ? (
+              <Play aria-hidden="true" className="fill-current" />
+            ) : (
+              <Pause aria-hidden="true" className="fill-current" />
+            )}
+          </Button>
         )}
-      </Button>
+      />
       <Button
         data-page-first={first(1)}
         variant="ghost"
