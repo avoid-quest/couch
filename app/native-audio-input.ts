@@ -111,7 +111,13 @@ export function nativeAudioInput(
     prepare: () => request({ type: "prepare" }),
     async stop() {
       stopping = true;
-      if (!exited) await request({ type: "stop" }).catch(() => {});
+      // The reader stops its helper within 4 s (SIGTERM after 2 s, SIGKILL 2 s later); one that
+      // doesn't answer by then is killed with it, so a stuck reader can't hold the next share.
+      if (!exited)
+        await Promise.race([
+          request({ type: "stop" }).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
       child.kill();
       await exit;
     },
