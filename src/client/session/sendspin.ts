@@ -1,4 +1,5 @@
 import type { LiveAudioSettings } from "../../shared/audio-settings";
+import type * as Sendspin from "@sendspin/sendspin-js";
 import {
   detectIsAndroid,
   detectIsIOS,
@@ -87,6 +88,25 @@ if (AndroidAudioContext)
   };
 const playRelaxed = (relaxed: boolean) => {
   latencyHint = relaxed ? "playback" : undefined;
+};
+// On Android, relaxed sound also starts chunks at most 1.5 s ahead, the SDK's horizon on Cast receivers
+// (sendspin-js #83, #89), instead of up to 20 s. Chrome renders every started chunk on each pass, even one
+// that plays later: 500 of them cost a phone enough to miss a buffer now and then, a 20 ms gap. The rest
+// waits decoded in the player's queue, as far ahead as Core sends it.
+const androidHorizonSec = 1.5;
+let horizonCapped = false;
+const capAndroidHorizon = (sendspin: typeof Sendspin) => {
+  // A private method: wrapped only where the SDK still has it. A test's stand-in library may have only the player.
+  const scheduling = sendspin.AudioScheduler?.prototype as unknown as
+    | { getTargetScheduledHorizonSec?: () => number }
+    | undefined;
+  const horizon = scheduling?.getTargetScheduledHorizonSec;
+  if (!AndroidAudioContext || horizonCapped || !scheduling || !horizon) return;
+  horizonCapped = true;
+  scheduling.getTargetScheduledHorizonSec = function () {
+    const sec = horizon.call(this);
+    return latencyHint ? Math.min(sec, androidHorizonSec) : sec;
+  };
 };
 // The player chains each chunk where the last one ended, between two frames. Chrome then renders the
 // frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
@@ -231,6 +251,7 @@ export function listen(
   ])
     .then(async ([sendspin, livePlayer]) => {
       alignStartsToFrames();
+      capAndroidHorizon(sendspin);
       if (sdkLive) {
         countLiveLoss(sendspin, () => (connected && !isLive(connected) ? connected : null));
         measureLiveArrivals(declaredBufferMs === undefined);
