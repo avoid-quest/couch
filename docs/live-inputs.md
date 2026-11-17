@@ -39,9 +39,13 @@ send H.264, or can't reach the Couch computer, encodes once per receiver instead
 - **Through Couch**: a receiver that can't connect directly within 10 seconds
   plays the buffered stream alone; `couch.log` lists it as `(buffered)` with the
   reason. It stays buffered for that source until sharing ends.
-- Timestamped **Audio input** and AirPlay use Sendspin's scheduler, even with one
-  listener. **Live audio** on the hosting desktop is described in
-  [Live audio](live-audio.md).
+- A timestamped **Audio input** or **System audio** shared Relaxed plays on one
+  speaker through the forwarding relay, as a screen's sound does. With a second
+  speaker Core moves it to Sendspin's scheduler, so every speaker plays in step
+  after a short break, and back when one is left. Without the relay helper, or
+  once the share or a speaker couldn't connect through it, it stays on Sendspin.
+  AirPlay always uses Sendspin. **Live audio** on the hosting desktop is
+  described in [Live audio](live-audio.md).
 - Receivers can only delay sound, never play it early, so none can line up with
   the original sound on the sharing Mac.
 
