@@ -221,3 +221,41 @@ test(
     }
   },
 );
+
+// Someone presses Pause on the TV while the film goes back to Direct and the TV confirms it before
+// its load: the reload keeps it paused, not the play the group had when the handover began.
+test(
+  "a Pause pressed while a film goes back to one screen holds",
+  { timeout: 20_000 },
+  async () => {
+    const f = await liveFixture({ extraDevices: 1 });
+    try {
+      const tv = await f.connect(2, "&video=1"),
+        laptop = await f.connect(3, "&video=1");
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "film", title: "Film", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: tv.id,
+      });
+      await until(() => !!tv.load());
+      tv.report();
+      await until(() => f.receiver.state.player.status === "playing");
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: true });
+      await until(
+        () => !!laptop.load() && !!f.receiver.state.playbacks?.some((p) => p.mode === "relaxed"),
+      );
+      const loads = tv.messages.length;
+      const { playbackId } = tv.load()!;
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: false });
+      void tv.command({ type: "pause", playbackId, paused: true });
+      tv.report({ playbackId, status: "paused", position: 12 });
+      await until(() =>
+        tv.messages.slice(loads).some((m) => m.type === "player" && m.command.type === "load"),
+      );
+      assert.equal(tv.load()!.paused, true);
+    } finally {
+      await f.close();
+    }
+  },
+);

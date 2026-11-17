@@ -128,6 +128,8 @@ export function createSession(
   let addedSubtitles: ExternalSubtitle[] = [];
   let webRecovery: { paused: boolean } | null = null;
   let pendingPause: boolean | null = null;
+  // Play and Pause presses so far: a handover's captured play or pause holds only if none came since.
+  let pauses = 0;
   let pendingSeek: { playbackId: string; position: number; from: number } | null = null;
   let webRetried = false;
   let quiescing = false;
@@ -1146,11 +1148,11 @@ export function createSession(
     },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
-    // paused: the pause it had before this Device's tab reported, unless a Play or Pause came since.
+    // held: the pause it had before this Device's tab reported, unless a Play or Pause came since.
     reload(
       media?: Pick<MediaSource, "source" | "audioSource" | "hls" | "mpegts" | "mpv">,
       retry = false,
-      paused?: boolean,
+      held?: { paused: boolean; pauses: number },
     ) {
       const { playbackId, status, position, speed } = state.player;
       if (
@@ -1174,7 +1176,7 @@ export function createSession(
       send({
         ...command,
         ...(live ? {} : { startPosition: position }),
-        paused: pendingPause ?? paused ?? status === "paused",
+        paused: pendingPause ?? (held?.pauses === pauses ? held.paused : status === "paused"),
         subtitles: withAdded(command.subtitles),
         ...carried(state.player),
         ...(speed ? { preferences: { ...command.preferences!, speed } } : {}),
@@ -1291,6 +1293,9 @@ export function createSession(
       );
       if (current) stop();
       else broadcast();
+    },
+    get pauses() {
+      return pauses;
     },
     get state() {
       return structuredClone(state);
@@ -1563,6 +1568,7 @@ export function createSession(
             state.player.error = null;
           }
           pendingPause = action.paused;
+          pauses++;
           if (state.webRetry) {
             state.webRetry = { paused: action.paused };
             broadcast();

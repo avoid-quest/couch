@@ -2036,7 +2036,10 @@ export async function createHub(options: HubOptions) {
     } else if (playback.synced) {
       // The group's play or pause carries on: its tab's picture loses the group's clock and may
       // report a pause before its own load arrives.
-      const paused = stateOf(playback).player.status === "paused";
+      const held = {
+        paused: stateOf(playback).player.status === "paused",
+        pauses: playback.session.pauses,
+      };
       playback.synced.close();
       playback.synced = undefined;
       const device = playback.outputs[0]?.deviceId;
@@ -2068,7 +2071,7 @@ export async function createHub(options: HubOptions) {
               ) {
                 playback.resolved = resolved;
                 playback.media = media;
-                playback.session.reload(prepared, false, paused);
+                playback.session.reload(prepared, false, held);
               }
             },
             (error) => {
