@@ -374,7 +374,7 @@ export function PlayerPage({
         !infoOverPicture &&
         (!shown || document.activeElement === surface()) &&
         inPlayer &&
-        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " ", "Tab"].includes(event.key)
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -403,8 +403,8 @@ export function PlayerPage({
         event.preventDefault();
         void run({ type: "pause", playbackId: player.playbackId, paused: playing });
       }
-      // Any other key shows the controls for a while and leaves focus where it is. Hidden bands are inert, so Tab
-      // shows them before the browser moves focus, and enters them in their order.
+      // Any other key shows the controls for a while and leaves focus where it is. Hidden bands are inert, so Tab off
+      // the TV shows them before the browser moves focus, and enters them in their order.
       if (inPlayer) {
         if (event.key === "Tab" && !shown) flushSync(wake);
         else wake();
