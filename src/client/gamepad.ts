@@ -94,8 +94,11 @@ export function gamepadReader(
     const presses = [...held].filter(pressed);
     const woke = presses.length > 0 && wake();
     for (const control of presses) {
-      pressedAt.set(control, now);
-      if (woke || together(keyedAt, control, now)) spent.add(control);
+      // A matched press and echo are spent, so the next tap of that control, however quick, acts.
+      const echoed = together(keyedAt, control, now);
+      if (echoed) keyedAt.delete(control);
+      else pressedAt.set(control, now);
+      if (woke || echoed) spent.add(control);
     }
     const acts = (control: Control) => pressed(control) && !spent.has(control);
     if (acts("back")) navigate("back");
@@ -121,8 +124,11 @@ export function gamepadReader(
   const key = (name: string, at: number) => {
     const control = echoes[name];
     if (!control) return false;
-    keyedAt.set(control, at);
-    return together(pressedAt, control, at);
+    // Only while the controller holds it, so a key typed on a keyboard meanwhile still counts.
+    const echo = previous.has(control) && together(pressedAt, control, at);
+    if (echo) pressedAt.delete(control);
+    else keyedAt.set(control, at);
+    return echo;
   };
   return { read, key, stop };
 }

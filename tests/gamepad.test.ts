@@ -130,6 +130,29 @@ test("a controller press that also arrives as its key acts once, whichever comes
   expect(keys).toEqual(["select", "back", "back"]);
 });
 
+test("a quick second tap with its echo acts again, and a keyboard's key counts when the control is up", () => {
+  const { keys, read, key } = controller();
+  // The controller first, twice 64 ms apart, each echoed.
+  read([pad([13])], true, 0);
+  expect(key("ArrowDown", 16)).toBe(true);
+  read([pad()], true, 32);
+  read([pad([13])], true, 64);
+  expect(key("ArrowDown", 80)).toBe(true);
+  read([pad()], true, 96);
+  // The key first, twice 64 ms apart.
+  expect(key("ArrowUp", 1000)).toBe(false);
+  read([pad([12])], true, 1016);
+  read([pad()], true, 1032);
+  expect(key("ArrowUp", 1064)).toBe(false);
+  read([pad([12])], true, 1080);
+  read([pad()], true, 1096);
+  expect(keys).toEqual(["down", "down"]);
+  // A tap released before a keyboard's Enter: the key is its own press.
+  read([pad([0])], true, 2000);
+  read([pad()], true, 2016);
+  expect(key("Enter", 2040)).toBe(false);
+});
+
 test("a held A whose menu comes due after Couch lost focus opens nothing", async () => {
   const { keys, read, blur } = controller();
   read([pad([0])], true, 0);
