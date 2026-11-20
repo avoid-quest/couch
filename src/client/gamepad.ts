@@ -51,14 +51,8 @@ function heldControls(pads: readonly (Gamepad | null)[]) {
 }
 
 /**
- * Turns controller frames into remote keys, as a remote's OK and arrows send them: OK on release or, held, the
- * item's menu; arrows repeat while held. It sends a key only while Couch has focus (focused), held OK's menu too,
- * for the caller to apply at once; a control already held when Couch gets focus (the press that switched to it)
- * waits for its release. A press that wakes the resting TV (wake) does
- * nothing else until it is released.
- *
- * A press that also arrives as its key (key) acts once: whichever of the two comes second within echoWindow is
- * dropped for its whole press, a key from keydown to keyup, a control until it is released.
+ * A controller is the TV's own remote: it sends the remote's keys only while Couch has focus, as a keyboard does, and
+ * a press its driver also sends as a key (key) acts once.
  */
 export function gamepadReader(
   navigate: (key: NavigationKey) => void,
