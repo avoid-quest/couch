@@ -11,14 +11,14 @@ const image = `${origin}/wp-content/uploads/2026/04/OnePieceElbafPic-1.png`;
 const player = (source: string) =>
   `${origin}/wp-content/themes/animestream-child/player/?${new URLSearchParams({ source, url: source === "animesaturn_live" ? "/episode/one-piece-PmTvj/ep-1180" : "aGVsbG8=", poster: image })}`;
 const live = player("animesaturn_live"),
-  mega = player("megavid_panel");
+  mega = player("svcms");
 const liveStream =
   "https://srv30.sake.streampeaker.org/_t/1792273767/hWH05TYyXI6TUWHunF-qCw/DDL/ANIME/OnePiece/1180/playlist.m3u8";
 const progressive = "https://srv30.sake.streampeaker.org/DDL/ANIME/Suikoden/01.mp4?token=fixture";
 const embed =
   "https://cdn2.megaplay.su/e/6cc193a4facd7d3d177fc90079bc86cec5da770737cc838d?autoplay=1";
 const megaStream = "https://cdn2.megaplay.su/hls/20260927_203701_5d832541/master.m3u8";
-// Public player responses captured on 2026-10-17, reduced to the fields used
+// Public player responses captured on 2026-10-17 (Mega renamed svcms on 2026-11-20), reduced to the fields used
 // by Couch. The opaque Mega reference is substituted; scripts are never run.
 const frame = (url: string) =>
   `<iframe src="${url.replaceAll("&", "&#038;")}" allowfullscreen></iframe>`;

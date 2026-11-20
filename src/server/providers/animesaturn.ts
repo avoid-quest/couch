@@ -159,7 +159,9 @@ function playerUrls(html: string): string[] {
           url.password ||
           url.hash ||
           url.pathname !== "/wp-content/themes/animestream-child/player/" ||
-          !["megavid_panel", "animesaturn_live"].includes(url.searchParams.get("source") ?? "")
+          !["svcms", "megavid_panel", "animesaturn_live"].includes(
+            url.searchParams.get("source") ?? "",
+          )
         )
           continue;
         if (
@@ -177,7 +179,11 @@ function playerUrls(html: string): string[] {
           !/^\/episode\/[a-zA-Z\d-]+\/ep-\d{1,5}$/.test(target)
         )
           continue;
-        if (url.searchParams.get("source") === "megavid_panel" && !/^[A-Za-z\d+/=]+$/.test(target))
+        // The Mega player, named svcms since November 2026 and megavid_panel before.
+        if (
+          ["svcms", "megavid_panel"].includes(url.searchParams.get("source")!) &&
+          !/^[A-Za-z\d+/=]+$/.test(target)
+        )
           continue;
         players.add(url.href);
       } catch {
