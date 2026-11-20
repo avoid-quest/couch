@@ -13,7 +13,8 @@ const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]'
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
 let adjusting: HTMLElement | null = null;
-function adjust(fader: HTMLElement | null) {
+/** Hands a TV fader the keys along it, as OK does; null hands them back. */
+export function adjust(fader: HTMLElement | null) {
   adjusting?.removeAttribute("data-adjusting");
   adjusting = fader;
   fader?.setAttribute("data-adjusting", "");
@@ -255,9 +256,11 @@ export function applyTvNavigation(key: NavigationKey) {
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
+    // Keys on the player with its controls hidden bring them back, except in Info over the picture, which has its own.
     if (
       key !== "back" &&
-      (scope.querySelector("[data-player-band=hidden]") ||
+      ((scope.querySelector("[data-player-band=hidden]") &&
+        !document.activeElement?.closest("[data-player-info]")) ||
         document.activeElement?.matches("[data-player-surface]"))
     ) {
       sendKey(

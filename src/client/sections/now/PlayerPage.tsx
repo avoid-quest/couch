@@ -78,6 +78,10 @@ const subscribeWide = (onChange: () => void) => {
 const isWide = () => window.matchMedia(wideQuery).matches;
 // The band's controls that open something to take focus (Popovers, Up next); Info shows its part in place.
 const opened = '[aria-expanded="true"]:not([data-info-toggle])';
+// Info over a picture opens on its first button, as the controls it hides would have held focus.
+const focusFirstButton = (element: HTMLElement | null) => {
+  element?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+};
 
 export function PlayerPage({
   queueOpen: requestedQueueOpen,
@@ -91,7 +95,6 @@ export function PlayerPage({
     state,
     connected,
     run,
-    seekBy,
     nativeHost,
     tvPresentation,
     videoQualityPreference,
@@ -204,7 +207,9 @@ export function PlayerPage({
   // another entry or Playback starts calm, while a new programme on the same station keeps it open.
   const infoKey = current ? `${state?.playback}:${current.id}:${current.source}` : null;
   const [infoFor, setInfoFor] = useState<string | null>(null);
-  const info = artworkStage && !!infoKey && infoFor === infoKey;
+  // Over a picture only the TV has Info, its remote's Info key and the top line's button.
+  const info = (artworkStage || tvPresentation) && !!infoKey && infoFor === infoKey;
+  const infoOverPicture = info && !artworkStage;
   useEffect(() => {
     setInfoFor(null);
   }, [infoKey]);
@@ -269,27 +274,22 @@ export function PlayerPage({
   }, [tvPresentation, current?.id, transportReady, location.state.__TSR_key]);
   const retry =
     state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
-  // The controls stay up while the keyboard is in them, on a toast's action, which Back returns to them, or while one
-  // of their Popovers or Sheets is open (Volume, Where it plays), as YouTube's stay up under an open menu; on the
-  // picture they hide when idle.
+  // The controls stay up on a toast's action, which Back returns to them, or while one of their Popovers or Sheets is
+  // open (Volume, Where it plays), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
+  // them. On the TV they hide wherever focus is, and the next key brings them back on Pause.
   const idle = () => {
-    const remoteFocus =
-      tvPresentation &&
-      document.documentElement.hasAttribute("data-keyboard") &&
-      root.current?.contains(document.activeElement) &&
-      !document.activeElement?.matches("[data-player-surface]");
     const opened = document.querySelector(
       '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]',
     );
     if (
-      remoteFocus ||
       opened ||
-      root.current?.querySelector(":focus-visible:not([data-player-surface])") ||
+      (!tvPresentation &&
+        root.current?.querySelector(":focus-visible:not([data-player-surface])")) ||
       document.activeElement?.closest("[data-sonner-toaster]")
     )
       return;
-    // Hidden bands are inert; a control a click left focused hands its keys to the picture rather than to the page.
-    if (!tvPresentation && document.activeElement?.closest("[data-player-band], [data-player-top]"))
+    // Hidden bands are inert; their focus goes to the picture rather than to the page.
+    if (document.activeElement?.closest("[data-player-band], [data-player-top]"))
       surface()?.focus({ preventScroll: true });
     setShown(false);
   };
@@ -304,16 +304,19 @@ export function PlayerPage({
     setShown(false);
   };
   const wake = () => {
+    // Info over the picture keeps the controls out of its way until it closes.
+    if (infoOverPicture) return;
     setShown(true);
     clearTimeout(timer.current);
     if (autoHide && !panel && !queueOpen) timer.current = setTimeout(idle, 4000);
   };
   useEffect(() => {
     clearTimeout(timer.current);
-    if (!autoHide || panel || queueOpen) setShown(true);
+    if (infoOverPicture) setShown(false);
+    else if (!autoHide || panel || queueOpen) setShown(true);
     else timer.current = setTimeout(idle, 4000);
     return () => clearTimeout(timer.current);
-  }, [autoHide, panel, queueOpen]);
+  }, [autoHide, panel, queueOpen, infoOverPicture]);
   useEffect(() => {
     if (!nativeHost || !current || shown) return;
     document.documentElement.toggleAttribute("data-cursor-hidden", true);
@@ -364,10 +367,11 @@ export function PlayerPage({
       }
       const inPlayer =
         root.current?.contains(document.activeElement) || document.activeElement === document.body;
-      // A TV's first key on the picture enters the controls, even before their initial timeout.
+      // A TV's first key on the picture brings the controls back on Pause, even before their initial timeout.
       if (
         tvPresentation &&
         !panel &&
+        !infoOverPicture &&
         (!shown || document.activeElement === surface()) &&
         inPlayer &&
         ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)
@@ -375,18 +379,10 @@ export function PlayerPage({
         event.preventDefault();
         event.stopImmediatePropagation();
         wake();
-        if (
-          playbackControls(state).seek &&
-          (event.key === "ArrowLeft" || event.key === "ArrowRight")
-        )
-          void seekBy(event.key === "ArrowLeft" ? -10 : 10);
-        const timeline = event.key.startsWith("Arrow");
         requestAnimationFrame(() =>
-          (timeline
-            ? (root.current?.querySelector<HTMLElement>(
-                '[role="slider"][aria-label="Playback position"]:not([data-disabled])',
-              ) ?? firstTransport())
-            : firstTransport()
+          (
+            root.current?.querySelector<HTMLElement>("button[data-play-button]:not(:disabled)") ??
+            firstTransport()
           )?.focus(),
         );
         return;
@@ -422,6 +418,7 @@ export function PlayerPage({
     panel,
     queueOpen,
     info,
+    infoOverPicture,
     closeQueue,
     playing,
     autoHide,
@@ -429,16 +426,15 @@ export function PlayerPage({
     pausable,
     player?.playbackId,
     run,
-    seekBy,
     shell.leavePlayer,
     fullscreen,
   ]);
-  // Info, from the I key, its button or a remote's Info key (dispatchTvRoute), over Up next shows Info. Over a picture,
-  // whose top line already names what plays, a remote's Info shows or hides the controls, as a TV's info banner.
+  // Info, from the I key, its button or a remote's Info key (dispatchTvRoute), over Up next shows Info. Over a picture
+  // it opens over the bottom of the picture with the controls hidden, focus on its first button.
   const toggleInfo = () => {
     if (!artworkStage) {
-      if (shown) hide();
-      else wake();
+      if (!info) hide();
+      setInfoFor(info ? null : infoKey);
       return;
     }
     const open = queueOpen || !info;
@@ -478,9 +474,9 @@ export function PlayerPage({
         : undefined,
     );
   };
-  // A pointer has no Back key, so desktop and phones lead the top line with Back; the TV's remote has its own.
+  // Back leads the top line on every screen: a pointer has no Back key, and on the TV a controller reaches it too.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
-  const back = !tvPresentation && (
+  const back = (
     <Button
       variant="ghost"
       size="icon-lg"
@@ -490,6 +486,25 @@ export function PlayerPage({
       onClick={shell.leavePlayer}
     >
       <ArrowLeft aria-hidden="true" />
+    </Button>
+  );
+  const infoButton = (
+    <Button
+      ref={infoToggle}
+      data-info-toggle
+      variant="ghost"
+      size="icon-lg"
+      className="-mr-2.5 size-(--player-target) shrink-0 text-foreground"
+      aria-label="Info"
+      title="Info"
+      aria-expanded={info}
+      aria-controls="player-info"
+      onClick={(event) => {
+        toggleInfo();
+        if (event.detail) surface()?.focus({ preventScroll: true });
+      }}
+    >
+      <Info aria-hidden="true" />
     </Button>
   );
   const artwork = currentProgramme?.artworkUrl ? (
@@ -698,13 +713,12 @@ export function PlayerPage({
       )}
       {/* The top line shows and hides with the band. Over a video it is one line, as in YouTube's and Netflix's fullscreen:
         Back, the title (opening Details) with its relationship links under it, and at the right the end time and, on the
-        TV, the clock. Beside artwork Info sits at the top right, with Back and a Remote's TV status on desktop and
-        phones, and Stop sharing while this device shares (docs/live-inputs.md). */}
+        TV, the clock and Info. Beside artwork Info sits at the top right, with Back, a Remote's TV status, and Stop
+        sharing while this device shares (docs/live-inputs.md). */}
       <div
         ref={topBand}
         data-player-top={shown ? "shown" : "hidden"}
         inert={!shown}
-        hidden={!osd && !back && !sharing && !(current && artworkStage)}
         className={cn(
           "player-top absolute inset-x-0 top-0 z-20 grid pt-4 transition-opacity duration-200 motion-reduce:transition-none",
           osd && "player-video-controls",
@@ -733,42 +747,17 @@ export function PlayerPage({
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <LiveSharingStatus />
               <div ref={setRecognitionControls} className="empty:hidden" />
-              {current && artworkStage && (
-                <Button
-                  ref={infoToggle}
-                  data-info-toggle
-                  variant="ghost"
-                  size="icon-lg"
-                  className="-mr-2.5 size-(--player-target) shrink-0"
-                  aria-label="Info"
-                  title="Info"
-                  aria-expanded={info}
-                  aria-controls="player-info"
-                  onClick={(event) => {
-                    toggleInfo();
-                    if (event.detail) surface()?.focus({ preventScroll: true });
-                  }}
-                >
-                  <Info aria-hidden="true" />
-                </Button>
-              )}
+              {current && artworkStage && infoButton}
             </div>
           </div>
         )}
         {osd && (
           <div
             data-player-heading
-            className={cn(
-              "drag-region window-controls-inset grid items-center gap-x-3 px-(--gutter)",
-              back ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]",
-            )}
+            className="drag-region window-controls-inset grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-(--gutter)"
           >
-            {trail && (
-              <div className={cn("min-w-0", back ? "col-start-2 col-end-4" : "col-span-full")}>
-                {trail}
-              </div>
-            )}
-            {back && <div className="row-start-2">{back}</div>}
+            {trail && <div className="col-start-2 col-end-4 min-w-0">{trail}</div>}
+            <div className="row-start-2">{back}</div>
             <h1
               title={title}
               className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl"
@@ -779,14 +768,10 @@ export function PlayerPage({
               {sharing && <LiveSharingStatus />}
               {!radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
+              {tvPresentation && <span className="self-center">{infoButton}</span>}
             </div>
             {(byline || context) && (
-              <div
-                className={cn(
-                  "flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base",
-                  back ? "col-start-2 col-end-4" : "col-span-full",
-                )}
-              >
+              <div className="col-start-2 col-end-4 flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
                 {byline && <p className="min-w-0 truncate">{byline}</p>}
                 {context}
               </div>
@@ -908,7 +893,38 @@ export function PlayerPage({
           </aside>
         )}
       </div>
-      {osd && state && !queueOpen && !panel && <NextUp state={state} run={run} />}
+      {osd && state && !queueOpen && !panel && !info && <NextUp state={state} run={run} />}
+      {infoOverPicture && state && (
+        <div
+          ref={infoRegion}
+          id="player-info"
+          data-player-info
+          className="absolute inset-x-0 bottom-0 z-30 grid gap-3 bg-linear-to-t from-black/95 from-55% to-transparent px-(--gutter) pt-24 pb-10 duration-200 motion-safe:animate-in motion-safe:fade-in-0"
+        >
+          {title && (
+            <h2
+              data-length={titleLength(title)}
+              style={titleFit(title)}
+              className="display-title max-w-[62%] min-w-0 text-balance"
+            >
+              {title}
+            </h2>
+          )}
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
+            {byline && <span>{byline}</span>}
+            {context}
+            {!radio && <PlayerEndTime state={state} className="tabular-nums" />}
+          </div>
+          <div ref={focusFirstButton} className="mt-2 flex gap-2">
+            {detailHref && (
+              <Button variant="secondary" onClick={() => detailNavigation.open(detailHref)}>
+                Details
+              </Button>
+            )}
+            <WhereItPlays state={state} connected={connected} run={run} label="Where it plays" />
+          </div>
+        </div>
+      )}
       {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
         picture; what it opened returns focus to the picture once it closes, off the TV. A keyboard's click (detail 0)
         keeps focus where the keyboard put it, and what it opened returns focus to its control. */}

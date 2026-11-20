@@ -10,6 +10,8 @@ import { isRadio } from "../../shared/radio";
 import { heldOutOf } from "../../shared/live-input";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
+import { isTvPresentation } from "@/session/presentation";
+import { adjust } from "@/navigation";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { RangeControl } from "./RangeControl";
 import { PlaybackThumbnail } from "./PlaybackThumbnail";
@@ -530,6 +532,8 @@ export function PlaybackVolume({
           value={level}
           max={100}
           disabled={!ready}
+          // A remote's press moves Volume 2, fine enough for a level between quiet and loud.
+          keyboardStep={isTvPresentation() ? 2 : 1}
           onCommit={(volume) =>
             run({ type: "volume", volume, ...(target ? { deviceId: target } : {}) })
           }
@@ -575,6 +579,7 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
   const trigger = useRef<HTMLButtonElement>(null);
   // Controlled, so it places itself as it opens (toolPanel).
   const [open, setOpen] = useState(false);
+  const tv = isTvPresentation();
   const sourceId = state.playbacks?.find(
     (playback) => playback.id === state.playback,
   )?.liveSourceId;
@@ -604,6 +609,17 @@ export function VolumeButton({ state, connected, run, className }: Props & { cla
           {...toolPanel(trigger.current)}
           aria-label="Volume controls"
           className="w-72"
+          // A remote opens Volume on its level, the slider already taking Left and Right, rather than on Mute.
+          onOpenAutoFocus={(event) => {
+            const slider =
+              tv && event.target instanceof HTMLElement
+                ? event.target.querySelector<HTMLElement>('[role="slider"]')
+                : null;
+            if (!slider) return;
+            event.preventDefault();
+            slider.focus();
+            adjust(slider);
+          }}
         >
           <PlaybackVolume state={state} connected={connected} run={run} />
         </PopoverContent>

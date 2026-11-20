@@ -18,6 +18,7 @@ import type {
 } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
 import { useGamepadNavigation } from "../gamepad";
+import { wakeTvRest } from "../tv-rest";
 import { couchApp, isNativeHost } from "./native-context";
 import { isTvPresentation } from "./presentation";
 import { forgetConnection } from "./connection";
@@ -163,7 +164,7 @@ export function SessionGate({
   }, []);
 
   function handleNavigation(key: NavigationKey) {
-    if (!tvPresentation) return;
+    if (!tvPresentation || wakeTvRest()) return;
     document.documentElement.setAttribute("data-keyboard", "");
     if (key !== "home" && key !== "info") {
       requestAnimationFrame(() => applyTvNavigation(key));
