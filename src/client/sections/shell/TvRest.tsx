@@ -31,7 +31,9 @@ export function TvRest({ playing }: { playing: boolean }) {
   const playingNow = useRef(playing);
   playingNow.current = playing;
   const restart = useRef<() => void>(undefined);
-  // The press that wakes it reaches nothing else: a key's whole press, held or not (key-presses.ts), or a pointer's.
+  const screen = useRef<HTMLElement>(null);
+  // The press that wakes it reaches nothing else: a key's whole press, held or not (key-presses.ts), or a pointer's
+  // down to its click, which still comes after pointerdown is cancelled and lands on what the clock covered.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let asleep = false;
@@ -50,33 +52,69 @@ export function TvRest({ playing }: { playing: boolean }) {
       arm();
       return was;
     };
-    const press = (event: PointerEvent) => {
-      if (!wake()) return;
+    let waking = false;
+    const swallow = (event: Event) => {
+      if (!waking) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (["click", "auxclick", "pointercancel"].includes(event.type)) waking = false;
     };
+    const press = (event: PointerEvent) => {
+      waking = wake();
+      swallow(event);
+    };
+    const sequence = [
+      "pointerup",
+      "pointercancel",
+      "mousedown",
+      "mouseup",
+      "contextmenu",
+      "click",
+      "auxclick",
+    ];
     restart.current = wake;
     setTvRestWake(wake);
     arm();
-    const unclaim = claimKeyPresses(wake);
+    // A key pressed after it (a press that never clicked) is past it.
+    const unclaim = claimKeyPresses(() => {
+      waking = false;
+      return wake();
+    });
     window.addEventListener("pointerdown", press, true);
     window.addEventListener("pointermove", wake, true);
+    for (const type of sequence) window.addEventListener(type, swallow, true);
     return () => {
       clearTimeout(timer);
       setTvRestWake(null);
       unclaim();
       window.removeEventListener("pointerdown", press, true);
       window.removeEventListener("pointermove", wake, true);
+      for (const type of sequence) window.removeEventListener(type, swallow, true);
     };
   }, []);
   // Something starting wakes it; the wait starts again when it stops.
   useEffect(() => {
     restart.current?.();
   }, [playing]);
+  // What it covers is out of reach of focus and screen readers; focus returns where it was on waking.
+  useEffect(() => {
+    if (!resting) return;
+    const focused = document.activeElement;
+    const covered = [...document.body.children].filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element !== screen.current && !element.inert,
+    );
+    for (const element of covered) element.inert = true;
+    return () => {
+      for (const element of covered) element.inert = false;
+      if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
+    };
+  }, [resting]);
   if (!resting) return null;
   // Over everything left open: Radix's panels portal to the body, and sonner's toasts sit at z-index 999999999.
   return createPortal(
     <section
+      ref={screen}
       aria-label="Resting"
       className="fixed inset-0 z-[1000000000] grid place-items-center bg-background"
     >
