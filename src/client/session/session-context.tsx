@@ -17,6 +17,7 @@ import type {
   SessionState,
 } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
+import { useGamepadNavigation } from "../gamepad";
 import { couchApp, isNativeHost } from "./native-context";
 import { isTvPresentation } from "./presentation";
 import { forgetConnection } from "./connection";
@@ -170,6 +171,7 @@ export function SessionGate({
     }
     dispatchTvRoute(key);
   }
+  useGamepadNavigation(handleNavigation);
 
   const {
     clock,
