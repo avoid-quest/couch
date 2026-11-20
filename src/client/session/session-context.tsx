@@ -173,10 +173,11 @@ export function SessionGate({
     dispatchTvRoute(key);
   }
   // A controller's key applies at once, in the frame that read it while Couch had focus, never after it lost focus.
+  // It is the TV's own input, not a phone's Remote.
   useGamepadNavigation((key) => {
     if (wakeTvRest()) return;
     document.documentElement.setAttribute("data-keyboard", "");
-    applyTvNavigation(key);
+    applyTvNavigation(key, false);
   });
 
   const {

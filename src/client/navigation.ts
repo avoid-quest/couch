@@ -239,10 +239,12 @@ function sendKey(target: HTMLElement, key: string) {
 
 // Home and Info change the TV's screen/overlay state in App. Other keys act on
 // its real DOM, including Radix portals, without changing a controller's page.
-export function applyTvNavigation(key: NavigationKey) {
+// A phone's Remote (remote) can't reach what is only the TV's own; a game controller, the TV's own input, can.
+export function applyTvNavigation(key: NavigationKey, remote = true) {
   if (key === "home" || key === "info") return false;
   // A nested Radix portal can aria-hide its parent dialog without closing it.
   if (
+    remote &&
     key !== "back" &&
     [...document.querySelectorAll<HTMLElement>(portals)].some(
       (element) => element.closest(localOnly) && rendered(element),
@@ -252,7 +254,7 @@ export function applyTvNavigation(key: NavigationKey) {
   // A held OK ("menu") opens a focused item's menu; on anything else it is OK.
   const ok = key === "select" || key === "menu";
   const previous = remoteNavigation;
-  remoteNavigation = true;
+  remoteNavigation = remote;
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
@@ -277,7 +279,7 @@ export function applyTvNavigation(key: NavigationKey) {
       visible(document.activeElement)
         ? document.activeElement
         : null;
-    if (key !== "back" && target?.closest(localOnly)) {
+    if (remote && key !== "back" && target?.closest(localOnly)) {
       if (ok) return true;
       const tablist = target.closest('[role="tablist"]');
       if (tablist && target.matches('[role="tab"]') && (key === "left" || key === "right")) {
