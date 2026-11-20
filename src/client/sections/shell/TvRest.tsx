@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CouchMark } from "@/components/CouchMark";
 import { DigitalClock } from "@/components/DigitalClock";
 import { deviceName } from "@/copy";
@@ -73,16 +74,18 @@ export function TvRest({ playing }: { playing: boolean }) {
     restart.current?.();
   }, [playing]);
   if (!resting) return null;
-  return (
+  // Over everything left open: Radix's panels portal to the body, and sonner's toasts sit at z-index 999999999.
+  return createPortal(
     <section
       aria-label="Resting"
-      className="fixed inset-0 z-50 grid place-items-center bg-background"
+      className="fixed inset-0 z-[1000000000] grid place-items-center bg-background"
     >
       <div className="grid justify-items-center gap-6">
         <CouchMark connected={connected} className="size-14" />
         <DigitalClock className="font-display text-[6rem] leading-none font-bold tracking-[-0.03em] text-foreground normal-nums" />
         <span className="text-title text-muted-foreground">{name}</span>
       </div>
-    </section>
+    </section>,
+    document.body,
   );
 }
