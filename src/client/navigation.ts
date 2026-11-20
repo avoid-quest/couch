@@ -383,6 +383,17 @@ export function useNavigation(onBack: () => void) {
           ?.closest('[role="radiogroup"]')
           ?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []),
       ].filter(visible);
+      // The Volume panel opens on its level (PlaybackTransport.tsx), so one Back closes it: Radix hears this Escape.
+      if (
+        event.key === "Escape" &&
+        fader &&
+        adjusting === fader &&
+        fader.closest("[data-volume]") &&
+        fader.closest('[data-slot="popover-content"]')
+      ) {
+        adjust(null);
+        return;
+      }
       if (fader && (event.key === "Enter" || (event.key === "Escape" && adjusting === fader)))
         adjust(adjusting === fader ? null : fader);
       else if (
