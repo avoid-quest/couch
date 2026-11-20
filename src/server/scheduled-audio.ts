@@ -1125,7 +1125,7 @@ export function createScheduledAudio(options: {
       sourceChanged(sourceId: string) {
         if (load?.liveSourceId === sourceId) each((session) => session.sendMetadata(metadata()));
       },
-      // A picture-only timeline has no decoder to learn an unlisted VOD's length; its screens report it.
+      // A screen can learn a film's length before the decoder does, or be its only source.
       duration(playbackId: string, seconds: number) {
         if (
           load?.playbackId !== playbackId ||
@@ -1134,7 +1134,7 @@ export function createScheduledAudio(options: {
           !Number.isFinite(seconds)
         )
           return;
-        state = { ...state, duration: seconds };
+        state = { ...state, duration: seconds, seekable: !load.live && !load.radio };
         report();
       },
       // The screens: Devices whose picture follows this group's clock.

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { AudioCodec, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { helper, startHelpers } from "../src/server/helpers";
+import { openStore } from "../src/server/store";
 import { liveFixture, until } from "./live-input.fixture";
 import { executableName, nodeExecutables } from "./executable.fixture";
 
@@ -55,6 +56,7 @@ async function webFixture(t: TestContext) {
       id: "fixture",
       title: "Separate tracks",
       duration: 60,
+      live_status: "was_live",
       formats: [video, audio],
       requested_formats: selected,
     };
@@ -113,6 +115,38 @@ process.stdin.resume();
 }
 
 const upstream = (source: string) => new URL(source).searchParams.get("url") ?? source;
+
+test("a broadcast saved while live seeks on two speakers after it becomes a recording", async (t) => {
+  const f = await webFixture(t);
+  try {
+    const store = openStore(f.databasePath);
+    store.playback("saved").saveQueue([
+      {
+        id: "broadcast",
+        title: "Broadcast",
+        source: "web:https://www.youtube.com/watch?v=fixture",
+        endless: true,
+      },
+    ]);
+    store.close();
+    await f.restart();
+    const receiver = await f.connect(1, "&video=1&audio=1");
+    const other = await f.connect(2, "&audio=1");
+    const play = await receiver.command({ type: "play", entryId: "broadcast" });
+    assert.ok(play.ok, play.error);
+    await until(() => !!receiver.load());
+    receiver.report({ duration: 60, seekable: true });
+    await until(() => receiver.state.player.status === "playing");
+    assert.equal(receiver.state.queue[0]?.endless, false);
+    await f.speaker(2);
+    const join = await receiver.command({ type: "output", deviceId: other.id, level: 50 });
+    assert.ok(join.ok, join.error);
+    await until(() => f.heard(2) > 0 && receiver.state.player.status === "playing");
+    assert.equal(receiver.state.controls?.seek, true);
+  } finally {
+    await f.close();
+  }
+});
 
 test(
   "private HLS keeps every sample when a shared programme loses a segment connection",

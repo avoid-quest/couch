@@ -15,6 +15,29 @@ async function until(predicate: () => boolean) {
   }
 }
 
+test("a screen reporting a film's duration before its speakers start keeps seeking available", async (t) => {
+  const states: PlayerState[] = [];
+  const audio = createScheduledAudio({ name: "Couch", admit: () => false, changed() {} });
+  const group = audio.group("film", (state) => states.push(state));
+  t.after(async () => {
+    group.close();
+    await audio.close();
+  });
+  group.members([
+    { deviceId: "screen", level: 100 },
+    { deviceId: "speaker", level: 100 },
+  ]);
+  group.send({
+    type: "load",
+    playbackId: "film",
+    source: "https://media.example/film.mp4",
+    paused: true,
+  });
+  group.duration("film", 635);
+  assert.equal(states.at(-1)?.duration, 635);
+  assert.equal(states.at(-1)?.seekable, true);
+});
+
 test("retired FFmpeg stderr, error and close cannot change the replacement programme", async (t) => {
   const cp = process.getBuiltinModule("node:child_process");
   const children: (ChildProcess & {

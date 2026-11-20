@@ -1705,7 +1705,7 @@ export async function createHub(options: HubOptions) {
         audioSource: media.audioSource,
         headers,
         publicNetwork: media.publicNetwork,
-        live: !!media.metadata?.endless || !!entry.endless,
+        live: media.metadata?.endless ?? !!entry.endless,
         audioOnly: media.audioOnly,
         hasAudio: media.hasAudio,
         duration: media.metadata?.duration ?? entry.duration ?? state.player.duration ?? undefined,
@@ -1907,7 +1907,7 @@ export async function createHub(options: HubOptions) {
       signal,
     );
     const live =
-      !!media.metadata?.endless ||
+      media.metadata?.endless ??
       (playback.media?.playbackId === playbackId && !!playback.media.live);
     // An endless stream's sound is the clock its pictures follow, so Core decodes it with no speaker too.
     const sound =
@@ -2242,7 +2242,8 @@ export async function createHub(options: HubOptions) {
       const entry = stateOf(playback).queue.find(
         (item) => item.id === stateOf(playback).currentEntryId,
       );
-      let isLiveMedia = !!(entry?.endless || media.metadata?.endless);
+      // A broadcast saved while live can resolve to a finished recording.
+      let isLiveMedia = media.metadata?.endless ?? !!entry?.endless;
       // Resolution coverage can exceed this attempt's channels. A prospective
       // move retains its proposed selection until its destination is committed.
       const output = pending.moving
