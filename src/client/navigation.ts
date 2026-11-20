@@ -449,7 +449,8 @@ export function useNavigation(onBack: () => void) {
       )
         return;
       event.preventDefault();
-      press = { target, hold: startHold(() => openItemMenu(target)) };
+      // The timer can fire after Couch lost focus, its keyup never coming.
+      press = { target, hold: startHold(() => document.hasFocus() && openItemMenu(target)) };
     };
     const okUp = (event: KeyboardEvent) => {
       if (event.key !== "Enter" || !press) return;
