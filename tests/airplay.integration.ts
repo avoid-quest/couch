@@ -7,6 +7,7 @@ import { mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from "node:
 import { createServer, type Socket as NetSocket } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import WebSocket from "ws";
 import { AudioCodec, Roles, SendspinClient, Identity } from "@sonn-audio/node-sendspin";
 import { createAirPlay } from "../src/server/airplay";
@@ -38,7 +39,7 @@ if (process.env.COUCH_TEST_AIRPLAY_CORE) {
     enabled: true,
     network: () => true,
     name: () => "Couch",
-    identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01" }),
+    identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01", askCode: true }),
     sessions: { started() {}, audio() {}, ended() {} },
     changed() {},
   });
@@ -355,6 +356,30 @@ const closed = (fake: Fake, socket: number, type = "RAOP") => {
   fake.send({ log: `Connection closed on socket ${socket}` });
 };
 
+test("Ask for a code is saved apart from the identity an older build writes", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-airplay-store-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "couch.sqlite");
+  let store = openStore(path);
+  const identity = store.airplayIdentity();
+  assert.equal(identity.askCode, true);
+  store.saveAirPlayAskCode(false);
+  store.close();
+
+  // The previous preview writes the identity row as it always has.
+  const previous = new DatabaseSync(path);
+  previous
+    .prepare("INSERT OR IGNORE INTO installation_airplay VALUES (1, 0, ?, ?)")
+    .run("unused-code", "unused-device");
+  previous.exec("UPDATE installation_airplay SET enabled = 1 WHERE id = 1");
+  previous.close();
+
+  store = openStore(path);
+  assert.equal(store.airplayEnabled(), true);
+  assert.deepEqual(store.airplayIdentity(), { ...identity, askCode: false });
+  store.close();
+});
+
 test(
   "public AirPlay discovery exposes capability while settings stay admin-only across role changes",
   { skip: !linux },
@@ -408,6 +433,34 @@ test(
       200,
     );
     assert.equal((await request("/api/settings/airplay", { token: admin.token })).status, 200);
+  },
+);
+
+test(
+  "AirPlay rechecks the administrator after restarting the receiver",
+  { skip: !linux },
+  async (t) => {
+    const { request, airplay, next, receiver: admin } = await fixture(t);
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    const fake = await next(1);
+    await ready(fake, airplay);
+    process.kill(fake.pid, "SIGSTOP");
+    const changing = request("/api/settings/airplay/ask-code", {
+      token: admin.token,
+      body: { enabled: false },
+    });
+    try {
+      await until(async () => !(await airplay()).askCode);
+      const demoted = await request(`/api/devices/${admin.id}/role`, {
+        body: { role: "controller" },
+      });
+      assert.equal(demoted.status, 200);
+    } finally {
+      process.kill(fake.pid, "SIGCONT");
+    }
+    const response = await changing;
+    assert.equal(response.status, 403);
+    assert.deepEqual(Object.keys(await response.json()), ["error"]);
   },
 );
 
@@ -981,6 +1034,60 @@ test("a new code restarts AirPlay with it", { skip: !linux }, async (t) => {
     `pw ${after}\n`,
   );
 });
+
+test(
+  "with Ask for a code off, UxPlay has no password and any sender plays",
+  { skip: !linux },
+  async (t) => {
+    const { airplay, next, request, directory, connect, hostToken, controller } = await fixture(t);
+    const startup = join(directory, "data", "airplay", "uxplayrc");
+    assert.equal((await airplay()).askCode, true, "on unless an admin turns it off");
+    assert.equal(
+      (
+        await request("/api/settings/airplay/ask-code", {
+          token: controller.token,
+          body: { enabled: false },
+        })
+      ).status,
+      403,
+    );
+    await request("/api/settings/airplay", { body: { enabled: true } });
+    let fake = await next(1);
+    await ready(fake, airplay);
+    assert.equal(await readFile(startup, "utf8"), `pw ${(await airplay()).code}\n`);
+
+    const response = await request("/api/settings/airplay/ask-code", { body: { enabled: false } });
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as AirPlayState).askCode, false);
+    await until(() => !alive(fake.pid));
+    fake = await next(2);
+    assert.equal(await readFile(startup, "utf8"), "");
+    await ready(fake, airplay);
+
+    // UxPlay logs no authentication without a password; the sender's sound still publishes it.
+    const host = await connect(Identity.generate().peerId, hostToken);
+    sender(fake, 31, "First guest", false);
+    fake.send({ log: "RAOP initialized success" });
+    closed(fake, 31);
+    // Stream setup commits this process to its sender before any sound arrives on fd 3.
+    fake = await next(3);
+    await ready(fake, airplay);
+    assert.deepEqual(host.state.liveSources ?? [], []);
+    // Browsing alone leaves the same receiver ready for a sender.
+    sender(fake, 30, undefined, false);
+    closed(fake, 30);
+    sender(fake, 32, "Guest", false);
+    fake.send({ log: "RAOP initialized success" });
+    fake.send({ tone: { frequency: 440 } });
+    await until(() => !!host.state.liveSources?.length);
+    assert.equal(host.state.liveSources![0]!.name, "AirPlay · Guest");
+
+    await request("/api/settings/airplay/ask-code", { body: { enabled: true } });
+    await until(() => !alive(fake.pid));
+    await next(4);
+    assert.equal(await readFile(startup, "utf8"), `pw ${(await airplay()).code}\n`);
+  },
+);
 
 test("UxPlay ends with Core however Core ends", { skip: !linux }, async (t) => {
   const { directory, uxplay, fakes, next } = await fixture(t);

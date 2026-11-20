@@ -20,6 +20,8 @@ export type AirPlayState = {
   name: string;
   /** What a sender enters the first time it plays here. */
   code: string;
+  /** Off: UxPlay has no password, and any sender on the network plays without the code. */
+  askCode: boolean;
   /** Who is playing here, as the sender names itself. */
   sender: string | null;
 };

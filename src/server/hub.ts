@@ -4227,7 +4227,11 @@ export async function createHub(options: HubOptions) {
         );
       }
     }
-    if (url.pathname === "/api/settings/airplay" || url.pathname === "/api/settings/airplay/code") {
+    if (
+      url.pathname === "/api/settings/airplay" ||
+      url.pathname === "/api/settings/airplay/code" ||
+      url.pathname === "/api/settings/airplay/ask-code"
+    ) {
       const refused = administrator();
       if (refused) return refused;
       if (request.method === "GET" && url.pathname === "/api/settings/airplay")
@@ -4237,7 +4241,7 @@ export async function createHub(options: HubOptions) {
           request,
           new Response(null, {
             status: 405,
-            headers: { Allow: url.pathname.endsWith("/code") ? "POST" : "GET, POST" },
+            headers: { Allow: url.pathname === "/api/settings/airplay" ? "GET, POST" : "POST" },
           }),
         );
       try {
@@ -4245,17 +4249,25 @@ export async function createHub(options: HubOptions) {
           stillAdministrator();
           store.newAirPlayCode();
           await airplay.renew();
-          return cors(request, json(airplay.state()));
+        } else if (url.pathname.endsWith("/ask-code")) {
+          const askCode = await settingField(request, "enabled");
+          if (typeof askCode !== "boolean")
+            throw new ControllerError("Choose whether AirPlay asks for a code.");
+          stillAdministrator();
+          store.saveAirPlayAskCode(askCode);
+          await airplay.renew();
+        } else {
+          const enabled = await settingField(request, "enabled");
+          if (typeof enabled !== "boolean")
+            throw new ControllerError("Choose whether to receive AirPlay.");
+          const { status, error } = airplay.state();
+          if (enabled && (status === "unsupported" || status === "unavailable"))
+            throw new ControllerError(error!, 409);
+          stillAdministrator();
+          store.saveAirPlayEnabled(enabled);
+          await airplay.setEnabled(enabled);
         }
-        const enabled = await settingField(request, "enabled");
-        if (typeof enabled !== "boolean")
-          throw new ControllerError("Choose whether to receive AirPlay.");
-        const { status, error } = airplay.state();
-        if (enabled && (status === "unsupported" || status === "unavailable"))
-          throw new ControllerError(error!, 409);
         stillAdministrator();
-        store.saveAirPlayEnabled(enabled);
-        await airplay.setEnabled(enabled);
         return cors(request, json(airplay.state()));
       } catch (error) {
         return cors(

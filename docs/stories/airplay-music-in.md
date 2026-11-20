@@ -9,8 +9,8 @@ picker and it plays on the house speakers.
 
 1. An admin: **Settings → Sources → Receive AirPlay** (with **Share on network**
    on).
-2. The friend chooses this Couch in their AirPlay picker and enters its
-   **Code**.
+2. The friend chooses this Couch in their AirPlay picker and, if **Ask for a
+   code** is on, enters its **Code**.
 3. **AirPlay · name** appears in Shared sources and takes the Couch computer's
    speakers.
 4. Add more speakers in **Where it plays**; they play in step.
@@ -18,7 +18,7 @@ picker and it plays on the house speakers.
 
 ## Done when
 
-- Only a sender with the code can play.
+- With **Ask for a code** on, only a sender with the code can play.
 - Other Playbacks and their queues keep going.
 - When the sender stops, the source goes away.
 

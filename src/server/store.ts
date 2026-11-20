@@ -151,6 +151,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
     CREATE TABLE IF NOT EXISTS installation_airplay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), code TEXT NOT NULL, deviceId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_airplay_ask_code (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -342,11 +343,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
     db.query("UPDATE installation_airplay SET code = ? WHERE id = 1 AND length(code) < 14").run(
       airPlayCode(),
     );
-    return db
-      .query<{ code: string; deviceId: string }, []>(
-        "SELECT code, deviceId FROM installation_airplay WHERE id = 1",
+    const { askCode, ...saved } = db
+      .query<{ code: string; deviceId: string; askCode: number }, []>(
+        // Its own table, so an older build still reads and writes the identity. On unless saved off.
+        "SELECT code, deviceId, coalesce(ask.enabled, 1) AS askCode FROM installation_airplay LEFT JOIN installation_airplay_ask_code AS ask USING (id) WHERE id = 1",
       )
       .get()!;
+    return { ...saved, askCode: !!askCode };
   };
   return {
     installationId() {
@@ -413,6 +416,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
       db.query("UPDATE installation_airplay SET enabled = ? WHERE id = 1").run(Number(enabled));
     },
     airplayIdentity,
+    saveAirPlayAskCode(askCode: boolean) {
+      db.query(
+        "INSERT INTO installation_airplay_ask_code VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled",
+      ).run(Number(askCode));
+    },
     newAirPlayCode() {
       airplayIdentity();
       db.query("UPDATE installation_airplay SET code = ? WHERE id = 1").run(airPlayCode());

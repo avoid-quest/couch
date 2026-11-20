@@ -10,7 +10,8 @@ Windows. Not yet checked with real Apple devices.
 An admin turns on **Settings → Sources → Receive AirPlay**; it runs only while
 **Share on network** is on. The first time a device plays here it asks for an
 AirPlay password: the **Code** below the switch, with its dashes. **New code**
-restarts AirPlay and makes every device enter it again.
+restarts AirPlay and makes every device enter it again. With **Ask for a code**
+off, AirPlay restarts without a password and any device that reaches it plays.
 
 While a device plays, **AirPlay · {name}** leads Home's **Shared sources** and
 plays automatically on the Couch computer; other devices join it with **Play on**
@@ -62,9 +63,9 @@ the password check and one sender at a time.
   time. A sender's clock that steps back within the window plays on without a
   gap: the part that overlaps sound already sent is dropped.
 - A sender becomes a source only when its sound arrives on a connection UxPlay
-  authenticated (`-d 1` log lines). One UxPlay process serves one sender: after
-  it leaves, Core restarts UxPlay, because log and sound arrive on separate pipes
-  in no fixed order.
+  authenticated (`-d 1` log lines), or on any connection without a password. One
+  UxPlay process serves one sender: after it leaves, Core restarts UxPlay,
+  because log and sound arrive on separate pipes in no fixed order.
 - **The sender's address** (`uxplay-sender-address.patch`): upstream UxPlay accepted a sender's UDP audio from any
   address, and packets shorter than one AES block are never decrypted, so another
   host could inject sound. The patch accepts packets only from the sender's own
@@ -72,7 +73,7 @@ the password check and one sender at a time.
 - UxPlay listens on every interface; it can't be limited to Couch's selected
   address. Keep AirPlay off where other networks shouldn't reach it. Anyone who
   reaches it can disturb it (hold the one connection, crash it), but can't publish
-  sound without the code.
+  sound without the code while **Ask for a code** is on.
 
 ## Build and test
 
