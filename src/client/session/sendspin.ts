@@ -189,10 +189,6 @@ const updateBuffer = (created: Player, sample = false) => {
   if (declaredBufferMs === undefined) {
     if (worklet) created.declared();
     else declaredLive();
-    console.log(
-      `Couch live measure: latest arrival per second ${arrivals.map((ms) => ms.toFixed(1)).join(", ")} ms` +
-        ` | adds ${network} ms | declares ${next} ms`,
-    );
   }
   declaredBufferMs = next;
   created.setMinBufferMs(next);

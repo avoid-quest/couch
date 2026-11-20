@@ -43,7 +43,6 @@ const windowMs = 1000;
 // An output fills its buffers after it starts: on Linux's PulseAudio the lead read 40 to 66 ms in its
 // first second, then 47 to 56. The need is read from the seconds after it.
 const settleMs = 1000;
-const statusMs = 10_000;
 // The SDK's volume curve and ramp (scheduler.js perceptualGain, VOLUME_RAMP_TIME_CONSTANT_SEC).
 const gainOf = (volume: number, muted: boolean) => (muted ? 0 : (volume / 100) ** 1.5);
 const volumeRampSec = 0.015;
@@ -102,8 +101,6 @@ export class LivePlayer {
   private interrupted = false;
   // What the feed reported since the last sample, and since the last status line.
   private second = noStats();
-  private window = noStats();
-  private windowStart = performance.now();
   private sendAheads: number[] = [];
   private arrival: number | undefined;
   // Whether it measures or waits to be placed (live-feed.ts): what the feed last said, from the start
@@ -253,7 +250,6 @@ export class LivePlayer {
       this.arrival = Math.max(this.arrival ?? -Infinity, status.arrival);
     this.sendAheads.push(...status.sendAheads);
     addStats(this.second, status.stats);
-    addStats(this.window, status.stats);
     if (volumeChanged) this.updateVolume();
   }
 
@@ -336,21 +332,5 @@ export class LivePlayer {
       this.offset = offset;
       this.sendClock();
     }
-    if (now - this.windowStart >= statusMs) this.status(now);
-  }
-
-  // One console line every 10 s while it plays, as the SDK's player logs its own.
-  private status(now: number) {
-    const ms = (frames: number) =>
-      Number.isFinite(frames) ? ((frames / this.context!.sampleRate) * 1000).toFixed(1) : "-";
-    const { chunks, lost, slack, filled, skipped, errorMin, errorMax, corrections } = this.window;
-    console.log(
-      `Couch live player: ${((now - this.windowStart) / 1000).toFixed(1)} s, ${chunks} chunks, ${lost} lost` +
-        ` | slack min ${ms(slack)} ms | filled ${ms(filled)} ms, skipped ${ms(skipped)} ms` +
-        ` | sync error ${ms(errorMin)} .. ${ms(errorMax)} ms, ${corrections} corrections` +
-        ` | lead ${this.outputMs()?.toFixed(1) ?? "-"} ms, ctx ${this.context?.state}`,
-    );
-    this.window = noStats();
-    this.windowStart = now;
   }
 }
