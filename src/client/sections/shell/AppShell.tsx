@@ -728,7 +728,6 @@ function ShellChrome({ children }: PropsWithChildren) {
       )}
     >
       <main id="main" className="flex flex-1 flex-col">
-        {/* First, so its key handler runs ahead of the pages'. */}
         {tvPresentation && paired && (
           <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
         )}

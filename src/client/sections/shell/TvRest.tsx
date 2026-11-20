@@ -3,6 +3,7 @@ import { CouchMark } from "@/components/CouchMark";
 import { DigitalClock } from "@/components/DigitalClock";
 import { deviceName } from "@/copy";
 import { deviceId, useLocalDeviceName } from "@/session/device-id";
+import { claimKeyPresses } from "@/key-presses";
 import { useSessionGate } from "@/session/session-context";
 import { setTvRestWake } from "@/tv-rest";
 
@@ -29,7 +30,7 @@ export function TvRest({ playing }: { playing: boolean }) {
   const playingNow = useRef(playing);
   playingNow.current = playing;
   const restart = useRef<() => void>(undefined);
-  // Registered once, ahead of the pages' own key handlers, so the press that wakes it reaches nothing else.
+  // The press that wakes it reaches nothing else: a key's whole press, held or not (key-presses.ts), or a pointer's.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let asleep = false;
@@ -48,7 +49,7 @@ export function TvRest({ playing }: { playing: boolean }) {
       arm();
       return was;
     };
-    const press = (event: Event) => {
+    const press = (event: PointerEvent) => {
       if (!wake()) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -56,13 +57,13 @@ export function TvRest({ playing }: { playing: boolean }) {
     restart.current = wake;
     setTvRestWake(wake);
     arm();
-    window.addEventListener("keydown", press, true);
+    const unclaim = claimKeyPresses(wake);
     window.addEventListener("pointerdown", press, true);
     window.addEventListener("pointermove", wake, true);
     return () => {
       clearTimeout(timer);
       setTvRestWake(null);
-      window.removeEventListener("keydown", press, true);
+      unclaim();
       window.removeEventListener("pointerdown", press, true);
       window.removeEventListener("pointermove", wake, true);
     };

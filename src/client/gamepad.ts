@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
 import { startHold } from "./hold";
 import { isTvPresentation } from "./session/presentation";
+import { wakeTvRest } from "./tv-rest";
 
 type Direction = "up" | "down" | "left" | "right";
 type Control = Direction | "ok" | "back";
@@ -40,13 +41,16 @@ function heldControls(pads: readonly (Gamepad | null)[]) {
 /**
  * Turns controller frames into remote keys, as a remote's OK and arrows send them: OK on release or, held, the
  * item's menu; arrows repeat while held. It acts only while Couch has focus, and a control already held when Couch
- * gets focus (the press that switched to it) waits for its release.
+ * gets focus (the press that switched to it) waits for its release. A press that wakes the resting TV (wake) does
+ * nothing else until it is released.
  */
-export function gamepadReader(navigate: (key: NavigationKey) => void) {
+export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () => boolean) {
   let previous = new Set<Control>();
   let hadFocus = true;
   let ok: ReturnType<typeof startHold> | null = null;
   const repeats = new Map<Direction, number>();
+  // Controls whose press does nothing more until they are released.
+  const spent = new Set<Control>();
   const stop = () => {
     ok?.release();
     ok = null;
@@ -58,18 +62,22 @@ export function gamepadReader(navigate: (key: NavigationKey) => void) {
     const arriving = !hadFocus;
     previous = held;
     hadFocus = focused;
+    for (const control of spent) if (!held.has(control)) spent.delete(control);
     if (!focused) stop();
     if (!focused || arriving) return;
     const pressed = (control: Control) => held.has(control) && !before.has(control);
-    if (pressed("back")) navigate("back");
-    if (pressed("ok")) ok = startHold(() => navigate("menu"));
+    const presses = [...held].filter(pressed);
+    if (presses.length > 0 && wake()) for (const control of presses) spent.add(control);
+    const acts = (control: Control) => pressed(control) && !spent.has(control);
+    if (acts("back")) navigate("back");
+    if (acts("ok")) ok = startHold(() => navigate("menu"));
     if (ok && !held.has("ok")) {
       if (ok.release()) navigate("select");
       ok = null;
     }
     for (const direction of ["up", "down", "left", "right"] as const) {
       const next = repeats.get(direction);
-      if (!held.has(direction)) repeats.delete(direction);
+      if (!held.has(direction) || spent.has(direction)) repeats.delete(direction);
       else if (pressed(direction)) {
         navigate(direction);
         repeats.set(direction, now + repeatDelay);
@@ -109,7 +117,7 @@ export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
     };
     const connected = () => {
       if (reader || !navigator.getGamepads().some(Boolean)) return;
-      reader = gamepadReader(navigate);
+      reader = gamepadReader(navigate, wakeTvRest);
       frame = requestAnimationFrame(poll);
     };
     connected();

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { NavigationKey } from "../src/shared/protocol";
 import { gamepadReader } from "../src/client/gamepad";
+import { keyPresses } from "../src/client/key-presses";
 
 const pad = (pressed: number[] = [], axes = [0, 0], mapping = "standard") =>
   ({
@@ -11,7 +12,10 @@ const pad = (pressed: number[] = [], axes = [0, 0], mapping = "standard") =>
 
 test("a controller moves Couch only while it has focus, and a press that gave it focus is not OK", () => {
   const keys: NavigationKey[] = [];
-  const reader = gamepadReader((key) => keys.push(key));
+  const reader = gamepadReader(
+    (key) => keys.push(key),
+    () => false,
+  );
   // Without focus, nothing moves.
   reader.read([pad([13])], false, 0);
   reader.read([pad()], false, 16);
@@ -33,7 +37,10 @@ test("a controller moves Couch only while it has focus, and a press that gave it
 
 test("a held direction repeats until Couch loses focus", () => {
   const keys: NavigationKey[] = [];
-  const reader = gamepadReader((key) => keys.push(key));
+  const reader = gamepadReader(
+    (key) => keys.push(key),
+    () => false,
+  );
   reader.read([pad([15])], true, 0);
   reader.read([pad([15])], true, 300);
   reader.read([pad([15])], true, 450);
@@ -42,4 +49,55 @@ test("a held direction repeats until Couch loses focus", () => {
   reader.read([pad([15])], true, 1000);
   reader.read([pad([15])], true, 2000);
   expect(keys).toEqual(["right", "right", "right"]);
+});
+
+test("a controller press that wakes the resting TV does nothing else until it is released", () => {
+  const keys: NavigationKey[] = [];
+  let resting = true;
+  const reader = gamepadReader(
+    (key) => keys.push(key),
+    () => {
+      const woke = resting;
+      resting = false;
+      return woke;
+    },
+  );
+  // A held right wakes it and never repeats; a held A wakes it, and neither its hold nor its release acts.
+  reader.read([pad([15])], true, 0);
+  reader.read([pad([15])], true, 500);
+  reader.read([pad([15])], true, 700);
+  reader.read([pad()], true, 800);
+  resting = true;
+  reader.read([pad([0])], true, 900);
+  reader.read([pad([0])], true, 1500);
+  reader.read([pad()], true, 1600);
+  expect(keys).toEqual([]);
+  // The next press acts.
+  reader.read([pad([15])], true, 1700);
+  expect(keys).toEqual(["right"]);
+});
+
+test("a key press that wakes the resting TV is taken whole: keydown, repeats and keyup", () => {
+  const presses = keyPresses();
+  let resting = true;
+  presses.claim(() => {
+    const woke = resting;
+    resting = false;
+    return woke;
+  });
+  const key = (type: string, name: string, repeat = false) =>
+    presses.takes({ type, key: name, repeat, timeStamp: 0 });
+  expect(key("keydown", "Enter")).toBe(true);
+  expect(key("keydown", "Enter", true)).toBe(true);
+  expect(key("keyup", "Enter")).toBe(true);
+  // Awake, the next press goes through.
+  expect(key("keydown", "Enter")).toBe(false);
+  expect(key("keyup", "Enter")).toBe(false);
+  // A held arrow that wakes it: none of its repeats moves focus.
+  resting = true;
+  expect(key("keydown", "ArrowRight")).toBe(true);
+  expect(key("keydown", "ArrowRight", true)).toBe(true);
+  // Another key pressed meanwhile is its own press.
+  expect(key("keydown", "ArrowDown")).toBe(false);
+  expect(key("keyup", "ArrowRight")).toBe(true);
 });
