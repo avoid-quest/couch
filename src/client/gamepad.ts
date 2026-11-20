@@ -52,14 +52,19 @@ function heldControls(pads: readonly (Gamepad | null)[]) {
 
 /**
  * Turns controller frames into remote keys, as a remote's OK and arrows send them: OK on release or, held, the
- * item's menu; arrows repeat while held. It acts only while Couch has focus, and a control already held when Couch
- * gets focus (the press that switched to it) waits for its release. A press that wakes the resting TV (wake) does
+ * item's menu; arrows repeat while held. It sends a key only while Couch has focus (focused), held OK's menu too,
+ * for the caller to apply at once; a control already held when Couch gets focus (the press that switched to it)
+ * waits for its release. A press that wakes the resting TV (wake) does
  * nothing else until it is released.
  *
  * A press that also arrives as its key (key) acts once: whichever of the two comes second within echoWindow is
  * dropped for its whole press, a key from keydown to keyup, a control until it is released.
  */
-export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () => boolean) {
+export function gamepadReader(
+  navigate: (key: NavigationKey) => void,
+  focused: () => boolean,
+  wake: () => boolean,
+) {
   let previous = new Set<Control>();
   let hadFocus = true;
   let ok: ReturnType<typeof startHold> | null = null;
@@ -75,15 +80,16 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
     ok = null;
     repeats.clear();
   };
-  const read = (pads: readonly (Gamepad | null)[], focused: boolean, now: number) => {
+  const read = (pads: readonly (Gamepad | null)[], now: number) => {
     const held = heldControls(pads);
     const before = previous;
+    const focus = focused();
     const arriving = !hadFocus;
     previous = held;
-    hadFocus = focused;
+    hadFocus = focus;
     for (const control of spent) if (!held.has(control)) spent.delete(control);
-    if (!focused) stop();
-    if (!focused || arriving) return;
+    if (!focus) stop();
+    if (!focus || arriving) return;
     const pressed = (control: Control) => held.has(control) && !before.has(control);
     const presses = [...held].filter(pressed);
     const woke = presses.length > 0 && wake();
@@ -93,7 +99,8 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
     }
     const acts = (control: Control) => pressed(control) && !spent.has(control);
     if (acts("back")) navigate("back");
-    if (acts("ok")) ok = startHold(() => navigate("menu"));
+    // The hold's timer can fire between frames, after Couch lost focus.
+    if (acts("ok")) ok = startHold(() => focused() && navigate("menu"));
     if (ok && !held.has("ok")) {
       if (ok.release()) navigate("select");
       ok = null;
@@ -122,10 +129,7 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
 
 /** On the TV, a game controller drives Couch as the remote does; it is read only while one is connected. */
 export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
-  // The hold's timer can fire between frames, after Couch lost focus.
-  const navigate = useEffectEvent((key: NavigationKey) => {
-    if (document.hasFocus()) onNavigate(key);
-  });
+  const navigate = useEffectEvent(onNavigate);
   useEffect(() => {
     if (!isTvPresentation()) return;
     let reader: ReturnType<typeof gamepadReader> | null = null;
@@ -142,12 +146,12 @@ export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
         end();
         return;
       }
-      reader!.read(pads, document.hasFocus(), now);
+      reader!.read(pads, now);
       frame = requestAnimationFrame(poll);
     };
     const connected = () => {
       if (reader || !navigator.getGamepads().some(Boolean)) return;
-      reader = gamepadReader(navigate, wakeTvRest);
+      reader = gamepadReader(navigate, () => document.hasFocus(), wakeTvRest);
       frame = requestAnimationFrame(poll);
     };
     connected();

@@ -172,7 +172,12 @@ export function SessionGate({
     }
     dispatchTvRoute(key);
   }
-  useGamepadNavigation(handleNavigation);
+  // A controller's key applies at once, in the frame that read it while Couch had focus, never after it lost focus.
+  useGamepadNavigation((key) => {
+    if (wakeTvRest()) return;
+    document.documentElement.setAttribute("data-keyboard", "");
+    applyTvNavigation(key);
+  });
 
   const {
     clock,

@@ -10,70 +10,77 @@ const pad = (pressed: number[] = [], axes = [0, 0], mapping = "standard") =>
     buttons: Array.from({ length: 17 }, (_, index) => ({ pressed: pressed.includes(index) })),
   }) as unknown as Gamepad;
 
-test("a controller moves Couch only while it has focus, and a press that gave it focus is not OK", () => {
+/** A controller's reader; each frame says whether Couch has focus, and blur() takes it away between frames. */
+function controller(wake = () => false) {
   const keys: NavigationKey[] = [];
+  let focused = true;
   const reader = gamepadReader(
     (key) => keys.push(key),
-    () => false,
+    () => focused,
+    wake,
   );
+  const read = (pads: Gamepad[], focus: boolean, now: number) => {
+    focused = focus;
+    reader.read(pads, now);
+  };
+  const blur = () => {
+    focused = false;
+  };
+  return { keys, read, key: reader.key, blur };
+}
+
+test("a controller moves Couch only while it has focus, and a press that gave it focus is not OK", () => {
+  const { keys, read } = controller();
   // Without focus, nothing moves.
-  reader.read([pad([13])], false, 0);
-  reader.read([pad()], false, 16);
-  reader.read([pad([0])], false, 32);
+  read([pad([13])], false, 0);
+  read([pad()], false, 16);
+  read([pad([0])], false, 32);
   // A is still held as Couch gets focus, and its release is not OK.
-  reader.read([pad([0])], true, 48);
-  reader.read([pad()], true, 64);
+  read([pad([0])], true, 48);
+  read([pad()], true, 64);
   expect(keys).toEqual([]);
   // With focus: the stick, B and a short A.
-  reader.read([pad([], [0.1, 0.9])], true, 80);
-  reader.read([pad([1])], true, 96);
-  reader.read([pad([0])], true, 112);
-  reader.read([pad()], true, 128);
+  read([pad([], [0.1, 0.9])], true, 80);
+  read([pad([1])], true, 96);
+  read([pad([0])], true, 112);
+  read([pad()], true, 128);
   // A pad without the standard mapping is ignored.
-  reader.read([pad([0, 12], [0, 0], "")], true, 144);
-  reader.read([pad()], true, 160);
+  read([pad([0, 12], [0, 0], "")], true, 144);
+  read([pad()], true, 160);
   expect(keys).toEqual(["down", "back", "select"]);
 });
 
 test("a held direction repeats until Couch loses focus", () => {
-  const keys: NavigationKey[] = [];
-  const reader = gamepadReader(
-    (key) => keys.push(key),
-    () => false,
-  );
-  reader.read([pad([15])], true, 0);
-  reader.read([pad([15])], true, 300);
-  reader.read([pad([15])], true, 450);
-  reader.read([pad([15])], true, 560);
-  reader.read([pad([15])], false, 700);
-  reader.read([pad([15])], true, 1000);
-  reader.read([pad([15])], true, 2000);
+  const { keys, read } = controller();
+  read([pad([15])], true, 0);
+  read([pad([15])], true, 300);
+  read([pad([15])], true, 450);
+  read([pad([15])], true, 560);
+  read([pad([15])], false, 700);
+  read([pad([15])], true, 1000);
+  read([pad([15])], true, 2000);
   expect(keys).toEqual(["right", "right", "right"]);
 });
 
 test("a controller press that wakes the resting TV does nothing else until it is released", () => {
-  const keys: NavigationKey[] = [];
   let resting = true;
-  const reader = gamepadReader(
-    (key) => keys.push(key),
-    () => {
-      const woke = resting;
-      resting = false;
-      return woke;
-    },
-  );
+  const { keys, read } = controller(() => {
+    const woke = resting;
+    resting = false;
+    return woke;
+  });
   // A held right wakes it and never repeats; a held A wakes it, and neither its hold nor its release acts.
-  reader.read([pad([15])], true, 0);
-  reader.read([pad([15])], true, 500);
-  reader.read([pad([15])], true, 700);
-  reader.read([pad()], true, 800);
+  read([pad([15])], true, 0);
+  read([pad([15])], true, 500);
+  read([pad([15])], true, 700);
+  read([pad()], true, 800);
   resting = true;
-  reader.read([pad([0])], true, 900);
-  reader.read([pad([0])], true, 1500);
-  reader.read([pad()], true, 1600);
+  read([pad([0])], true, 900);
+  read([pad([0])], true, 1500);
+  read([pad()], true, 1600);
   expect(keys).toEqual([]);
   // The next press acts.
-  reader.read([pad([15])], true, 1700);
+  read([pad([15])], true, 1700);
   expect(keys).toEqual(["right"]);
 });
 
@@ -103,26 +110,30 @@ test("a key press that wakes the resting TV is taken whole: keydown, repeats and
 });
 
 test("a controller press that also arrives as its key acts once, whichever comes first", () => {
-  const keys: NavigationKey[] = [];
-  const reader = gamepadReader(
-    (key) => keys.push(key),
-    () => false,
-  );
+  const { keys, read, key } = controller();
   // The key first: it acted, so the controller's press and its repeats are dropped until released.
-  expect(reader.key("ArrowDown", 0)).toBe(false);
-  reader.read([pad([13])], true, 16);
-  reader.read([pad([13])], true, 600);
-  reader.read([pad()], true, 700);
+  expect(key("ArrowDown", 0)).toBe(false);
+  read([pad([13])], true, 16);
+  read([pad([13])], true, 600);
+  read([pad()], true, 700);
   expect(keys).toEqual([]);
   // The controller first: it acts, and the key that follows is dropped.
-  reader.read([pad([0])], true, 1000);
-  expect(reader.key("Enter", 1020)).toBe(true);
-  reader.read([pad()], true, 1050);
+  read([pad([0])], true, 1000);
+  expect(key("Enter", 1020)).toBe(true);
+  read([pad()], true, 1050);
   expect(keys).toEqual(["select"]);
   // Apart, they are two presses.
-  reader.read([pad([1])], true, 2000);
-  reader.read([pad()], true, 2100);
-  expect(reader.key("Escape", 3000)).toBe(false);
-  reader.read([pad([1])], true, 4000);
+  read([pad([1])], true, 2000);
+  read([pad()], true, 2100);
+  expect(key("Escape", 3000)).toBe(false);
+  read([pad([1])], true, 4000);
   expect(keys).toEqual(["select", "back", "back"]);
+});
+
+test("a held A whose menu comes due after Couch lost focus opens nothing", async () => {
+  const { keys, read, blur } = controller();
+  read([pad([0])], true, 0);
+  blur();
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(keys).toEqual([]);
 });
