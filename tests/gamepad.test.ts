@@ -101,3 +101,28 @@ test("a key press that wakes the resting TV is taken whole: keydown, repeats and
   expect(key("keydown", "ArrowDown")).toBe(false);
   expect(key("keyup", "ArrowRight")).toBe(true);
 });
+
+test("a controller press that also arrives as its key acts once, whichever comes first", () => {
+  const keys: NavigationKey[] = [];
+  const reader = gamepadReader(
+    (key) => keys.push(key),
+    () => false,
+  );
+  // The key first: it acted, so the controller's press and its repeats are dropped until released.
+  expect(reader.key("ArrowDown", 0)).toBe(false);
+  reader.read([pad([13])], true, 16);
+  reader.read([pad([13])], true, 600);
+  reader.read([pad()], true, 700);
+  expect(keys).toEqual([]);
+  // The controller first: it acts, and the key that follows is dropped.
+  reader.read([pad([0])], true, 1000);
+  expect(reader.key("Enter", 1020)).toBe(true);
+  reader.read([pad()], true, 1050);
+  expect(keys).toEqual(["select"]);
+  // Apart, they are two presses.
+  reader.read([pad([1])], true, 2000);
+  reader.read([pad()], true, 2100);
+  expect(reader.key("Escape", 3000)).toBe(false);
+  reader.read([pad([1])], true, 4000);
+  expect(keys).toEqual(["select", "back", "back"]);
+});

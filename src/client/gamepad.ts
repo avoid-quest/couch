@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
 import { startHold } from "./hold";
+import { claimKeyPresses } from "./key-presses";
 import { isTvPresentation } from "./session/presentation";
 import { wakeTvRest } from "./tv-rest";
 
@@ -17,6 +18,17 @@ const buttons: [Control, number][] = [
   ["left", 14],
   ["right", 15],
 ];
+// The keys a controller's press can also arrive as, from Steam's desktop layout.
+const echoes: Record<string, Control> = {
+  Enter: "ok",
+  Escape: "back",
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+};
+// A press and its key echo arrive a frame or two apart; nobody presses one control on two devices this close together.
+const echoWindow = 100;
 // Half the stick's travel, so a resting or brushed stick never moves focus.
 const deadzone = 0.5;
 // As a remote's key repeat: a pause so one press moves once, then steps slow enough to follow.
@@ -43,6 +55,9 @@ function heldControls(pads: readonly (Gamepad | null)[]) {
  * item's menu; arrows repeat while held. It acts only while Couch has focus, and a control already held when Couch
  * gets focus (the press that switched to it) waits for its release. A press that wakes the resting TV (wake) does
  * nothing else until it is released.
+ *
+ * A press that also arrives as its key (key) acts once: whichever of the two comes second within echoWindow is
+ * dropped for its whole press, a key from keydown to keyup, a control until it is released.
  */
 export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () => boolean) {
   let previous = new Set<Control>();
@@ -51,6 +66,10 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
   const repeats = new Map<Direction, number>();
   // Controls whose press does nothing more until they are released.
   const spent = new Set<Control>();
+  const pressedAt = new Map<Control, number>();
+  const keyedAt = new Map<Control, number>();
+  const together = (times: Map<Control, number>, control: Control, at: number) =>
+    Math.abs(at - (times.get(control) ?? -Infinity)) < echoWindow;
   const stop = () => {
     ok?.release();
     ok = null;
@@ -67,7 +86,11 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
     if (!focused || arriving) return;
     const pressed = (control: Control) => held.has(control) && !before.has(control);
     const presses = [...held].filter(pressed);
-    if (presses.length > 0 && wake()) for (const control of presses) spent.add(control);
+    const woke = presses.length > 0 && wake();
+    for (const control of presses) {
+      pressedAt.set(control, now);
+      if (woke || together(keyedAt, control, now)) spent.add(control);
+    }
     const acts = (control: Control) => pressed(control) && !spent.has(control);
     if (acts("back")) navigate("back");
     if (acts("ok")) ok = startHold(() => navigate("menu"));
@@ -87,7 +110,14 @@ export function gamepadReader(navigate: (key: NavigationKey) => void, wake: () =
       }
     }
   };
-  return { read, stop };
+  /** A key pressed at a time: says whether it echoes a press this controller already acted on. */
+  const key = (name: string, at: number) => {
+    const control = echoes[name];
+    if (!control) return false;
+    keyedAt.set(control, at);
+    return together(pressedAt, control, at);
+  };
+  return { read, key, stop };
 }
 
 /** On the TV, a game controller drives Couch as the remote does; it is read only while one is connected. */
@@ -121,9 +151,11 @@ export function useGamepadNavigation(onNavigate: (key: NavigationKey) => void) {
       frame = requestAnimationFrame(poll);
     };
     connected();
+    const unclaim = claimKeyPresses((event) => reader?.key(event.key, event.timeStamp) ?? false);
     window.addEventListener("gamepadconnected", connected);
     return () => {
       window.removeEventListener("gamepadconnected", connected);
+      unclaim();
       end();
     };
   }, []);
