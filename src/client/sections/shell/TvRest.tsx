@@ -53,8 +53,9 @@ export function TvRest({ playing }: { playing: boolean }) {
       return was;
     };
     let waking = false;
+    // Only a real pointer's own events: the Remote and the controller press through element.click().
     const swallow = (event: Event) => {
-      if (!waking) return;
+      if (!waking || !event.isTrusted) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (["click", "auxclick", "pointercancel"].includes(event.type)) waking = false;
@@ -105,7 +106,13 @@ export function TvRest({ playing }: { playing: boolean }) {
         element instanceof HTMLElement && element !== screen.current && !element.inert,
     );
     for (const element of covered) element.inert = true;
+    // Something opening on the TV while it rests, such as a dialog a phone opened, wakes it.
+    const opened = new MutationObserver((changes) => {
+      if (changes.some((change) => change.addedNodes.length)) restart.current?.();
+    });
+    opened.observe(document.body, { childList: true });
     return () => {
+      opened.disconnect();
       for (const element of covered) element.inert = false;
       if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
     };
