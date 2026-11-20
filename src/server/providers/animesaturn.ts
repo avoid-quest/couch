@@ -179,7 +179,7 @@ function playerUrls(html: string): string[] {
           !/^\/episode\/[a-zA-Z\d-]+\/ep-\d{1,5}$/.test(target)
         )
           continue;
-        // The Mega player, named svcms since November 2026 and megavid_panel before.
+        // The Mega player, which AnimeSaturn serves as svcms or megavid_panel.
         if (
           ["svcms", "megavid_panel"].includes(url.searchParams.get("source")!) &&
           !/^[A-Za-z\d+/=]+$/.test(target)

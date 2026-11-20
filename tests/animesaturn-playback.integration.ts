@@ -18,8 +18,8 @@ const progressive = "https://srv30.sake.streampeaker.org/DDL/ANIME/Suikoden/01.m
 const embed =
   "https://cdn2.megaplay.su/e/6cc193a4facd7d3d177fc90079bc86cec5da770737cc838d?autoplay=1";
 const megaStream = "https://cdn2.megaplay.su/hls/20260927_203701_5d832541/master.m3u8";
-// Public player responses captured on 2026-10-17 (Mega renamed svcms on 2026-11-20), reduced to the fields used
-// by Couch. The opaque Mega reference is substituted; scripts are never run.
+// Public player responses, with the Mega player as svcms, reduced to the fields used by Couch. The opaque Mega
+// reference is substituted; scripts are never run.
 const frame = (url: string) =>
   `<iframe src="${url.replaceAll("&", "&#038;")}" allowfullscreen></iframe>`;
 const html = `<meta property="og:image" content="${image}"><article itemtype="http://schema.org/Episode"><a href="${collection}"><span itemprop="name">One Piece Sub ITA</span></a><h1 class="entry-title">One Piece Sub ITA Episode 1180</h1>${frame(mega)}<button onclick="loadMi({ value: '${Buffer.from(frame(live)).toString("base64")}' });">HD</button></article>`;

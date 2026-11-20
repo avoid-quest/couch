@@ -97,8 +97,8 @@ In `src/client/components`:
   2:3 posters, 16:9 videos, square music and stations, round channels),
   `mediaCaption`, `metaLine`
 - `ContentFilters`, `BrowsePagination`, `ContentLink`, `RowMenu`
-- `PlaybackTransport`, `PlaybackTimeline`, `PlaybackSeekBar` (Video.js Slider
-  primitives), `PlaybackThumbnail`, `VolumeButton`, `Level`
+- `PlaybackTransport`, `PlaybackTimeline` (Video.js's `TimeSlider`),
+  `PlaybackThumbnail`, `VolumeButton`, `Level`
 - `playbackStatus`: one status vocabulary for every playback surface
 
 Messages: **toasts** (`src/client/toasts.ts`, a fixed set of kinds, at most one

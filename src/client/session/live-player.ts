@@ -99,7 +99,7 @@ export class LivePlayer {
   private measured = false;
   private reader: ReturnType<typeof setInterval> | undefined;
   private interrupted = false;
-  // What the feed reported since the last sample, and since the last status line.
+  // What the feed reported since the last samples.
   private second = noStats();
   private sendAheads: number[] = [];
   private arrival: number | undefined;
