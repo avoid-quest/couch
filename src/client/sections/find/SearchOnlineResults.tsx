@@ -43,7 +43,7 @@ const inCollection = (progress: HistoryItem, url: string) =>
   collectionLinks(progress.collection).some((link) => samePage(link.url, url));
 
 export type SearchHit = {
-  kind: "Video" | "Music" | "Live" | "Radio" | "Channels";
+  kind: "Video" | "Music" | "Stream" | "Radio" | "Channels";
   duration?: number | null;
   id: string;
   source: string;
@@ -293,7 +293,7 @@ function OnlineResults(props: Props) {
   // errors and retries, so changing a query or connection retires its reads.
   const music = provider === "bandcamp" || provider === "soundcloud";
   const facet = (item: ProviderItem): Pick<SearchHit, "kind" | "duration"> => ({
-    kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Live" : "Video",
+    kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Stream" : "Video",
     duration: item.duration,
   });
   // Debounced summaries can still call online actions after a disconnect.

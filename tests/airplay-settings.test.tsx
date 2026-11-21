@@ -11,6 +11,7 @@ const privateState: AirPlayState = {
   error: null,
   name: "Linux Couch",
   code: "private-airplay-code",
+  askCode: true,
   sender: "Private sender",
 };
 function render(client: QueryClient, administrator: boolean) {

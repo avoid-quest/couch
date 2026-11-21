@@ -151,6 +151,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
     CREATE TABLE IF NOT EXISTS installation_airplay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), code TEXT NOT NULL, deviceId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_airplay_ask_code (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -200,6 +201,10 @@ export function openStore(path: string, remoteControlEnabled = false) {
       .some((column) => column.name === "inSync")
   )
     db.exec("ALTER TABLE playback ADD COLUMN inSync INTEGER NOT NULL DEFAULT 0");
+  // Saved items with no end said `live`; "Live" now names only the Live mode.
+  db.exec(
+    `UPDATE playback SET queue = replace(queue, '"live":true', '"endless":true') WHERE queue LIKE '%"live":true%'`,
+  );
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(
     Number(remoteControlEnabled),
@@ -338,11 +343,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
     db.query("UPDATE installation_airplay SET code = ? WHERE id = 1 AND length(code) < 14").run(
       airPlayCode(),
     );
-    return db
-      .query<{ code: string; deviceId: string }, []>(
-        "SELECT code, deviceId FROM installation_airplay WHERE id = 1",
+    const { askCode, ...saved } = db
+      .query<{ code: string; deviceId: string; askCode: number }, []>(
+        // Its own table, so an older build still reads and writes the identity. On unless saved off.
+        "SELECT code, deviceId, coalesce(ask.enabled, 1) AS askCode FROM installation_airplay LEFT JOIN installation_airplay_ask_code AS ask USING (id) WHERE id = 1",
       )
       .get()!;
+    return { ...saved, askCode: !!askCode };
   };
   return {
     installationId() {
@@ -368,18 +375,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
         )
         .get()?.settings;
       const value = saved ? JSON.parse(saved) : null;
-      return isLiveAudioSettings(value)
-        ? { codec: value.codec, minBufferMs: value.minBufferMs }
-        : defaultLiveAudioSettings;
+      return isLiveAudioSettings(value) ? { codec: value.codec } : defaultLiveAudioSettings;
     },
     saveLiveAudioSettings(value: unknown) {
-      if (!isLiveAudioSettings(value))
-        throw new ControllerError(
-          "Choose Automatic, PCM or Opus and a buffer between 0 and 5000 ms.",
-        );
+      if (!isLiveAudioSettings(value)) throw new ControllerError("Choose Automatic, PCM or Opus.");
       db.query(
         "INSERT INTO installation_live_audio VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET settings = excluded.settings",
-      ).run(JSON.stringify({ codec: value.codec, minBufferMs: value.minBufferMs }));
+      ).run(JSON.stringify({ codec: value.codec }));
     },
     askEveryDevice() {
       return !!db
@@ -414,6 +416,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
       db.query("UPDATE installation_airplay SET enabled = ? WHERE id = 1").run(Number(enabled));
     },
     airplayIdentity,
+    saveAirPlayAskCode(askCode: boolean) {
+      db.query(
+        "INSERT INTO installation_airplay_ask_code VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled",
+      ).run(Number(askCode));
+    },
     newAirPlayCode() {
       airplayIdentity();
       db.query("UPDATE installation_airplay SET code = ? WHERE id = 1").run(airPlayCode());

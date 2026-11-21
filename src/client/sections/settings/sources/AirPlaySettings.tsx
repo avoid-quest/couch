@@ -71,6 +71,11 @@ function AirPlayControls({
       apiSend<AirPlayState>(credentials, "/api/settings/airplay", { enabled }),
     onSuccess: saved,
   });
+  const askCode = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiSend<AirPlayState>(credentials, "/api/settings/airplay/ask-code", { enabled }),
+    onSuccess: saved,
+  });
   const renew = useMutation({
     mutationFn: () => apiSend<AirPlayState>(credentials, "/api/settings/airplay/code", {}),
     onSuccess: saved,
@@ -82,14 +87,18 @@ function AirPlayControls({
     : state.status === "receiving"
       ? `${state.sender} is sending sound. Playback starts automatically on this Couch.`
       : state.status === "ready"
-        ? `Ready. On your device, choose ${state.name} in AirPlay and enter ${state.code} the first time.`
+        ? `Ready. On your device, choose ${state.name} in AirPlay${state.askCode ? ` and enter ${state.code} the first time` : ""}.`
         : state.status === "starting"
           ? "Starting AirPlay…"
           : state.status === "waiting"
             ? "Waiting for Share on network. AirPlay listens only while this Couch is shared on the network."
             : null;
   const failure =
-    state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
+    state?.error ??
+    query.error?.message ??
+    toggle.error?.message ??
+    askCode.error?.message ??
+    renew.error?.message;
   // Off where it can't run: another platform hides it, a build or computer without the receiver says why in one line.
   if (state?.status === "unsupported" && !state.enabled) return null;
   if (state?.status === "unavailable" && !state.enabled)
@@ -99,7 +108,7 @@ function AirPlayControls({
       </SettingsSection>
     );
   return (
-    <SettingsSection title="AirPlay" description={description}>
+    <SettingsSection title="AirPlay" description={description} data-tv-local-only>
       <SettingsRow
         label="Receive AirPlay"
         description={
@@ -116,12 +125,26 @@ function AirPlayControls({
             !state ||
             (!usable && !state.enabled) ||
             toggle.isPending ||
+            askCode.isPending ||
             renew.isPending
           }
           onCheckedChange={(enabled) => toggle.mutate(enabled)}
         />
       </SettingsRow>
       {state?.enabled && usable && (
+        <SettingsRow
+          label="Ask for a code"
+          description="Off: any device on your network can play here without a code."
+        >
+          <Switch
+            aria-label="Ask for a code"
+            checked={askCode.isPending ? askCode.variables : state.askCode}
+            disabled={!connected || toggle.isPending || askCode.isPending || renew.isPending}
+            onCheckedChange={(enabled) => askCode.mutate(enabled)}
+          />
+        </SettingsRow>
+      )}
+      {state?.enabled && usable && state.askCode && (
         <SettingsRow
           label="Code"
           description="A device asks for it as its AirPlay password the first time it plays here. A new code makes every device enter it again."
@@ -130,11 +153,14 @@ function AirPlayControls({
           {/* The trigger takes focus back when the dialog closes, so it stays enabled while the change is sent. */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={!connected || toggle.isPending}>
+              <Button
+                variant="outline"
+                disabled={!connected || toggle.isPending || askCode.isPending}
+              >
                 {renew.isPending ? "Changing…" : "New code"}
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent>
+            <AlertDialogContent data-tv-local-only>
               <AlertDialogHeader>
                 <AlertDialogTitle>Change the AirPlay code?</AlertDialogTitle>
                 <AlertDialogDescription>

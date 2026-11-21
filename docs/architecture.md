@@ -67,6 +67,14 @@ Playback at a time.
   Undo. Up next is saved in the `playback` table.
 - Core decides delivery and programme authority
   ([ADR 0002](adr/0002-playback-delivery-and-authority.md)).
+- Each output carries a receiver state while its Playback plays (`Output.state`),
+  which Where it plays and the sharer's panel show: *joining* until its screen
+  plays or its speaker is sent sound; *behind* while the device reports that its
+  picture waits for data or its Live speaker keeps losing late chunks
+  (`BehindMessage`); *stalled* while Core held its speaker's sound back, or heard
+  nothing from it (not even its clock-sync requests) for over 10 s, in most of
+  the last five seconds; *relayed* while it gets the media through Core;
+  *can't play* with the reason.
 
 ## Rendering
 
@@ -77,7 +85,9 @@ tab it chose (the newest one). The Device fetches the source itself:
 - URLs play in `<video>`; YouTube's separate audio plays in an `<audio>` that
   follows it. Couch-hosted HLS uses hls.js (native HLS as fallback); direct
   cross-origin HLS prefers native, because provider segments may not allow CORS.
-  Raw MPEG-TS uses mpegts.js. The app preloads hls.js while idle.
+  Raw MPEG-TS uses mpegts.js; in a group with a screen, Core repackages it once
+  into HLS with FFmpeg, copying its packets (`ts-repack.ts`), and every screen
+  and Core's sound read that playlist. The app preloads hls.js while idle.
 - VP9-capable Devices prefer VP9 and Opus; others need H.264 and AAC. YouTube
   quality caps the smaller dimension, so portrait Shorts work.
 - In the app, Main caps googlevideo's open-ended `Range` requests at 10 MB,
@@ -101,12 +111,14 @@ When a Playback has sound on several Devices, Live audio, Audio input or
 AirPlay, its sound is **Synced** (`src/server/sendspin.ts`,
 `src/server/scheduled-audio.ts`). Core serves `/sendspin` with the unmodified
 Sendspin Node SDK behind Couch token authorization, and the client plays it with
-the official player (`@sendspin/sendspin-js`).
+the official player (`@sendspin/sendspin-js`). A Live audio listener plays with
+Couch's own AudioWorklet player on the SDK's connection, clock and decoding,
+except on Android and iOS, where it keeps the official player ([Live audio](live-audio.md)).
 
 - For ordinary media, one FFmpeg per Playback decodes the audio once and encodes
   once per wire format: Opus in 60 ms packets, or 100 ms PCM chunks for players
   without Opus (Firefox). Captured sources (Live, audio inputs, AirPlay) have one
-  encoder per source with 5 ms frames ([Live audio](live-audio.md)). Every speaker gets the same timestamped chunk and applies its own
+  encoder per source with 5 ms Opus frames and 5 ms PCM chunks ([Live audio](live-audio.md)). Every speaker gets the same timestamped chunk and applies its own
   volume and delay.
 - Pause, seek and speed restart FFmpeg where the Playback is.
 - Screens showing a synced picture fetch the video themselves, play it muted and
@@ -122,7 +134,7 @@ the official player (`@sendspin/sendspin-js`).
   the clock runs on; audio that arrives after its time is dropped.
 - That mapping has limits: during a Twitch ad each screen shows its own ad; after
   an encoder restart sends timestamps back, pictures can run off the sound by that
-  jump; native HLS and raw MPEG-TS pictures follow only play and pause.
+  jump; native HLS pictures follow only play and pause.
 - Web media on HLS, except YouTube's checked formats, plays its master: each Device
   adapts to its link, capped at the chosen quality, and Core decodes an audio-only
   rendition when there is one.
@@ -137,15 +149,22 @@ See [Live audio](live-audio.md).
 
 Live publications belong to the publishing Device's session and end with it;
 AirPlay sources belong to Core and end when the sender leaves.
-Direct playback attaches a WebRTC MediaStream to the receiver's video element;
-Core only relays signaling between the exact two connections, and ICE servers
-(including TURN) go only to paired devices. Only In sync, or for a receiver that
+Direct playback attaches a WebRTC MediaStream to the receiver's video element.
+The publisher sends one stream to the relay helper's forwarding job
+(`couch-relay forward`, Pion WebRTC, `src/server/live-forward.ts`), which passes
+its H.264 and Opus packets to every receiver without decoding them; without the
+bundled helper, or when the publisher can't reach it, each receiver connects to
+the publisher. Core relays signaling only between the exact connections, and ICE
+servers (including TURN) go only to paired devices. Only In sync, or for a receiver that
 couldn't connect directly, does Core ask the publisher for a MediaRecorder upload
 and turn it into rolling HLS with FFmpeg (`src/server/live-stream.ts`)
 ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)).
 
 For Live audio, Main owns capture outside the window's event loop: native Mac
 inputs use the bundled PortAudio helper, browser inputs a hidden capture page.
+A native input's sound goes from the helper to Core through its own utility
+process (`app/native-input-process.ts`), never through Main, so a busy Main
+doesn't stop it; Main keeps the microphone grant and drives that process.
 Screen and window capture take resolution and 30/60/120 FPS targets
 (`defaultLiveFrameRate`, `src/shared/live-input.ts`). See
 [Share a live device](live-inputs.md).
@@ -202,6 +221,7 @@ screen awake** holds a Screen Wake Lock while this device plays.
 src/client     -- Vite -->               dist              (served by Core)
 src/main.ts    -- Bun.build node -->     build/core.mjs    (Core)
 app/main.ts    -- Bun.build -->          build/main.mjs    (Electron main)
+app/native-input-process.ts -- Bun.build --> build/native-input.mjs (native input reader)
 app/preload.ts -- Bun.build -->          build/preload.cjs (sandboxed preload)
 ```
 

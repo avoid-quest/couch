@@ -181,7 +181,7 @@ test(
     const socket = f.ws(token);
     await new Promise<void>((resolve) =>
       socket.on("message", (data) => {
-        if (JSON.parse(String(data)).type === "state") resolve();
+        if (JSON.parse(String(data)).type === "playback") resolve();
       }),
     );
     // A controller can't disable sharing; the admin can from its own device, over the LAN listener it is about to stop.

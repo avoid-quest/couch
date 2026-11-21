@@ -50,7 +50,9 @@ export function createSendspin(options: {
   const uploads = new Map<string, WebSocket>();
   let clients = new Set<string>(),
     delays = new Map<string, number>(),
-    receivers = new Map<string, { error: string; group: string; epoch: string }>();
+    receivers = new Map<string, { error: string; group: string; epoch: string }>(),
+    stalled = new Set<string>(),
+    started = new Set<string>();
   let closed = false,
     failed: string | undefined;
   let closing: Promise<void> | undefined;
@@ -143,6 +145,8 @@ export function createSendspin(options: {
     failed = error.message || "The audio worker stopped.";
     readyReject(error);
     clients.clear();
+    stalled.clear();
+    started.clear();
     closeConnections();
     for (const [id, source] of sources) {
       source.error = failed;
@@ -234,6 +238,8 @@ export function createSendspin(options: {
     } else if (message.type === "status") {
       clients = new Set(message.value.clients);
       delays = new Map(message.value.delays);
+      stalled = new Set(message.value.stalled);
+      started = new Set(message.value.started);
       receivers = new Map(
         message.value.receivers.map(
           ([id, error, group, epoch]: [string, string, string, string]) => [
@@ -461,6 +467,10 @@ export function createSendspin(options: {
         : undefined;
     },
     connected: (id: string) => clients.has(id),
+    // Its socket stayed backed up for most of the last few seconds.
+    stalled: (id: string) => stalled.has(id),
+    // It has been sent sound in its group's current run.
+    started: (id: string) => started.has(id),
     delay: (id: string) =>
       delays.get(id) ?? options.savedDelay?.(id) ?? (clients.has(id) ? 0 : undefined),
     setDelay(id: string, delay: number) {

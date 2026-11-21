@@ -125,40 +125,27 @@ test("Live audio settings are the host's and admins': controllers can't read or 
   const read = (token: string) =>
     fetch(`${f.hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   try {
-    assert.equal(
-      (await f.post(path, "unpaired", { settings: { codec: "pcm", minBufferMs: 400 } })).status,
-      401,
-    );
-    assert.equal(
-      (await f.post(path, f.controller, { settings: { codec: "pcm", minBufferMs: 400 } })).status,
-      403,
-    );
+    assert.equal((await f.post(path, "unpaired", { settings: { codec: "pcm" } })).status, 401);
+    assert.equal((await f.post(path, f.controller, { settings: { codec: "pcm" } })).status, 403);
     assert.equal((await read(f.controller)).status, 403);
     assert.equal(
-      (await read(f.admin).then((response) => response.json())).minBufferMs,
-      150,
+      (await read(f.admin).then((response) => response.json())).codec,
+      "auto",
       "a refused change leaves the default",
     );
-    for (const settings of [
-      { codec: "pcm", minBufferMs: -1 },
-      { codec: "pcm", minBufferMs: 5001 },
-      { codec: "flac", minBufferMs: 250 },
-      null,
-    ])
+    for (const settings of [{ codec: "flac" }, {}, null])
       assert.equal((await f.post(path, f.admin, { settings })).status, 400);
+    // A client from before the floor was removed still saves its codec; the floor is ignored.
     const saved = await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } });
     assert.equal(saved.status, 200);
-    assert.deepEqual(await saved.json(), { codec: "pcm", minBufferMs: 400 });
-    assert.equal(
-      (await f.post(path, hostToken, { settings: { codec: "opus", minBufferMs: 400 } })).status,
-      200,
-    );
+    assert.deepEqual(await saved.json(), { codec: "pcm" });
+    assert.equal((await f.post(path, hostToken, { settings: { codec: "opus" } })).status, 200);
     assert.equal(
       (await f.post(`/api/devices/${f.adminId}/role`, hostToken, { role: "controller" })).status,
       200,
     );
     assert.equal(
-      (await f.post(path, f.admin, { settings: { codec: "pcm", minBufferMs: 400 } })).status,
+      (await f.post(path, f.admin, { settings: { codec: "pcm" } })).status,
       403,
       "a demoted admin loses them",
     );

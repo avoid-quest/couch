@@ -1,44 +1,195 @@
 import type { LiveAudioSettings } from "../../shared/audio-settings";
-import type { SendspinPlayer } from "@sendspin/sendspin-js";
+import type * as Sendspin from "@sendspin/sendspin-js";
+import {
+  detectIsAndroid,
+  detectIsIOS,
+  type SendspinPlayer,
+  type SendspinPlayerConfig,
+} from "@sendspin/sendspin-js";
 import { apiFetch } from "../api/client";
 import { waitForTap } from "./renderer";
 import type { Credentials } from "./session";
 import { storage } from "./device-id";
 import { failed } from "../toasts";
-import { declareLiveBuffer, liveBufferReadings } from "./live-buffer";
+import { reportBehind } from "./behind";
+import {
+  declareLiveBuffer,
+  measuredLateMs,
+  nextLateSteps,
+  noLateSteps,
+  sdkBatchMs,
+  sdkLateSteps,
+  withLateSteps,
+} from "./live-buffer";
+import { liveReadings } from "../../shared/live-need";
+import type { LivePlayer } from "./live-player";
+import {
+  countingLiveLoss,
+  countLiveLoss,
+  declaredLive,
+  liveMeasuring,
+  measureLiveArrivals,
+  reportsOutputLatency,
+  sampleLiveArrival,
+  sampleLiveLoss,
+} from "./live-loss";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
-// official Sendspin player, with Couch's stable Device ID.
+// official Sendspin player, with Couch's stable Device ID. A Live listener plays with Couch's own
+// player on the SDK's connection, clock and decoding (live-player.ts), except on Android and iOS.
 // A tab that shows a synced picture connects too, only for the clock it follows (ticket 11).
-let player: Promise<SendspinPlayer> | null = null;
-let connected: SendspinPlayer | null = null;
+type Player = SendspinPlayer | LivePlayer;
+const isLive = (player: Player): player is LivePlayer => "sampleLoss" in player;
+// On Android, Chrome plays a context with an AudioWorklet through a FIFO whose underruns add delay
+// its output timestamps miss; the SDK's player has no worklet. On iOS sound plays through a media
+// element whose delay no browser reports; the SDK's player adds its own allowance for it
+// (docs/live-audio.md).
+const sdkPlays = () => detectIsAndroid() || detectIsIOS();
+let player: Promise<Player> | null = null;
+let connected: Player | null = null;
 let group: string | undefined;
 let hearing = false;
 let configuration: string | undefined;
-// The SDK's disconnect() clears Media Session, which useMediaSession owns and won't rewrite
+// The SDK's destroy() clears Media Session, which useMediaSession owns and won't rewrite
 // while its inputs are unchanged (a codec change replaces the player mid-Live): keep what it set.
-const dispose = (stopped: SendspinPlayer) => {
+const dispose = (stopped: Player) => {
   const session = navigator.mediaSession,
     kept = session && { metadata: session.metadata, playbackState: session.playbackState };
-  stopped.disconnect("user_request");
+  stopped.destroy();
   if (session) Object.assign(session, kept);
+};
+// On Android, relaxed sound keeps the SDK's estimated clock, its fallback without getOutputTimestamp(), as
+// the SDK keeps Cast receivers: their output timestamps make the speed hunt (sendspin-js #85). Live keeps them.
+const AndroidAudioContext =
+  typeof AudioContext !== "undefined" && /Android/i.test(navigator.userAgent)
+    ? AudioContext
+    : undefined;
+const outputTimestamp =
+  AndroidAudioContext &&
+  Object.getOwnPropertyDescriptor(AndroidAudioContext.prototype, "getOutputTimestamp");
+const useOutputTimestamps = (use: boolean) => {
+  if (!AndroidAudioContext || !outputTimestamp) return;
+  const descriptor = use ? outputTimestamp : { ...outputTimestamp, value: undefined };
+  Object.defineProperty(AndroidAudioContext.prototype, "getOutputTimestamp", descriptor);
+};
+// On Android, relaxed sound also asks for a "playback" context, which the SDK's player can't ask for
+// itself: Chrome then renders it in longer buffers than the default's low-latency ones, so a busy phone
+// has more time before it misses one. Each miss is a gap, and the time it costs makes the player correct.
+// Relaxed sound plays 1 s or more ahead anyway, and the player measures the longer output latency.
+// Live, and any other sound, keeps the default.
+let latencyHint: AudioContextLatencyCategory | undefined;
+if (AndroidAudioContext)
+  globalThis.AudioContext = class extends AndroidAudioContext {
+    constructor(options?: AudioContextOptions) {
+      super(
+        latencyHint && options?.latencyHint === undefined ? { ...options, latencyHint } : options,
+      );
+    }
+  };
+const playRelaxed = (relaxed: boolean) => {
+  latencyHint = relaxed ? "playback" : undefined;
+};
+// On Android, relaxed sound also starts chunks at most 1.5 s ahead, the SDK's horizon on Cast receivers
+// (sendspin-js #83, #89), instead of up to 20 s. Chrome renders every started chunk on each pass, even one
+// that plays later: 500 of them cost a phone enough to miss a buffer now and then, a 20 ms gap. The rest
+// waits decoded in the player's queue, as far ahead as Core sends it.
+const androidHorizonSec = 1.5;
+let horizonCapped = false;
+const capAndroidHorizon = (sendspin: typeof Sendspin) => {
+  // A private method: wrapped only where the SDK still has it. A test's stand-in library may have only the player.
+  const scheduling = sendspin.AudioScheduler?.prototype as unknown as
+    | { getTargetScheduledHorizonSec?: () => number }
+    | undefined;
+  const horizon = scheduling?.getTargetScheduledHorizonSec;
+  if (!AndroidAudioContext || horizonCapped || !scheduling || !horizon) return;
+  horizonCapped = true;
+  scheduling.getTargetScheduledHorizonSec = function () {
+    const sec = horizon.call(this);
+    return latencyHint ? Math.min(sec, androidHorizonSec) : sec;
+  };
+};
+// The player chains each chunk where the last one ended, between two frames. Chrome then renders the
+// frame where they meet without part of it: a one-frame notch per chunk that clicks on loud transients.
+// Starting a chunk on its nearest frame moves it by at most half a sample and joins it exactly.
+// A chunk the player speeds up or slows down has a fractional length, so it keeps its own start.
+let framesAligned = false;
+const alignStartsToFrames = () => {
+  if (framesAligned || typeof AudioBufferSourceNode === "undefined") return;
+  framesAligned = true;
+  const start = AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start = function (
+    this: AudioBufferSourceNode,
+    when?: number,
+    offset = 0,
+    ...rest
+  ) {
+    const rate = this.context.sampleRate,
+      speed = this.playbackRate.value;
+    const aligned = when === undefined || speed !== 1 ? when : Math.round(when * rate) / rate;
+    return start.call(this, aligned, offset, ...rest);
+  };
 };
 let liveSettings: LiveAudioSettings | undefined;
 let bufferScope: string | undefined;
-let declaredBufferMs = 0;
+let needMs: number | undefined;
+let declaredBufferMs: number | undefined;
 let latencyReadings: number[] = [];
+let lastLatency: number | undefined;
+// Before its first sound: how late the latest chunk of each second it measured arrived, and what its
+// need adds for that once declared (live-buffer.ts measuredLateMs).
+let arrivals: number[] = [];
+let networkMs: number | undefined;
+let lateSteps = noLateSteps;
 let bufferTimer: ReturnType<typeof setInterval> | undefined;
-// sample: add this second's output reading; otherwise only the host floor can raise the declaration.
-const updateBuffer = (created: SendspinPlayer, sample = false) => {
+// The player whose sound this tab unlocked. Until then its context is suspended and reports only
+// its base latency, too little a need, so readings come from a running context. Its first
+// declaration places it, so that one has to be right.
+let sounding: Player | undefined;
+// sample: add this second's readings.
+const updateBuffer = (created: Player, sample = false) => {
   if (connected !== created || !liveSettings) return;
-  const latency =
-    sample && hearing && created.isConnected && created.isPlaying && created.timeSyncInfo.synced
-      ? created.syncInfo.outputLatencyMs
-      : NaN;
-  if (Number.isFinite(latency) && latency >= 0)
-    latencyReadings = [...latencyReadings, latency].slice(-liveBufferReadings);
-  const next = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs, latencyReadings);
-  if (next === declaredBufferMs) return;
+  const worklet = isLive(created);
+  const playing =
+    sample &&
+    hearing &&
+    sounding === created &&
+    created.isConnected &&
+    created.isPlaying &&
+    created.timeSyncInfo.synced;
+  const output = worklet ? created.outputMs() : created.syncInfo.outputLatencyMs;
+  const latency = playing ? output : undefined;
+  // The first declaration waits for a reading the context has settled on: one that includes its
+  // output latency, or the same reading twice (a browser that reports none).
+  const measured = worklet ? created.measuresOutput : reportsOutputLatency();
+  const settled = needMs !== undefined || measured || latency === lastLatency;
+  lastLatency = latency;
+  if (settled && latency !== undefined && latency >= 0)
+    latencyReadings = [...latencyReadings, latency].slice(-liveReadings);
+  const measuring = worklet ? created.measuring : liveMeasuring();
+  if (sample) {
+    const arrival = worklet ? created.sampleArrival() : sampleLiveArrival();
+    if (playing && measuring && arrival !== undefined) arrivals = [...arrivals, arrival];
+    // A suspended context handles nothing: what it received isn't late, and it plays nothing. Nor
+    // does a player that measures.
+    const counted = playing && !measuring;
+    const second = worklet ? created.sampleLoss(counted) : sampleLiveLoss(created, counted);
+    if (second) lateSteps = nextLateSteps(lateSteps, second);
+    // Losing chunks in most of the last few seconds is what makes it step later: until then it is
+    // behind. A step that lands starts its seconds again.
+    const lossy = lateSteps.seconds.slice(-liveReadings).filter((counted) => counted.lost > 0);
+    reportBehind({ sound: lossy.length > liveReadings / 2 });
+  }
+  // The first declaration waits for the measurement too.
+  const network = networkMs ?? measuredLateMs(arrivals);
+  if (network === undefined) return;
+  needMs = declareLiveBuffer(needMs, latencyReadings, (worklet ? 0 : sdkBatchMs) + network);
+  if (needMs !== undefined) networkMs = network;
+  const next = needMs === undefined ? undefined : withLateSteps(needMs, lateSteps.lateMs);
+  if (next === undefined || next === declaredBufferMs) return;
+  if (declaredBufferMs === undefined) {
+    if (worklet) created.declared();
+    else declaredLive();
+  }
   declaredBufferMs = next;
   created.setMinBufferMs(next);
 };
@@ -53,12 +204,20 @@ export function listen(
     live && (on || watch)
       ? JSON.stringify([credentials?.origin, credentials?.token, live.sourceId])
       : undefined;
+  const sdkLive = Boolean(live) && sdkPlays();
   if (scope !== bufferScope) {
     bufferScope = scope;
     latencyReadings = [];
-    declaredBufferMs = live ? declareLiveBuffer(0, live.minBufferMs) : 0;
+    lastLatency = undefined;
+    arrivals = [];
+    networkMs = undefined;
+    lateSteps = sdkLive ? sdkLateSteps : noLateSteps;
+    needMs = declaredBufferMs = undefined;
   }
   liveSettings = live;
+  countingLiveLoss(sdkLive && (on || watch));
+  useOutputTimestamps(Boolean(live));
+  playRelaxed(!live && (on || watch));
   const next = JSON.stringify([
     credentials?.origin,
     credentials?.token,
@@ -72,6 +231,7 @@ export function listen(
     hearing = false;
     configuration = undefined;
     clearInterval(bufferTimer);
+    reportBehind({ sound: false });
     waitForTap(null);
     void current?.then(dispose).catch(() => {});
     if (!on && !watch) return;
@@ -81,44 +241,65 @@ export function listen(
   const hear = on && !hearing;
   hearing = on;
   if (!on) waitForTap(null);
-  const current: Promise<SendspinPlayer> = (player ??= import("@sendspin/sendspin-js")
-    .then(async ({ SendspinPlayer }) => {
+  const current: Promise<Player> = (player ??= Promise.all([
+    import("@sendspin/sendspin-js"),
+    live && !sdkLive ? import("./live-player") : undefined,
+  ])
+    .then(async ([sendspin, livePlayer]) => {
+      alignStartsToFrames();
+      capAndroidHorizon(sendspin);
+      if (sdkLive) {
+        countLiveLoss(sendspin, () => (connected && !isLive(connected) ? connected : null));
+        measureLiveArrivals(declaredBufferMs === undefined);
+      }
       await apiFetch(credentials, "/api/audio/session", { method: "POST", credentials: "include" });
-      if (player === current && liveSettings)
-        declaredBufferMs = declareLiveBuffer(declaredBufferMs, liveSettings.minBufferMs);
       // Electron ships BoringSSL without ChaCha20-Poly1305; both SDKs support AES-GCM.
-      const created = new SendspinPlayer({
+      const options = {
         suite: "aesgcm",
-        baseUrl: credentials.origin,
+        url: `${credentials.origin.replace(/^http/, "ws")}/sendspin`,
         clientName: name,
         storage,
         ...(live?.codec && live.codec !== "auto"
           ? { codecs: live.codec === "opus" ? ["opus", "pcm"] : ["pcm"] }
           : {}),
-        ...(live ? { minBufferMs: declaredBufferMs } : {}),
         onStateChange: (state) => {
           if (player === current) group = state.groupState.group_id;
         },
-      });
+      } satisfies SendspinPlayerConfig;
+      const created = livePlayer
+        ? new livePlayer.LivePlayer({ ...options, minBufferMs: declaredBufferMs ?? 0 })
+        : new sendspin.SendspinPlayer({
+            ...options,
+            ...(live ? { minBufferMs: declaredBufferMs ?? 0 } : {}),
+          });
       if (player !== current) return created;
       connected = created;
+      if (livePlayer && created instanceof livePlayer.LivePlayer)
+        created.onStopped = (reason) => {
+          stopped(reason);
+          dispose(created);
+        };
       if (live) bufferTimer = setInterval(() => updateBuffer(created, true), 1000);
       void created.connect().catch(() => {});
       return created;
     })
     .catch((reason) => {
-      if (player === current) {
-        player = connected = null;
-        group = undefined;
-        hearing = false;
-        clearInterval(bufferTimer);
-        failed("Couldn't start sound.", reason);
-        waitForTap(() => {
-          if (configuration === next) listen(on, watch, credentials, name, live);
-        });
-      }
+      stopped(reason);
       throw reason;
     }));
+  // The player couldn't start, or its Live Worker failed: a tap starts a new one.
+  function stopped(reason: unknown) {
+    if (player !== current) return;
+    player = connected = null;
+    group = undefined;
+    hearing = false;
+    clearInterval(bufferTimer);
+    reportBehind({ sound: false });
+    failed("Couldn't start sound.", reason);
+    waitForTap(() => {
+      if (configuration === next) listen(on, watch, credentials, name, live);
+    });
+  }
   void current
     .then((created) => {
       if (player === current) updateBuffer(created);
@@ -134,6 +315,7 @@ export function listen(
         () => {
           if (player !== current || !hearing) return;
           unlocked = true;
+          sounding = created;
           waitForTap(null);
         },
         () => {},
@@ -142,7 +324,9 @@ export function listen(
         if (player !== current || !hearing) return;
         void created.unlock().then(
           () => {
-            if (player === current && hearing) waitForTap(null);
+            if (player !== current || !hearing) return;
+            sounding = created;
+            waitForTap(null);
           },
           (reason) => {
             if (player !== current || !hearing) return;

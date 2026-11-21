@@ -202,7 +202,7 @@ test(
     const load = await f.play();
     assert.deepEqual(load.output, { picture: false, sound: true });
     await until(
-      () => f.receiver.state.queue.find((entry) => entry.id === "programme")?.live === true,
+      () => f.receiver.state.queue.find((entry) => entry.id === "programme")?.endless === true,
     );
     assert.ok(f.requests.includes("/it/index.m3u8"));
     assert.equal(

@@ -22,7 +22,7 @@ mock.module("../src/client/audio-settings", () => ({
   useNativeInputChannelPreference: () => preference,
 }));
 const query = {
-  data: { codec: "auto", minBufferMs: 200 } as LiveAudioSettings,
+  data: { codec: "auto" } as LiveAudioSettings,
   error: null,
   isFetching: false,
   refetch: async () => {},
@@ -68,7 +68,7 @@ test("a settings save sends only its change, merged into the settings current wh
       return null;
     }),
   );
-  cached = { codec: "pcm", minBufferMs: 200 }; // another admin chose PCM after this save failed
-  await mutationOptions!.mutationFn({ minBufferMs: 300 });
-  expect(sentBodies).toEqual([{ settings: { codec: "pcm", minBufferMs: 300 } }]);
+  cached = { codec: "pcm" }; // another admin chose PCM after this save failed
+  await mutationOptions!.mutationFn({ codec: "opus" });
+  expect(sentBodies).toEqual([{ settings: { codec: "opus" } }]);
 });

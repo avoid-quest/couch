@@ -14,6 +14,8 @@ import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
+import { connectBehind } from "./behind";
+import { createSessionParts } from "../../shared/session-parts";
 import {
   deviceId,
   loadLocalDeviceSharing,
@@ -23,7 +25,7 @@ import {
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
-import { setCoreTime } from "../core-clock";
+import { coreNow, setCoreTime } from "../core-clock";
 import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
@@ -139,6 +141,7 @@ export function useSession(
     let handshake: ReturnType<typeof setTimeout> | undefined;
     let textInput: ReturnType<typeof connectRemoteText> | undefined;
     let stopRendering: (() => void) | undefined;
+    let stopBehind: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
     let publishing = false;
@@ -182,6 +185,7 @@ export function useSession(
       publishing = false;
       setLocalLiveSourceId(null);
       stopRendering?.();
+      stopBehind?.();
       listen(false, false, credentials, "Couch");
       rendererStatus = syncedStatus = "idle";
       reportPlayback();
@@ -335,6 +339,7 @@ export function useSession(
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
+      const parts = createSessionParts();
       let baseline = false;
       socket.current = connection;
       socketCredentials.current = credentials;
@@ -353,6 +358,9 @@ export function useSession(
             if (isCurrent() && connection.readyState === WebSocket.OPEN)
               connection.send(JSON.stringify({ type: "textFocus", field }));
           });
+        stopBehind = connectBehind((message) => {
+          if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message));
+        });
         stopRendering = connectRenderer((state) => {
           rendererStatus = state.status;
           reportPlayback();
@@ -398,19 +406,20 @@ export function useSession(
           connection.close(4002, "Invalid response");
           return;
         }
-        if (message.type === "state") {
+        const whole = parts(message);
+        if (whole) {
           // A result can precede its snapshot: retain confirmation for the destination it names.
           const previous = observation.current;
           // The first idle Queue creates a playback without replacing an item or destination.
           if (
             previous &&
-            (previous.controlling !== message.state.controlling ||
-              (previous.playback !== null && previous.playback !== message.state.playback) ||
-              previous.currentEntryId !== message.state.currentEntryId)
+            (previous.controlling !== whole.controlling ||
+              (previous.playback !== null && previous.playback !== whole.playback) ||
+              previous.currentEntryId !== whole.currentEntryId)
           )
-            dismissPlaybackFeedback(message.state.controlling);
+            dismissPlaybackFeedback(whole.controlling);
           // This notice precedes the snapshot that closes the receiver. React may batch the two states.
-          const activity = message.state.activity;
+          const activity = whole.activity;
           if (
             activity &&
             activity.id !== previous?.activity?.id &&
@@ -422,16 +431,23 @@ export function useSession(
           clearTimeout(handshake);
           attempt = 0;
           ready.current = true;
-          observation.current = message.state;
-          live.current?.observe(message.state.liveSources ?? []);
+          observation.current = whole;
+          live.current?.observe(whole.liveSources ?? []);
           syncedStatus =
-            message.state.playbacks?.find((playback) =>
+            whole.playbacks?.find((playback) =>
               playback.outputs.some((output) => output.deviceId === deviceId() && output.sound),
             )?.status ?? "idle";
           reportPlayback();
-          const { position, duration, ...player } = message.state.player;
-          setState({ ...message.state, player });
-          setClock({ playbackId: player.playbackId, position, duration });
+          const { position, duration, ...player } = whole.player;
+          setState({ ...whole, player });
+          // The state's position is Core's anchor: where it was at positionAt, moving at its speed while it plays.
+          setClock({
+            playbackId: player.playbackId,
+            position,
+            duration,
+            at: whole.positionAt ?? coreNow(),
+            rate: player.status === "playing" && !player.buffering ? (player.speed ?? 1) : 0,
+          });
           setStatus("connected");
         } else if (message.type === "clock") {
           if (
@@ -441,7 +457,9 @@ export function useSession(
             !(
               message.duration === null ||
               (typeof message.duration === "number" && Number.isFinite(message.duration))
-            )
+            ) ||
+            !Number.isFinite(message.at) ||
+            !Number.isFinite(message.rate)
           ) {
             connection.close(4002, "Invalid response");
             return;
@@ -457,6 +475,8 @@ export function useSession(
             playbackId: message.playbackId,
             position: message.position,
             duration: message.duration,
+            at: message.at,
+            rate: message.rate,
           });
         } else if (message.type === "time") {
           if (typeof message.now !== "number" || !Number.isFinite(message.now)) {

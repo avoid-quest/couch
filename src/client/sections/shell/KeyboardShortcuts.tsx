@@ -1,9 +1,9 @@
 import { livePlayback } from "@/session/playback-controls";
 import { deviceId } from "@/session/device-id";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
-import type { RefObject } from "react";
+import { useContext, type RefObject } from "react";
 import { useSessionGate } from "@/session/session-context";
-import { usePlaybackClock } from "@/session/playback-clock";
+import { PlaybackClockContext } from "@/session/playback-clock";
 import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import {
   Dialog,
@@ -45,7 +45,8 @@ export function KeyboardShortcuts({
 }) {
   const shell = useShell();
   const { state, connected, run, seekBy } = useSessionGate();
-  const clock = usePlaybackClock();
+  // Only its length: the anchor, not the position that ticks every second while it plays.
+  const clock = useContext(PlaybackClockContext);
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const {

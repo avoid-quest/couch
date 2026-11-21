@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
 import { isTvPresentation } from "@/session/presentation";
 
-// A remote moves volume and faders 5 per press.
+// A remote moves faders 5 per press (Volume sets its own).
 export function RangeControl({
   label,
   value,

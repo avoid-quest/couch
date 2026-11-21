@@ -3,9 +3,10 @@ import type Mpegts from "mpegts.js";
 import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
 import { soundClock } from "./sendspin";
 import { localDeviceName } from "./device-id";
-import { bufferedEnd, setBuffered } from "./buffered";
+import { bufferedEnd, setBuffered, setLocalMedia } from "./buffered";
 import { createCompressor } from "./compressor";
 import { setPictureMapping } from "./picture-mapping";
+import { reportBehind } from "./behind";
 import type { CompressorSettings } from "../../shared/compressor";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
@@ -267,6 +268,8 @@ const sourceFailed = () => fail(video.error?.message || unavailable);
 // Pass-through says whether a source is HLS; without it, the path does.
 const isPlaylist = (command: NonNullable<typeof loading>) =>
   !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
+// A capture's element has no programme time to show.
+setLocalMedia(() => (playbackId && !mediaStream ? { playbackId, media: video } : null));
 // The timeline's loaded segment, only for media that seeks: not a capture, raw MPEG-TS or a live stream.
 const buffered = () => {
   let end =
@@ -402,7 +405,9 @@ const prepareCompression = (settings: CompressorSettings) => {
   if (!processing && settings.enabled) {
     let context: AudioContext | undefined;
     try {
-      context = new AudioContext();
+      // The default, asked for: on Android, relaxed sound makes contexts that ask for none "playback"
+      // (sendspin.ts), whose longer buffers would put this sound behind the picture.
+      context = new AudioContext({ latencyHint: "interactive" });
       const graph = createCompressor(context, settings);
       const source = context.createMediaElementSource(split() ? audio : video);
       source.connect(graph.input);
@@ -466,9 +471,14 @@ const setFollow = (follow: Follow | null) => {
     revision = ++followGeneration;
   void import("./picture-clock").then(({ followClock }) => {
     if (following === follow && generation === current && revision === followGeneration)
-      unfollow = followClock(video, clock, () => {
-        void start(video);
-      });
+      unfollow = followClock(
+        video,
+        clock,
+        () => {
+          void start(video);
+        },
+        (waiting) => reportBehind({ picture: waiting }),
+      );
   });
 };
 // Only hls.js tells where the source's timestamps start; engines without MSE keep native HLS.

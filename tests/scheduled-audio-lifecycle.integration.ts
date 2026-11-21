@@ -15,6 +15,29 @@ async function until(predicate: () => boolean) {
   }
 }
 
+test("a screen reporting a film's duration before its speakers start keeps seeking available", async (t) => {
+  const states: PlayerState[] = [];
+  const audio = createScheduledAudio({ name: "Couch", admit: () => false, changed() {} });
+  const group = audio.group("film", (state) => states.push(state));
+  t.after(async () => {
+    group.close();
+    await audio.close();
+  });
+  group.members([
+    { deviceId: "screen", level: 100 },
+    { deviceId: "speaker", level: 100 },
+  ]);
+  group.send({
+    type: "load",
+    playbackId: "film",
+    source: "https://media.example/film.mp4",
+    paused: true,
+  });
+  group.duration("film", 635);
+  assert.equal(states.at(-1)?.duration, 635);
+  assert.equal(states.at(-1)?.seekable, true);
+});
+
 test("retired FFmpeg stderr, error and close cannot change the replacement programme", async (t) => {
   const cp = process.getBuiltinModule("node:child_process");
   const children: (ChildProcess & {
@@ -85,4 +108,56 @@ test("retired FFmpeg stderr, error and close cannot change the replacement progr
   children[1]!.emit("close", 1);
   assert.equal(states.at(-1)!.status, "error");
   assert.equal(errors.length, 1, "a current nonzero close still fails its own programme");
+});
+
+test("a live picture-only group plays on its plain timeline when the decoder for its clock fails", async (t) => {
+  const cp = process.getBuiltinModule("node:child_process");
+  const children: ChildProcess[] = [];
+  const spawn = cp.spawn;
+  cp.spawn = (() => {
+    const child = Object.assign(new ChildProcess(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      stdio: [new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()],
+      kill: () => true,
+    });
+    children.push(child);
+    return child;
+  }) as typeof spawn;
+  syncBuiltinESMExports();
+  const source = createServer((_request, response) => response.end("synthetic source"));
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  const states: PlayerState[] = [];
+  const audio = createScheduledAudio({
+    name: "Clock only",
+    admit: () => false,
+    changed() {},
+    ffmpeg: async () => "synthetic-ffmpeg",
+    logError() {},
+  });
+  const group = audio.group("pictures", (state) => states.push(state));
+  t.after(async () => {
+    group.close();
+    await audio.close();
+    cp.spawn = spawn;
+    syncBuiltinESMExports();
+    source.closeAllConnections();
+    await new Promise<void>((resolve) => source.close(() => resolve()));
+  });
+  const url = `http://127.0.0.1:${(source.address() as { port: number }).port}/live`;
+  // No speaker: Core decodes the stream only for the clock its pictures follow.
+  group.send({ type: "load", playbackId: "A", source: url, live: true });
+  await until(() => children.length > 0);
+  // A stream with no sound track (its hasAudio is unknown): FFmpeg finds no audio and exits.
+  children[0]!.emit("close", 1);
+  await until(() => states.at(-1)?.timeline?.mapping === "unavailable");
+  assert.notEqual(states.at(-1)!.status, "error");
+  assert.equal(states.at(-1)!.error, null);
+  // A speaker joins: the decoder runs again, and its pictures follow the stream's timestamps again.
+  group.members([{ deviceId: "speaker", level: 100 }]);
+  await until(() => children.length > 1);
+  group.members([{ deviceId: "speaker", level: 90 }]);
+  assert.equal(states.at(-1)!.volume, 90);
+  assert.equal(states.at(-1)!.timeline, undefined);
+  children[1]!.emit("close", 1);
 });

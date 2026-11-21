@@ -7,8 +7,18 @@ import { AudioCodec, Roles, SendspinClient, serverNowUs } from "@sonn-audio/node
 import { createScheduledAudio } from "../src/server/scheduled-audio";
 import { createSendspin } from "../src/server/sendspin";
 import type { Socket } from "node:net";
+import type { LiveSource } from "../src/shared/live-input";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const liveCapture: LiveSource = {
+  id: "capture",
+  deviceId: "host",
+  name: "Capture",
+  kind: "microphone",
+  audio: true,
+  video: false,
+  intent: "live",
+};
 const until = async (check: () => boolean) => {
   const deadline = Date.now() + 5000;
   while (!check()) {
@@ -57,7 +67,7 @@ test(
     });
     await healthy.connect(url);
     await healthy.sendPlayerState({ min_buffer_ms: 150 });
-    audio.registerSource("capture");
+    audio.registerSource("capture", liveCapture);
     group.members([
       { deviceId: "healthy", level: 100 },
       { deviceId: "bad", level: 100 },
@@ -106,11 +116,10 @@ test(
       }),
     );
     await greeting;
-    // Valid JSON numbers can overflow JavaScript's finite range. The SDK forwards this declaration unchanged.
+    // Valid JSON numbers can overflow JavaScript's finite range.
     bad.send(
       '{"type":"client/state","payload":{"player":{"min_buffer_ms":1e309,"static_delay_ms":0}}}',
     );
-    await until(() => bad!.readyState === WebSocket.CLOSED || errors.length > 0);
     assert.deepEqual(errors, [], "a player's invalid timing must not fail other playbacks");
     const before = frames.length;
     await until(() => frames.length > before + 10);
@@ -200,10 +209,8 @@ test(
       },
     };
     bad.send(JSON.stringify(hello));
-    const closed = once(bad, "close");
     const before = frames.length;
-    bad.send("null"); // The unmodified SDK throws here; our public dispatch boundary contains it.
-    await closed;
+    bad.send("null"); // Not a Sendspin message: neither the SDK nor our dispatch boundary may let it through.
     await until(() => frames.length > before + 5);
     assert.deepEqual(errors, []);
     assert.equal(healthy.isConnected, true);
@@ -251,7 +258,7 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   await stalled.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: delay });
   await until(() => audio.delay("stalled") === delay);
   const stalledSocket = served.at(-1)!;
-  audio.registerSource("capture");
+  audio.registerSource("capture", liveCapture);
   const group = audio.group("programme", () => {});
   group.members([
     { deviceId: "healthy", level: 100 },
@@ -309,11 +316,14 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   socket.pause();
   const before = frames.length;
   await sleep(4000);
+  // Live PCM chunks are 5 ms: two and a half of the four seconds.
   assert.ok(
     frames.length > before + 500,
     "the healthy listener keeps receiving while another stalls",
   );
   assert.ok(writes < 10, `Core stops queueing audio for the stalled listener (${writes} writes)`);
+  // Backed up for most of the last few seconds, it reports stalled; the healthy one doesn't.
+  assert.deepEqual(audio.status().stalled, ["stalled"]);
   const resumed = serverNowUs() + delay * 1000;
   stalledFrames.length = 0;
   backlog = false;
@@ -324,3 +334,103 @@ test("a stalled Live listener resumes at playable audio", { timeout: 20_000 }, a
   const stale = stalledFrames.filter((at) => at < resumed).length;
   assert.ok(stale < 50, `stale chunks after resume: ${stale} of ${stalledFrames.length}`);
 });
+
+test(
+  "a speaker Core holds back or doesn't hear from for most of 5 s reports stalled",
+  { timeout: 30_000 },
+  async (t) => {
+    const audio = createScheduledAudio({
+      name: "Held back",
+      admit: (id) => ["healthy", "full", "frozen", "muted"].includes(id),
+      changed() {},
+      ffmpeg: async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
+      sourceFailed() {},
+    });
+    const server = createServer(),
+      sockets = new WebSocketServer({ server });
+    sockets.on("connection", (socket, request) => audio.accept(socket, request));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const frames: number[] = [];
+    // A player whose declared capacity never fits a chunk (5 ms of Live PCM is 960 bytes): its socket
+    // stays empty, it never takes sound.
+    const player = (id: string, capacity: number) =>
+      new SendspinClient(id, id, [Roles.PLAYER], {
+        playerSupport: {
+          supported_formats: [
+            { codec: AudioCodec.PCM, sample_rate: 48000, channels: 2, bit_depth: 16 },
+          ],
+          buffer_capacity: capacity,
+          supported_commands: [],
+        },
+      });
+    const healthy = player("healthy", 1 << 20),
+      full = player("full", 512),
+      frozen = player("frozen", 1 << 20),
+      muted = player("muted", 1 << 20);
+    healthy.addAudioChunkListener((timestamp) => frames.push(timestamp));
+    for (const client of [healthy, full, frozen, muted]) {
+      await client.connect(url);
+      await client.sendPlayerState({ min_buffer_ms: 150, static_delay_ms: 0 });
+    }
+    await until(() => audio.delay("full") === 0 && audio.delay("frozen") === 0);
+    audio.registerSource("capture", liveCapture);
+    const group = audio.group("programme", () => {});
+    group.members([
+      { deviceId: "healthy", level: 100 },
+      { deviceId: "full", level: 100 },
+      { deviceId: "frozen", level: 100 },
+      { deviceId: "muted", level: 0 },
+    ]);
+    group.send({
+      type: "load",
+      playbackId: "programme",
+      source: "",
+      liveSourceId: "capture",
+      live: true,
+      captureIntent: "live",
+    });
+    let sequence = 0;
+    const origin = serverNowUs(),
+      timer = setInterval(() => {
+        while (sequence < Math.floor((serverNowUs() - origin) / 10000)) {
+          audio.writeSource("capture", {
+            generation: "capture",
+            sequence,
+            samplePosition: sequence * 480,
+            capturedAtUs: origin + sequence * 10000,
+            sampleRate: 48000,
+            channels: 2,
+            pcm: new Float32Array(960),
+          });
+          sequence++;
+        }
+      }, 5);
+    t.after(async () => {
+      clearInterval(timer);
+      group.close();
+      audio.close();
+      await healthy.disconnect();
+      await full.disconnect();
+      await frozen.disconnect();
+      await muted.disconnect();
+      sockets.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    await until(() => frames.length > 20);
+    // A frozen tab: its clock-sync requests stop, though its socket keeps taking sound. A muted,
+    // hidden tab's are as sparse (Chrome's timers for a hidden, silent page), and it isn't stalled.
+    for (const client of [frozen, muted]) {
+      const clock = client as unknown as { scheduleTimeSync(): void; stopTimeSync(): void };
+      clock.scheduleTimeSync = () => {};
+      clock.stopTimeSync();
+    }
+    await sleep(4000);
+    assert.deepEqual(audio.status().stalled, ["full"]);
+    // Its last burst was at most 5 s before; 10 s without one, then most of 5 s.
+    await sleep(6000);
+    await until(() => audio.status().stalled.includes("frozen"));
+    await sleep(4000);
+    assert.deepEqual(audio.status().stalled.sort(), ["frozen", "full"]);
+  },
+);

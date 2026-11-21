@@ -104,6 +104,10 @@ test(
         opus.every((chunk) => chunk.duration === 5_000),
         "Live Opus uses 5 ms frames",
       );
+      assert.ok(
+        opus.every((chunk) => chunk.data.length > 170),
+        "each frame is over the MPEG-TS muxer's 170 bytes, so it leaves FFmpeg at once",
+      );
       assert.equal(pcm[0]!.at, origin);
       assert.ok(opus[0]!.at < origin, "Opus pre-skip maps before the first captured sample");
       const last = pcm.at(-1)!;
@@ -137,3 +141,39 @@ test(
     );
   },
 );
+
+test("a relaxed capture sends the relaxed decoder's 60 ms Opus and 100 ms PCM chunks", async (t) => {
+  const errors: string[] = [],
+    output: { wire: string; duration: number }[] = [];
+  const source = createScheduledCapture(
+    async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
+    (error) => errors.push(error),
+    undefined,
+    true,
+  );
+  t.after(() => source.close());
+  source.subscribe((event) => {
+    if (event.type === "chunk") output.push(event);
+  });
+  for (let sequence = 0; sequence < 100; sequence++)
+    source.write({
+      generation: "relaxed",
+      sequence,
+      samplePosition: sequence * 480,
+      capturedAtUs: 1_000_000 + sequence * 10_000,
+      sampleRate: 48000,
+      channels: 2,
+      pcm: new Float32Array(960).fill(0.25),
+    });
+  await until(
+    () =>
+      errors.length > 0 ||
+      ["pcm", "opus"].every((wire) => output.filter((chunk) => chunk.wire === wire).length >= 5),
+  );
+  assert.deepEqual(errors, []);
+  for (const [wire, duration] of [
+    ["opus", 60_000],
+    ["pcm", 100_000],
+  ] as const)
+    assert.ok(output.filter((chunk) => chunk.wire === wire).every((c) => c.duration === duration));
+});

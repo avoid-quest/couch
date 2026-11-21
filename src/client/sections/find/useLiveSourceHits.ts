@@ -2,7 +2,7 @@ import { deviceId } from "@/session/device-id";
 import { useMemo } from "react";
 import { useSessionGate } from "@/session/session-context";
 import type { SearchHit } from "./SearchOnlineResults";
-import { liveTitle } from "../../../shared/live-input";
+import { heldOutOf, liveTitle } from "../../../shared/live-input";
 
 /** Active device inputs use the same search rows and playback actions as other sources. */
 export function useLiveSourceHits(query: string): SearchHit[] {
@@ -18,7 +18,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
         .map((source) => {
           // Play on the publisher, or while controlling it, waits in Where it plays to choose receivers.
           const live = source.intent === "live";
-          const publisher = live && source.deviceId === deviceId();
+          const publisher = live && heldOutOf(source) === deviceId();
           const disabled = !connected || publisher;
           const primary = publisher ? "Sharing" : live ? "Join" : "Play";
           const play = () => {
@@ -43,7 +43,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
             source: "Shared sources",
             title: liveTitle(source),
             meta: source.metadata?.description || (source.name.endsWith(` · ${meta}`) ? "" : meta),
-            kind: "Live",
+            kind: "Stream",
             live: true,
             video: source.video,
             primary: { label: primary, disabled, run: play },
@@ -52,7 +52,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
               {
                 label: "Play on",
                 disabled: !connected,
-                sharingDeviceId: source.deviceId,
+                sharingDeviceId: heldOutOf(source),
                 liveAudio: live,
                 playOn: (deviceId) => {
                   void run({ type: "playLive", sourceId: source.id, deviceId });

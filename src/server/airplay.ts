@@ -1,4 +1,3 @@
-import { serverNowUs } from "@sonn-audio/node-sendspin";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
@@ -6,11 +5,12 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import type { Readable } from "node:stream";
 import type { AirPlayAvailability, AirPlayState } from "../shared/airplay";
-import { createAudioIngress, createFramer, payloadType, type RtpPacket } from "./airplay-audio";
+import { createAudioIngress, createFramer, type RtpPacket } from "./airplay-audio";
 
 export type AirPlaySessions = {
-  /** An admitted sender's sound has started: publish it as a source. */
-  started: (id: string, sender: string) => void;
+  /** An admitted sender's sound has started: publish it as a source. timed: its packets' capture
+   * times are when the sender means them to be heard (audio-only AirPlay), not when Couch got them. */
+  started: (id: string, sender: string, timed: boolean) => void;
   /** RTP jitter-buffer output, timestamped on Core's clock; not the remote ADC clock. */
   audio: (id: string, packet: CaptureAudioPacket) => void;
   ended: (id: string) => void;
@@ -51,19 +51,21 @@ function lines(stream: Readable, line: (text: string) => void) {
 }
 
 // UxPlay keeps the AirPlay protocol, its password check and one sender at a time. Couch runs it
-// only while an admin has turned it on, with the code as UxPlay's password (-pw): UxPlay sets up a
-// sender's audio or mirroring only after its Digest authentication with it (lib/raop_handlers.h),
-// which UxPlay's -pin pairing alone doesn't require. A sender counts as playing here only once
-// its decoded sound arrives on a connection UxPlay authenticated.
+// only while an admin has turned it on, with the code as UxPlay's password (-pw) unless Ask for a
+// code is off. With a password, UxPlay sets up a sender's audio or mirroring only after its Digest
+// authentication with it (lib/raop_handlers.h), which UxPlay's -pin pairing alone doesn't require.
+// A sender counts as playing here only once its decoded sound arrives on a connection UxPlay
+// authenticated, or on any connection without a password.
 // A sender is UxPlay's one RTSP (RAOP) connection, which it refuses to a second while one is open.
 // Its debug log (-d 1, without packet data) names when that connection is made, when UxPlay
 // authenticates it and when it is removed; other connections, such as one refused or one that only
 // asks for /info, never hold a session.
 // The log and the sound arrive on separate pipes, in no order between them, and UxPlay logs a removal
-// before it stops that sender's decoding. So one UxPlay process serves one sender's sound: once an
-// authenticated connection is removed, Couch ignores that process and starts another, and no
-// sound it still sends can belong to whoever connects next. The pipe's framing is read from its
-// first byte whoever the sound turns out to belong to.
+// before it stops that sender's decoding. So one UxPlay process serves one sender's sound: once a
+// sender that could send sound leaves (authenticated, or set up a stream without a password), Couch
+// ignores that process and starts another, and no sound it still sends can belong to whoever
+// connects next. The pipe's framing is read from its first byte whoever the sound turns out to
+// belong to.
 export function createAirPlay(options: {
   executable?: string;
   directory: string;
@@ -71,7 +73,7 @@ export function createAirPlay(options: {
   /** Share on network: UxPlay listens on every interface, so it runs only while the Couch is shared. */
   network: () => boolean;
   name: () => string;
-  identity: () => { code: string; deviceId: string };
+  identity: () => { code: string; deviceId: string; askCode: boolean };
   sessions: AirPlaySessions;
   changed: () => void;
   log?: (line: string) => void;
@@ -95,9 +97,10 @@ export function createAirPlay(options: {
   // introduced itself on it names its session. spent: this UxPlay's authenticated sender left.
   let connected = false,
     authenticated = false,
+    streamSetUp = false,
     spent = false,
     sender = "",
-    code = "";
+    password = "";
   let session:
     | {
         id: string;
@@ -109,6 +112,11 @@ export function createAirPlay(options: {
     | undefined;
   let pending = Promise.resolve();
 
+  // UxPlay's password: the code, or none with Ask for a code off.
+  const wanted = () => {
+    const { askCode, code } = options.identity();
+    return askCode ? code : "";
+  };
   const unavailable = () =>
     !supported
       ? "AirPlay receiving is available on Linux."
@@ -119,6 +127,7 @@ export function createAirPlay(options: {
           : null;
   const state = (): AirPlayState => {
     const missing = unavailable();
+    const { code, askCode } = options.identity();
     return {
       enabled,
       status: !supported
@@ -138,7 +147,8 @@ export function createAirPlay(options: {
                     : "starting",
       error: missing ?? (enabled ? error : null),
       name: options.name(),
-      code: options.identity().code,
+      code,
+      askCode,
       sender: session?.sender ?? null,
     };
   };
@@ -152,22 +162,27 @@ export function createAirPlay(options: {
     options.sessions.ended(id);
     options.changed();
   };
-  const begin = () => {
+  const begin = (first: RtpPacket) => {
     const id = crypto.randomUUID(),
       ingress = createAudioIngress();
+    ingress.place(first);
+    const timed = ingress.timed();
     let position = 0,
-      sequence = 0,
-      originUs: number | undefined;
+      sequence = 0;
     const current = (session = {
       id,
       sender: sender || "AirPlay device",
       ingress,
       media: Date.now(),
       timer: setInterval(() => {
-        const pcm = ingress.tick();
+        const { pcm, at: startMs } = ingress.tick();
         if (session !== current) return;
         if (pcm.length) {
-          originUs ??= serverNowUs() - (pcm.length / 4 / 44_100) * 1e6;
+          // How far ahead the sender's time is, for checking a sender's picture against Couch's sound.
+          if (timed && !position)
+            log(
+              `airplay ${id.slice(0, 8)} on the sender's time, ${Math.round(startMs - performance.now())} ms ahead`,
+            );
           for (let at = 0; at < pcm.length; at += 4096 * 4) {
             const part = pcm.subarray(at, at + 4096 * 4),
               samples = new Float32Array(part.length / 2);
@@ -176,7 +191,7 @@ export function createAirPlay(options: {
               generation: id,
               sequence: sequence++,
               samplePosition: position,
-              capturedAtUs: Math.round(originUs + (position / 44_100) * 1e6),
+              capturedAtUs: Math.round(startMs * 1000 + (at / 4 / 44_100) * 1e6),
               sampleRate: 44_100,
               channels: 2,
               pcm: samples,
@@ -189,16 +204,23 @@ export function createAirPlay(options: {
       }, 20),
     });
     current.timer.unref();
-    log(`airplay ${id.slice(0, 8)} receiving`);
-    options.sessions.started(id, current.sender);
+    log(
+      `airplay ${id.slice(0, 8)} receiving${first.timed && !timed ? ", timed by arrival: the sender's time isn't usable" : ""}`,
+    );
+    options.sessions.started(id, current.sender, timed);
     options.changed();
   };
   const media = (packets: RtpPacket[]) => {
     // Sound is a sender's only on its authenticated connection, and only from the process that serves it.
     if (!packets.length || (!session && !(connected && authenticated))) return;
-    if (!session) begin();
+    // A sender's sound that changes how it is timed (audio to mirroring, or a sender time Couch
+    // can't use) is another source, from the packet where it changes.
+    for (const packet of packets)
+      if (!session || !session.ingress.place(packet)) {
+        end();
+        begin(packet);
+      }
     session!.media = Date.now();
-    for (const packet of packets) session!.ingress.place(packet);
   };
   const line = (text: string) => {
     let match: RegExpExecArray | null;
@@ -210,15 +232,23 @@ export function createAirPlay(options: {
     else if (/^New connection \S+ identified as Connection type RAOP$/.test(text)) {
       end();
       connected = true;
-      authenticated = false;
+      // Without a password UxPlay checks no one, so every sender is admitted.
+      authenticated = !password;
+      streamSetUp = false;
       sender = "";
       log("airplay sender connected");
     } else if (connected && text === "Client authentication success") authenticated = true;
+    else if (
+      connected &&
+      (text === "RAOP initialized success" || text === "Mirroring initialized successfully")
+    )
+      streamSetUp = true;
     else if (/^removing connection type RAOP socket \d+ /.test(text)) {
       end();
       connected = false;
       log("airplay sender disconnected");
-      if (authenticated) {
+      // Without a password, a picker that only reads /info leaves this process to the next sender.
+      if (authenticated && (password || streamSetUp)) {
         authenticated = false;
         spent = true;
         recycle();
@@ -255,14 +285,14 @@ export function createAirPlay(options: {
     const identity = options.identity(),
       startup = join(directory, "uxplayrc");
     name = options.name();
-    code = identity.code;
+    password = wanted();
     ready = false;
     connected = false;
     authenticated = false;
     spent = false;
     sender = "";
     // The password is in UxPlay's own startup file (-rc), readable only by Couch, not on its command line.
-    await writeFile(startup, `pw ${code}\n`, { mode: 0o600 });
+    await writeFile(startup, password ? `pw ${password}\n` : "", { mode: 0o600 });
     await chmod(startup, 0o600);
     // setpriv ends UxPlay with Core however Core ends; stdbuf lets Couch read its log as it happens.
     // Its home is Couch's data, so no ~/.uxplayrc or key outside it applies.
@@ -283,8 +313,14 @@ export function createAirPlay(options: {
       "0",
       "-d",
       "1",
+      // Audio-only AirPlay keeps the sender's timing (payload type 97, Couch's patch); mirroring's
+      // sound, whose picture Couch discards, doesn't.
+      "-async",
+      "-vsync",
+      "no",
+      // The patch names each stream's payload type and RTP timing itself.
       "-artp",
-      `pt=${payloadType} ! rtpstreampay ! fdsink fd=3 sync=false`,
+      "! rtpstreampay ! fdsink fd=3 sync=false",
       "-key",
       join(directory, "key.pem"),
       "-m",
@@ -345,14 +381,13 @@ export function createAirPlay(options: {
       options.changed();
     });
   };
-  // One child at a time follows the switch, the name and the code; a failure waits for the admin.
+  // One child at a time follows the switch, the name and the password; a failure waits for the admin.
   const reconcile = () =>
     (pending = pending
       .catch(() => {})
       .then(async () => {
         const want = enabled && !closed && options.network() && !unavailable();
-        if (child && (!want || name !== options.name() || code !== options.identity().code))
-          await stop();
+        if (child && (!want || name !== options.name() || password !== wanted())) await stop();
         if (!want || child || error) {
           options.changed();
           return;
@@ -389,7 +424,7 @@ export function createAirPlay(options: {
     async refresh() {
       await reconcile();
     },
-    /** After a new code: a device that knew the old one has to enter the new one. */
+    /** After a new code, or Ask for a code changed: UxPlay restarts with the password, or none. */
     async renew() {
       error = null;
       restarts = [];

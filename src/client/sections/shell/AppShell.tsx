@@ -58,6 +58,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
+import { TvRest, useTvName } from "./TvRest";
 import { useNavigation } from "@/navigation";
 import {
   collectionLocation,
@@ -80,7 +81,7 @@ import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
 import { hear, onBlocked } from "@/session/renderer";
-import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
+import { showsPicture } from "@/session/device-id";
 
 // The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
 const sections: [string, LucideIcon][] = [
@@ -689,11 +690,7 @@ function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
-  const localName = useLocalDeviceName();
-  const tvName =
-    localName ??
-    state?.devices?.find((device) => device.id === deviceId())?.name ??
-    installationName;
+  const tvName = useTvName();
   useRememberCouchName(installationName);
   const nowPlaying =
     !!current &&
@@ -731,6 +728,9 @@ function ShellChrome({ children }: PropsWithChildren) {
       )}
     >
       <main id="main" className="flex flex-1 flex-col">
+        {tvPresentation && paired && (
+          <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
+        )}
         {tvPresentation && state?.appearance && (
           <TvAppearancePreview
             appearance={state.appearance}
@@ -762,7 +762,7 @@ function ShellChrome({ children }: PropsWithChildren) {
                   {tvPresentation ? (
                     <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground">
                       <CouchMark connected={connected} />
-                      <span className="truncate">{deviceName(tvName)}</span>
+                      <span className="truncate">{tvName}</span>
                     </span>
                   ) : (
                     <CouchSwitch

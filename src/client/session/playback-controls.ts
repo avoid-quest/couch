@@ -4,7 +4,7 @@ type State = ClientSessionState | null | undefined;
 export const livePlayback = (state: State) => {
   const playback = state?.playbacks?.find((item) => item.id === state.playback);
   return (
-    playback?.intent === "live" ||
+    playback?.mode === "live" ||
     state?.liveSources?.some(
       (source) => source.id === playback?.liveSourceId && source.intent === "live",
     ) === true

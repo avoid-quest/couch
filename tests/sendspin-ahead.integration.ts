@@ -91,7 +91,7 @@ async function fixture(t: TestContext) {
     clients.push(client);
     client.addStreamStartListener(() => streams.push("start"));
     client.addStreamClearListener(() => streams.push("clear"));
-    client.addStreamEndListener(() => streams.push("end"));
+    client.addStreamEndListener((roles) => streams.push(roles ? `end ${roles.join(",")}` : "end"));
     client.addAudioChunkListener((timestamp, bytes) => {
       frames.push({ timestamp, bytes: Buffer.from(bytes) });
       // Held: chunks not yet played, with their 13-byte headers. A PCM chunk is 100 ms; Opus here is 60 ms.
@@ -509,7 +509,7 @@ test(
 
 // Clearing paused sound keeps the phone's audio element alive; Stop still ends the stream.
 test(
-  "pause clears buffered sound without ending the stream, and Stop ends it",
+  "pause ends the player stream and keeps the cover, Play starts a new one, and Stop ends every stream",
   { timeout: 20_000, skip },
   async (t) => {
     const { group, source, receiver } = await fixture(t);
@@ -518,15 +518,16 @@ test(
     group.send({ type: "load", playbackId: "pause", source });
     await until(() => speaker.frames.length > 0, "The speaker never got sound");
     group.send({ type: "pause", playbackId: "pause", paused: true });
-    await until(() => speaker.streams.includes("clear"), "Pausing never cleared buffered sound");
+    // Sendspin: a paused group ends its player and visualizer streams, not the artwork stream.
+    await until(() => speaker.streams.length > 1, "Pausing never ended the player stream");
+    assert.deepEqual(speaker.streams, ["start", "end player,visualizer"]);
     const pausedFrames = speaker.frames.length;
     group.send({ type: "pause", playbackId: "pause", paused: false });
     await until(() => speaker.frames.length > pausedFrames, "Playing again never supplied sound");
-    // The SDK treats another start on an active stream as a format update.
-    assert.deepEqual(speaker.streams, ["start", "clear"]);
+    assert.deepEqual(speaker.streams, ["start", "end player,visualizer", "start"]);
     group.send({ type: "stop", playbackId: "pause" });
     await until(() => speaker.streams.includes("end"), "Stop never ended the stream");
-    assert.deepEqual(speaker.streams, ["start", "clear", "end"]);
+    assert.deepEqual(speaker.streams, ["start", "end player,visualizer", "start", "end"]);
   },
 );
 

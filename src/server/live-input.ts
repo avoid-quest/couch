@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { LiveMetadata, LivePeer, LiveSignalMessage, LiveSource } from "../shared/live-input";
 import type { Action, PlaybackCommand, ServerMessage } from "../shared/protocol";
+import type { Forwarder } from "./live-forward";
 
 type Load = Extract<PlaybackCommand, { type: "load" }>;
 // relay: Core's buffered link for a receiver that couldn't connect directly, instead of a peer.
@@ -15,6 +16,9 @@ type Receiver<Socket> = {
 // Receivers that couldn't connect directly play this source through Core's stream instead.
 // uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
 // A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
+// uplink: the capturing window's one connection to the forwarding relay, while a viewer gets it from there.
+// direct: that relay failed for this source, so each viewer connects to the capturing window instead.
+// uploadError: its timestamped upload failed while it played through the relay; it can't play in step again.
 type Publication<Socket> = {
   source: LiveSource;
   startedAt: number;
@@ -22,6 +26,9 @@ type Publication<Socket> = {
   uploadToken?: string;
   relayed: Set<string>;
   uploadId?: string;
+  uplink?: string;
+  direct?: boolean;
+  uploadError?: string;
 };
 type Peer<Socket> = LivePeer & {
   publisher?: Socket;
@@ -31,22 +38,36 @@ type Peer<Socket> = LivePeer & {
   loadId: string;
   volume: number;
   relay?: string;
+  // The other end is the forwarding relay, not the publisher.
+  forwarded?: boolean;
 };
 const metadata = (value: LiveMetadata) => ({
   title: value.title?.trim() || undefined,
   description: value.description?.trim() || undefined,
 });
 
-// Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
+// Core grants each peer to two exact admitted connections, or one and the forwarding relay. Signaling has no
+// arbitrary target. With the relay, the publisher encodes once for every viewer; without it (no bundled helper,
+// or it failed for this source), once per viewer. reroute: the source's viewers need routing again.
 export function createLiveInputs<Socket>(options: {
   deviceOf: (socket: Socket) => string;
   nameOf: (id: string) => string;
   send: (socket: Socket, message: ServerMessage) => void;
   ended: (source: LiveSource, publisherName?: string) => void;
   changed: () => void;
+  forwarder?: Pick<Forwarder, "available" | "uplink" | "downlink" | "signal" | "close">;
+  reroute?: (sourceId: string) => void;
 }) {
   const sources = new Map<string, Publication<Socket>>();
   const peers = new Map<string, Peer<Socket>>();
+  const forwards = (publication: Publication<Socket>) =>
+    !!publication.owner && !publication.direct && !!options.forwarder?.available();
+  const uplinkOf = (peerId: string) =>
+    [...sources.values()].find((publication) => publication.uplink === peerId);
+  const closeUplink = (publication: Publication<Socket>) => {
+    if (publication.uplink) options.forwarder?.close(publication.uplink);
+    publication.uplink = undefined;
+  };
   const announcements = new Set<string>();
   let announcing: ReturnType<typeof setImmediate> | undefined;
   const announce = (sourceId: string) => {
@@ -58,26 +79,46 @@ export function createLiveInputs<Socket>(options: {
       announcements.clear();
       for (const sourceId of changed) {
         const publication = sources.get(sourceId);
+        const own = [...peers.values()].filter((peer) => peer.sourceId === sourceId);
+        // The publisher sends nothing that no viewer receives.
+        if (publication && !own.some((peer) => peer.forwarded)) closeUplink(publication);
         if (publication?.owner)
           options.send(publication.owner, {
             type: "livePeers",
             sourceId,
             upload: !!publication.uploadId,
             uploadId: publication.uploadId,
-            peers: [...peers.values()]
-              .filter((peer) => peer.sourceId === sourceId && !peer.relay)
-              .map(({ peerId, deviceId, picture, sound }) => ({
-                peerId,
-                deviceId,
-                picture,
-                sound,
-              })),
+            peers: [
+              // The relay's own end has no receiving device of its own.
+              ...(publication.uplink
+                ? [
+                    {
+                      peerId: publication.uplink,
+                      deviceId: "",
+                      picture: publication.source.video,
+                      sound: publication.source.audio,
+                    },
+                  ]
+                : []),
+              ...own
+                .filter((peer) => !peer.relay && !peer.forwarded)
+                .map(({ peerId, deviceId, picture, sound }) => ({
+                  peerId,
+                  deviceId,
+                  picture,
+                  sound,
+                })),
+            ],
           });
       }
     });
   };
-  const removePeer = (peer: Peer<Socket>) => {
+  const dropPeer = (peer: Peer<Socket>) => {
     peers.delete(peer.peerId);
+    if (peer.forwarded) options.forwarder?.close(peer.peerId);
+  };
+  const removePeer = (peer: Peer<Socket>) => {
+    dropPeer(peer);
     options.send(peer.receiver, { type: "player", command: { type: "stop" } });
   };
   const end = (sourceId: string, publisherName?: string) => {
@@ -88,12 +129,18 @@ export function createLiveInputs<Socket>(options: {
     // Publish the ending notice before any peer's Stop can close its player.
     options.ended(publication.source, publisherName);
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
+    closeUplink(publication);
     if (publication.owner)
       options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
     options.changed();
   };
   return {
     sources: () => [...sources.values()].map((publication) => publication.source),
+    /** The forwarding relay carries this source: a capturing window's, with the helper, not failed for it. */
+    forwardable: (sourceId: string) => {
+      const publication = sources.get(sourceId);
+      return !!publication && forwards(publication);
+    },
     source: (sourceId: string) => sources.get(sourceId)?.source,
     position: (sourceId: string) => {
       const publication = sources.get(sourceId);
@@ -173,6 +220,14 @@ export function createLiveInputs<Socket>(options: {
       // The media socket can close and another receiver retry before an old control message arrives.
       return publication.uploadId === uploadId;
     },
+    failUpload(sourceId: string, error: string) {
+      const publication = sources.get(sourceId);
+      if (!publication) return;
+      publication.uploadError = error;
+      publication.uploadId = undefined;
+      announce(sourceId);
+    },
+    uploadError: (sourceId: string) => sources.get(sourceId)?.uploadError,
     upload(sourceId: string, upload: boolean) {
       const publication = sources.get(sourceId);
       if (!publication || !!publication.uploadId === upload) return;
@@ -194,6 +249,7 @@ export function createLiveInputs<Socket>(options: {
     ) {
       const publication = sources.get(sourceId);
       const wanted = publication && load ? receivers : [];
+      const forwarded = !!publication && forwards(publication);
       const changed = new Set<string>();
       for (const peer of [...peers.values()])
         if (
@@ -205,6 +261,7 @@ export function createLiveInputs<Socket>(options: {
               receiver.sound === peer.sound &&
               receiver.relay === peer.relay,
           ) ||
+            !!peer.forwarded !== (forwarded && !peer.relay) ||
             peer.loadId !== load?.playbackId ||
             peer.sourceId !== sourceId)
         ) {
@@ -232,13 +289,14 @@ export function createLiveInputs<Socket>(options: {
             deviceId: receiver.deviceId,
             picture: receiver.picture,
             sound: receiver.sound,
-            publisher: publication.owner,
+            publisher: forwarded && !receiver.relay ? undefined : publication.owner,
             receiver: receiver.socket,
             sourceId,
             playbackId,
             loadId: load.playbackId,
             volume: receiver.volume,
             relay: receiver.relay,
+            forwarded: forwarded && !receiver.relay,
           };
           peers.set(peer.peerId, peer);
           if (peer.relay) {
@@ -252,6 +310,18 @@ export function createLiveInputs<Socket>(options: {
               command: { type: "volume", volume: receiver.volume },
             });
             continue;
+          }
+          if (peer.forwarded) {
+            if (!publication.uplink) {
+              publication.uplink = crypto.randomUUID();
+              options.forwarder!.uplink(
+                publication.uplink,
+                sourceId,
+                publication.source.video,
+                publication.source.audio,
+              );
+            }
+            options.forwarder!.downlink(peer.peerId, sourceId, peer.picture, peer.sound);
           }
           // The peer carries the media: no HLS link reaches a Direct receiver.
           options.send(receiver.socket, {
@@ -272,20 +342,47 @@ export function createLiveInputs<Socket>(options: {
     },
     receive(socket: Socket, message: LiveSignalMessage) {
       const peer = peers.get(message.peerId);
+      const uplink = peer ? undefined : uplinkOf(message.peerId);
+      if (uplink) {
+        if (uplink.owner !== socket)
+          throw new Error("This connection has no live peer permission.");
+        options.forwarder?.signal(message.peerId, message.signal);
+        return;
+      }
       if (!peer) return; // ICE may arrive after an output was stopped or replaced.
       if (peer.publisher !== socket && peer.receiver !== socket)
         throw new Error("This connection has no live peer permission.");
+      if (peer.forwarded) {
+        options.forwarder?.signal(message.peerId, message.signal);
+        return;
+      }
       const other = peer.publisher === socket ? peer.receiver : peer.publisher;
       if (other) options.send(other, message);
     },
-    // Either end reports a peer that can't connect; its receiver is relayed from now on.
-    unreachable(socket: Socket, peerId: string) {
+    /** The forwarding relay's side of a peer, to the browser at the other end. */
+    forwarded(peerId: string, signal: LiveSignalMessage["signal"]) {
+      const peer = peers.get(peerId),
+        owner = peer ? peer.receiver : uplinkOf(peerId)?.owner;
+      if (owner) options.send(owner, { type: "liveSignal", peerId, signal });
+    },
+    // Either end reports a peer that can't connect; its receiver is relayed from now on. When the
+    // publisher's own connection to the forwarding relay fails, its viewers connect to it directly.
+    unreachable(socket: Socket | undefined, peerId: string) {
+      const uplink = peers.has(peerId) ? undefined : uplinkOf(peerId);
+      if (uplink) {
+        if (socket !== undefined && uplink.owner !== socket)
+          throw new Error("This connection has no live peer permission.");
+        uplink.direct = true;
+        closeUplink(uplink);
+        options.reroute?.(uplink.source.id);
+        return;
+      }
       const peer = peers.get(peerId);
       if (!peer) return; // Already stopped or replaced.
-      if (peer.publisher !== socket && peer.receiver !== socket)
+      if (socket !== undefined && peer.publisher !== socket && peer.receiver !== socket)
         throw new Error("This connection has no live peer permission.");
       sources.get(peer.sourceId)?.relayed.add(peer.deviceId);
-      peers.delete(peerId);
+      dropPeer(peer);
       announce(peer.sourceId);
       return peer;
     },
@@ -314,7 +411,7 @@ export function createLiveInputs<Socket>(options: {
       const changed = new Set<string>();
       for (const peer of [...peers.values()])
         if (peer.receiver === socket) {
-          peers.delete(peer.peerId);
+          dropPeer(peer);
           changed.add(peer.sourceId);
         }
       for (const sourceId of changed) announce(sourceId);

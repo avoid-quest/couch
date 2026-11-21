@@ -43,7 +43,7 @@ test("sound-only preparation and protected delivery never fetch a separate video
     "playing",
     selected,
     { authorization: "Bearer video-only", referer: "https://player.example/watch" },
-    { origin: "https://couch.example", userAgent: "Test" },
+    { origin: "https://couch.example", userAgent: "Couch", relay: true },
     signal(),
   );
   expect(routed.audioSource).toBeUndefined();
@@ -178,7 +178,7 @@ test("synthetic HLS protects every audio choice and child with playback signatur
         cookie: "fixture=1",
         referer: "https://player.example/watch",
       },
-      { origin: "https://couch.example", userAgent: "Browser fixture" },
+      { origin: "https://couch.example", userAgent: "Couch", relay: true },
       signal(),
     );
     expect(routed.audioManifest).toBeUndefined();

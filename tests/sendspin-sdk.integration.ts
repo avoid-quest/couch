@@ -51,7 +51,7 @@ for (const intent of ["live", "relaxed"] as const)
       const player = new SendspinCore({
         suite: "aesgcm",
         storage,
-        baseUrl: f.hub.origin,
+        url: `${f.hub.origin.replace(/^http/, "ws")}/sendspin`,
         codecs: ["pcm"],
         minBufferMs: 150,
       });
@@ -106,7 +106,8 @@ for (const intent of ["live", "relaxed"] as const)
       assert.equal(player.currentFormat?.codec, "pcm");
       assert.equal(chunks[0]!.sampleRate, 48000);
       assert.equal(chunks[0]!.samples.length, 2);
-      assert.equal(chunks[0]!.samples[0]!.length, 240);
+      // Live sends 5 ms PCM chunks; a relaxed capture uses the relaxed decoder's 100 ms PCM chunks.
+      assert.equal(chunks[0]!.samples[0]!.length, intent === "live" ? 240 : 4800);
       assert.ok(chunks.every((chunk) => Number.isSafeInteger(chunk.serverTimeUs)));
       assert.ok(
         chunks.some((chunk) => chunk.samples[0]!.some((value) => value > 0.15)),
@@ -119,7 +120,7 @@ for (const intent of ["live", "relaxed"] as const)
         "the two input channels retain their opposite polarities",
       );
       const lead = intent === "live" ? 150_000 : 1_000_000;
-      // The decoder can skip early packets during startup; surviving 5 ms chunks
+      // The decoder can skip early packets during startup; surviving chunks
       // still belong to the source timeline plus the configured presentation lead.
       assert.ok(chunks[0]!.serverTimeUs - input.origin >= lead);
       assert.ok(chunks.every((chunk) => (chunk.serverTimeUs - input.origin - lead) % 5_000 === 0));
@@ -144,7 +145,7 @@ test(
     const player = new SendspinCore({
       suite: "aesgcm",
       storage,
-      baseUrl: `${f.hub.origin}/api/audio/${identity.token}`,
+      url: `${f.hub.origin.replace(/^http/, "ws")}/api/audio/${identity.token}/sendspin`,
       codecs: ["pcm"],
       reconnect: { maxAttempts: 0 },
     });

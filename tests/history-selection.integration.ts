@@ -16,6 +16,7 @@ import type {
   ServerMessage,
   SessionState,
 } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 // Actual REST -> Hub -> Session -> renderer load, using private SQLite and offline helpers.
 test(
@@ -139,7 +140,7 @@ else console.log(JSON.stringify({title:"Video",url:"https://example.com/video.mp
     );
     sockets.push(socket);
     socket.onmessage = (event) => {
-      const message = JSON.parse(String(event.data)) as ServerMessage;
+      const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
       if (message.type === "state") state = message.state;
       if (message.type === "player" && message.command.type === "load") {
         loads.push(message.command);

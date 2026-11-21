@@ -11,6 +11,7 @@ import { createHub } from "../src/server/hub";
 import { helper, startHelpers } from "../src/server/helpers";
 import { updateStatus } from "../src/server/helper-status";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
 
 // Real Core intake, Session and extractor subprocesses; only the helper executable and
 // renderer are fixtures. Each run owns its database, helper directory and loopback port.
@@ -100,7 +101,7 @@ else {
     sequence = 0;
   const pending = new Map<string, (result: Extract<ServerMessage, { type: "result" }>) => void>();
   socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data)) as ServerMessage;
+    const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
     if (message.type === "state") state = message.state;
     if (message.type === "result") {
       pending.get(message.requestId)?.(message);
@@ -199,8 +200,8 @@ for (const intake of ["enqueueWeb", "enqueueProvider"] as const)
       assert.deepEqual(f.runs(), [{ inspect: false, url }]);
       assert.equal(
         f.upstreamRequests,
-        0,
-        "Core dispatches the resolved media without discarded delivery probes",
+        1,
+        "Core probes the resolved media once to decide whether the device fetches it directly",
       );
     },
   );

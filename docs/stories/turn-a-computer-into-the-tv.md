@@ -9,6 +9,7 @@ remote, plays through the right speakers, and phones become its remote.
 
 1. On the Couch computer: **Settings → TV → TV mode** → **Restart Couch**.
 2. Arrows, **OK** and **Back** move around; held **OK** opens an item's menu.
+   A game controller works too.
 3. **Screen**: **Try** a display → **Keep** (or it reverts after 20 seconds).
 4. **Sound** → **Output**, **Test tone**, **Audio delay**; on Linux,
    **Bluetooth** → **Search** → **Connect** for a speaker.

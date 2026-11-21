@@ -8,15 +8,18 @@
   on.
 - **Publishing**: press **Share** in the header and choose **Screen**,
   **Window**, **System audio** or **Audio input**, optionally devices under
-  **Play on**, then **Start sharing**. Without a destination the source waits in
+  **Play on**, then **Start sharing**. On the Couch computer an **Audio input**
+  is always [Live audio](live-audio.md), and **System audio** is Live when
+  **Playback** is **Live**. Without a destination the source waits in
   Home's **Shared sources**. A browser without screen capture offers audio inputs
   only.
 - **Picture**: 1080p and 60 FPS by default, with 720p or original resolution and
   30/60/120 FPS targets, changeable while sharing. Targets are ceilings, not
   guarantees. Captured audio turns off echo cancellation, noise suppression and
   gain control so music isn't altered.
-- **The publisher never plays its own capture.** It stays a controller, listed
-  as **Sharing this source** in **Where it plays**.
+- **The publisher never plays its own capture**, except a Live audio input,
+  which the Couch computer's own outputs can play like any other device's.
+  Otherwise it stays a controller, listed as **Sharing this source** in **Where it plays**.
 - **Stop sharing** ends the source on every receiver. Closing the publishing
   window, disconnecting it or stopping capture through the OS does too.
 - macOS system audio needs 14.2+. Including system audio sends the whole mix,
@@ -27,16 +30,25 @@
 Screens and audio without timestamped capture go **directly over WebRTC** to
 each receiver ([ADR 0001](adr/0001-live-inputs-play-over-webrtc-unless-in-sync.md)),
 so each device plays as soon as it receives and two rooms can be slightly apart.
-The publisher encodes once per receiver.
+The publisher encodes once, in H.264, and sends that one stream to the Couch
+computer, whose relay helper forwards it to every receiver. A browser that can't
+send H.264, or can't reach the Couch computer, encodes once per receiver instead.
 
 - **In sync** (in **Where it plays**, with more than one receiver) buffers the
   capture through FFmpeg and HLS so devices play together, a few seconds behind.
-- **Behind**: a receiver that can't connect directly within 10 seconds plays the
-  buffered stream alone; `couch.log` lists it as `(buffered)` with the reason. It
-  stays buffered for that source until sharing ends.
-- Timestamped **Audio input** and AirPlay use Sendspin's scheduler, even with one
-  listener. **Live audio** on the hosting desktop is described in
-  [Live audio](live-audio.md).
+- **Through Couch**: a receiver that can't connect directly within 10 seconds
+  plays the buffered stream alone; `couch.log` lists it as `(buffered)` with the
+  reason. It stays buffered for that source until sharing ends.
+- A timestamped **Audio input** or **System audio** shared Relaxed plays on one
+  speaker through the forwarding relay, as a screen's sound does. With a second
+  speaker Core moves it to Sendspin's scheduler, so every speaker plays in step
+  after a short break, and back when one is left. Without the relay helper, or
+  once the share or a speaker couldn't connect through it, it stays on Sendspin.
+  Sendspin reads its timestamped upload: if that fails while the share plays
+  only through the relay, the speaker plays on, but the share can't play in
+  step until it is shared again, and its speakers say why; on Sendspin, the
+  share ends. AirPlay always uses Sendspin. **Live audio** on the hosting desktop is
+  described in [Live audio](live-audio.md).
 - Receivers can only delay sound, never play it early, so none can line up with
   the original sound on the sharing Mac.
 

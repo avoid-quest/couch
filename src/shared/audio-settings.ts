@@ -1,16 +1,11 @@
 import type { NativeBufferFrames, NativeChannelMap } from "./capture";
-export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus"; minBufferMs: number };
-export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto", minBufferMs: 150 };
-export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings => {
-  const v = value as LiveAudioSettings;
-  return (
-    !!v &&
-    ["auto", "pcm", "opus"].includes(v.codec) &&
-    Number.isInteger(v.minBufferMs) &&
-    v.minBufferMs >= 0 &&
-    v.minBufferMs <= 5000
-  );
-};
+export type LiveAudioSettings = { codec: "auto" | "pcm" | "opus" };
+// Live has no room delay: each listener plays as soon as its own measured need allows, and
+// listeners whose needs round up to the same step play together. Settings saved with the old
+// floor (minBufferMs) still read; the floor is ignored.
+export const defaultLiveAudioSettings: LiveAudioSettings = { codec: "auto" };
+export const isLiveAudioSettings = (value: unknown): value is LiveAudioSettings =>
+  !!value && ["auto", "pcm", "opus"].includes((value as LiveAudioSettings).codec);
 
 export const nativeInputBufferOptions = ["128", "256", "512", "1024"] as const;
 export type NativeInputBufferPreference = (typeof nativeInputBufferOptions)[number];

@@ -29,13 +29,7 @@ import { couchApp } from "@/session/native-context";
 import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import {
-  CaptureBufferSelect,
-  CaptureChannelsSelect,
-  LiveSettingsStatus,
-  PlaybackBufferInput,
-  useLiveAudioSettings,
-} from "./LiveOperator";
+import { CaptureBufferSelect, CaptureChannelsSelect } from "./LiveOperator";
 import {
   nativeInputChannelMap,
   nativeInputChannelPreference,
@@ -168,10 +162,16 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     media: !!navigator.mediaDevices?.getUserMedia,
     display: !!navigator.mediaDevices?.getDisplayMedia,
   };
-  const [kind, setKind] = useState<ShareKind>(
+  const [picked, setPicked] = useState<ShareKind>(
     () => kinds.find((item) => !unavailable(item, browser)) ?? kinds[0]!,
   );
-  const live = useLiveAudioSettings(kind.intent === "live");
+  const [systemLive, setSystemLive] = useState(false);
+  // On the Couch computer an audio input is always Live, and System audio is Live when chosen (architecture §1.4).
+  const kind =
+    (localHost &&
+      (picked.inputs || (picked.capture === "system-audio" && systemLive)) &&
+      shareKinds.find((item) => item.intent === "live" && item.capture === picked.capture)) ||
+    picked;
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<AudioInput[] | null>(null);
@@ -226,12 +226,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
     available &&
     !reason &&
     !elsewhere &&
-    (kind.intent !== "live" ||
-      (!!audioDeviceId &&
-        audioDeviceId !== "default" &&
-        !!live.settings &&
-        !live.save.isPending &&
-        !live.save.error)) &&
+    (kind.intent !== "live" || !kind.inputs || (!!audioDeviceId && audioDeviceId !== "default")) &&
     (!lists || !!(kind.pictures ? source : sources?.some((item) => item.kind === "screen")));
 
   const checkAccess = async (on = kind) => {
@@ -386,12 +381,12 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           aria-label="What to share"
           spacing={2}
           className="w-full flex-wrap"
-          value={kind.inputs ? "microphone" : kind.id}
+          value={picked.id}
           disabled={pending || listing}
           onValueChange={(value) => {
             const next = kinds.find((item) => item.id === value);
             if (next) {
-              setKind(next);
+              setPicked(next);
               setError(null);
               setSourceId("");
             }
@@ -405,11 +400,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
               disabled={!!unavailable(item, browser)}
               title={unavailable(item, browser)}
             >
-              {item.capture === kind.capture && item.pictures === kind.pictures ? (
-                <Check aria-hidden="true" />
-              ) : (
-                <item.icon aria-hidden="true" />
-              )}
+              {item === picked ? <Check aria-hidden="true" /> : <item.icon aria-hidden="true" />}
               {item.label}
             </ToggleGroupItem>
           ))}
@@ -448,7 +439,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           {kind.pictures === "window" ? "windows" : "screens"}
         </Button>
       )}
-      {kind.inputs && localHost && (
+      {kind.capture === "system-audio" && localHost && (
         <Row
           label="Playback"
           description={
@@ -458,7 +449,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           }
         >
           <ChoiceGroup
-            label="Audio input playback"
+            label="System audio playback"
             value={kind.intent ?? "relaxed"}
             disabled={!available || !!reason}
             options={[
@@ -466,9 +457,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
               { value: "live", label: "Live" },
             ]}
             onValueChange={(value) => {
-              setKind(
-                shareKinds.find((item) => item.inputs && (item.intent ?? "relaxed") === value)!,
-              );
+              setSystemLive(value === "live");
               setError(null);
             }}
           />
@@ -550,21 +539,6 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           <AlertDescription>{nativeBuffer.error || nativeChannels.error}</AlertDescription>
         </Alert>
       )}
-      {kind.intent === "live" && (
-        <Row
-          label="Playback buffer floor (ms)"
-          htmlFor="share-live-buffer"
-          description="0 uses each listener's buffer."
-        >
-          <PlaybackBufferInput
-            id="share-live-buffer"
-            live={live}
-            disabled={pending}
-            className="ml-auto"
-          />
-        </Row>
-      )}
-      {kind.intent === "live" && <LiveSettingsStatus live={live} />}
       {devices.length > 0 && (
         <Row label="Play on">
           <ToggleGroup

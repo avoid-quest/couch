@@ -41,6 +41,8 @@ type Publication = {
   surface?: LiveSelection["surface"];
   since: number;
   uploadId?: string;
+  // Its timestamped upload failed and said why; Core ends the share if it played in step.
+  uploadFailed?: boolean;
   audioFrames?: Awaited<ReturnType<typeof prepareCaptureAudio>>;
   stopAudio?: () => void;
   recorder?: MediaRecorder;
@@ -355,7 +357,7 @@ export function createLiveSession(options: {
   window.addEventListener("pagehide", leaving);
   // Core's buffered stream (In sync, or a receiver that couldn't connect directly) reads one continuous
   // recording. Its failure ends only that upload; Core stops buffered delivery and receivers keep their peers.
-  // Timestamped audio reaches listeners only through its upload, so that share ends with it.
+  // Timestamped audio plays in step only through its upload: Core ends that share if it does.
   const stopUpload = (current: Publication, error?: Error) => {
     const { recorder, socket } = current;
     current.recorder = current.socket = undefined;
@@ -377,7 +379,7 @@ export function createLiveSession(options: {
         error: error.message,
       });
       options.failed(error);
-      if (current.source.audioDelivery === "pcm") void end().catch(() => {});
+      if (current.source.audioDelivery === "pcm") current.uploadFailed = true;
     }
   };
   const startUpload = (current: Publication) => {
@@ -685,8 +687,11 @@ export function createLiveSession(options: {
       starting = true;
       const attempt = ++generation;
       let capture: MediaStream | undefined, captureFormat: AudioCaptureFormat | undefined;
+      // The capture rate setting is an input's. Live System audio keeps the system's own rate (48 kHz on a Mac).
       const requestedRate =
-        selection.intent === "live" ? captureSampleRate(readCaptureRatePreference()) : undefined;
+        selection.intent === "live" && selection.kind === "microphone"
+          ? captureSampleRate(readCaptureRatePreference())
+          : undefined;
       const sourceId = crypto.randomUUID();
       const nativeAudioId =
         selection.intent === "live" && selection.kind === "microphone" && couchApp?.liveAudio
@@ -951,7 +956,7 @@ export function createLiveSession(options: {
       if (publication?.published && !source) {
         // State and upload errors use different sockets. Whichever arrives first
         // must retire capture and tell the publisher why sharing disappeared.
-        if (!starting)
+        if (!starting && !publication.uploadFailed)
           options.failed(new Error("Couch stopped this live input. Start sharing again."));
         closePublication();
       }

@@ -1,5 +1,6 @@
 import type { ClientSessionState } from "./session";
-import type { Action, DeviceSummary, Output } from "../../shared/protocol";
+import type { Action, DeviceSummary, Output, ReceiverState } from "../../shared/protocol";
+import { heldOutOf } from "../../shared/live-input";
 
 // Where it plays' rules, without React: which devices the picker lists and in what
 // order, what each row says, which controls it offers, and when the chooser opens. Core decides; these rules
@@ -50,8 +51,8 @@ export const choosesHere = (
     action.type === "playLive" &&
     action.playNow !== false &&
     playback.liveSourceId === action.sourceId &&
-    after.liveSources?.find((source) => source.id === action.sourceId)?.deviceId ===
-      (action.deviceId ?? before?.controlling)
+    !!source &&
+    heldOutOf(source) === (action.deviceId ?? before?.controlling)
   );
 };
 
@@ -72,7 +73,7 @@ export type Row = {
   output?: Output;
   /** This device, whose own controls stay its own. */
   mine: boolean;
-  /** Only what matters: "This device", then an exception ("Behind", "Can't play: {Core's reason}", "Muted", "Private"…). */
+  /** Only what matters: "This device", then an exception ("Joining", "Behind", "Can't play: {Core's reason}", "Muted"…). */
   status: string;
   /** The status is a failure, said in destructive red. */
   failed: boolean;
@@ -94,6 +95,13 @@ export type Picker = {
   rows: Row[];
 };
 
+/** A receiver's state as its row says it; playing says nothing, and can't play says Core's reason. */
+const receiverWords: Partial<Record<ReceiverState, string>> = {
+  joining: "Joining",
+  behind: "Behind",
+  stalled: "Stalled",
+  relayed: "Through Couch",
+};
 const control = (reason: Reason | false | undefined): Control =>
   reason ? { enabled: false, reason } : { enabled: true };
 
@@ -125,8 +133,8 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     const current = output(device.id);
     // Ownership permits local controls even while viewing another playback.
     const mine = device.id === here;
-    // The publisher controls its capture and never plays it (docs/live-inputs.md).
-    const capturing = source?.deviceId === device.id;
+    // The publisher controls its capture and never plays it, except a Live audio input (docs/live-inputs.md).
+    const capturing = !!source && heldOutOf(source) === device.id;
     const speakers = mine || device.sharing?.audio === true,
       screen = mine || device.sharing?.video === true;
     const audio = !silent && !capturing && speakers,
@@ -207,14 +215,13 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
       (hostOnly && lock) ||
       (current?.error
         ? `Can't play: ${current.error}`
-        : current?.buffered
-          ? "Behind"
-          : locked ||
-            (soundOn && device.muted
-              ? "Muted"
-              : busy
-                ? `Playing ${busy.title ?? "something else"}`
-                : ""));
+        : (current?.state && receiverWords[current.state]) ||
+          locked ||
+          (soundOn && device.muted
+            ? "Muted"
+            : busy
+              ? `Playing ${busy.title ?? "something else"}`
+              : ""));
     return {
       device,
       output: current,
@@ -240,7 +247,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
   });
   return {
     choose: waiting ? `Choose where ${title ?? "it"} plays` : undefined,
-    // PCM audio is already scheduled, even at one receiver; this choice remains for captured A/V.
+    // Core picks PCM audio's delivery by its receivers; this choice remains for captured A/V.
     inSync:
       source &&
       !(source.audioDelivery === "pcm" && !source.video) &&
@@ -274,8 +281,8 @@ const filtersOf = (row: Row): Filter[] => [
   ...(row.picture.on ? ["picture" as const] : []),
   ...(row.level.sound ? ["sound" as const] : []),
   ...(row.output?.delayActive ? ["sync" as const] : []),
-  ...(row.output?.buffered && !row.output.error ? ["behind" as const] : []),
-  ...(row.output?.error ? ["error" as const] : []),
+  ...(row.output?.state === "behind" || row.output?.state === "stalled" ? ["behind" as const] : []),
+  ...(row.output?.state === "cant-play" ? ["error" as const] : []),
   ...(!row.device.online ? ["offline" as const] : []),
 ];
 /** Each count over every device, zeros left out: Picture 2 · Sound 3 · Offline 1. */
@@ -367,7 +374,7 @@ export const playingOn = (
 
 /**
  * A row's level (Level.tsx): none unless its sound is in the playback; moving while the playback sounds (`sounding`)
- * and this device's sound comes out (online, not muted, failing or behind), else flat.
+ * and this device's sound comes out (online, not muted, and its speaker playing), else flat.
  */
 export const rowLevel = (row: Row, sounding: boolean) =>
   !row.output || !row.level.sound
@@ -377,6 +384,7 @@ export const rowLevel = (row: Row, sounding: boolean) =>
         row.device.online &&
         !row.device.muted &&
         !row.output.error &&
-        !row.output.buffered
+        row.output.state !== "joining" &&
+        row.output.state !== "stalled"
       ? "moving"
       : "flat";

@@ -17,6 +17,8 @@ import type {
   SessionState,
 } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
+import { useGamepadNavigation } from "../gamepad";
+import { wakeTvRest } from "../tv-rest";
 import { couchApp, isNativeHost } from "./native-context";
 import { isTvPresentation } from "./presentation";
 import { forgetConnection } from "./connection";
@@ -162,7 +164,7 @@ export function SessionGate({
   }, []);
 
   function handleNavigation(key: NavigationKey) {
-    if (!tvPresentation) return;
+    if (!tvPresentation || wakeTvRest()) return;
     document.documentElement.setAttribute("data-keyboard", "");
     if (key !== "home" && key !== "info") {
       requestAnimationFrame(() => applyTvNavigation(key));
@@ -170,6 +172,13 @@ export function SessionGate({
     }
     dispatchTvRoute(key);
   }
+  // A controller's key applies at once, in the frame that read it while Couch had focus, never after it lost focus.
+  // It is the TV's own input, not a phone's Remote.
+  useGamepadNavigation((key) => {
+    if (wakeTvRest()) return;
+    document.documentElement.setAttribute("data-keyboard", "");
+    applyTvNavigation(key, false);
+  });
 
   const {
     clock,

@@ -6,10 +6,13 @@ import { NativeModeGate } from "@/sections/shell/PlaybackDevice";
 import { SessionGate, useSessionGate } from "./session/session-context";
 import { registerAppShellWorker } from "./register-sw";
 import { router } from "./router";
+import { listenForKeyPresses } from "./key-presses";
 import "./index.css";
 
 document.documentElement.classList.add("dark");
 registerAppShellWorker();
+// Before anything renders, so it hears each key ahead of the app's own listeners.
+listenForKeyPresses();
 
 function SessionRouter() {
   const { queryClient, identity, localHost, connected } = useSessionGate();

@@ -161,7 +161,7 @@ export function createCatalog({ radio, viewing }: Services) {
         }[provider]
       : "Online";
     const url =
-      source?.source.startsWith("web:") && !source.live && source.kind !== "radio"
+      source?.source.startsWith("web:") && !source.endless && source.kind !== "radio"
         ? publicProviderMediaUrl(source.source.slice(4))
         : undefined;
     return {

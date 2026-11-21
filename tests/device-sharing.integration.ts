@@ -10,6 +10,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { defaultDeviceSharing } from "../src/shared/device-sharing";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { routes, withState } from "./whole-state.fixture";
 
 async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-sharing-")),
@@ -40,7 +41,7 @@ async function fixture() {
     await new Promise<void>((resolve, reject) => {
       socket.once("error", reject);
       socket.onmessage = (event) => {
-        const message = JSON.parse(String(event.data)) as ServerMessage;
+        const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
         messages.push(message);
         if (message.type === "state") {
           state = message.state;
@@ -148,7 +149,7 @@ test(
           (message) => message.type === "player" && message.command.type === "load",
         ),
       );
-      assert.deepEqual(f.admin.state.outputs, [
+      assert.deepEqual(routes(f.admin.state.outputs), [
         { deviceId: f.deviceId, picture: false, sound: true, local: false },
       ]);
       assert.equal(
@@ -321,7 +322,7 @@ test(
           f.admin.state.playbacks?.some((playback) => playback.status === "unavailable") === true,
       );
       assert.match(f.admin.state.player.error ?? "", /Device is not sharing audio/);
-      assert.deepEqual(f.admin.state.outputs, []);
+      assert.deepEqual(routes(f.admin.state.outputs), []);
       assert.deepEqual(
         f.admin.state.queue.map((entry) => entry.id),
         ["pending"],
@@ -395,7 +396,7 @@ test("initial sound-only HLS selects its audio rendition", { timeout: 15_000 }, 
       false,
       "the sound-only attempt must not read a picture playlist",
     );
-    assert.deepEqual(f.device.state.outputs, [
+    assert.deepEqual(routes(f.device.state.outputs), [
       { deviceId: f.adminId, picture: false, sound: true, local: false },
     ]);
     assert.deepEqual(
@@ -432,7 +433,7 @@ test(
       await f.device.command({ type: "output", deviceId: f.deviceId, picture: true });
       await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
       assert.deepEqual(
-        f.device.state.outputs?.find((output) => output.deviceId === f.deviceId),
+        routes(f.device.state.outputs)?.find((output) => output.deviceId === f.deviceId),
         own,
       );
       assert.equal(
@@ -447,12 +448,12 @@ test(
         false,
       );
       assert.deepEqual(
-        f.device.state.outputs?.find((output) => output.deviceId === f.deviceId),
+        routes(f.device.state.outputs)?.find((output) => output.deviceId === f.deviceId),
         own,
       );
       assert.equal((await f.admin.command({ type: "play", entryId: "waiting" })).ok, false);
       assert.deepEqual(
-        f.device.state.outputs?.find((output) => output.deviceId === f.deviceId),
+        routes(f.device.state.outputs)?.find((output) => output.deviceId === f.deviceId),
         own,
       );
       assert.deepEqual(
@@ -497,7 +498,7 @@ test(
       });
       assert.equal(response.status, 200);
       await until(() => host.state.outputs?.[0]?.local === true);
-      assert.deepEqual(host.state.outputs, [
+      assert.deepEqual(routes(host.state.outputs), [
         { deviceId: hostId, picture: true, sound: true, local: true },
       ]);
       assert.equal(

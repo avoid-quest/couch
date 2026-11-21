@@ -28,15 +28,27 @@ describe("Core playback policy", () => {
     expect(playbackDelivery({ outputs: [{ ...speaker, sound: false }] })).toBe("direct");
   });
 
-  test("timestamped inputs keep fixed delivery at one or zero audience devices", () => {
+  test("Live keeps fixed delivery; a relaxed timestamped input plays directly on one device through the relay", () => {
+    const pcm = { ...source, audioDelivery: "pcm" as const };
     for (const outputs of [[speaker], []]) {
       expect(
-        playbackDelivery({ source: { ...source, intent: "live", audioDelivery: "pcm" }, outputs }),
+        playbackDelivery({
+          source: { ...pcm, intent: "live" },
+          outputs,
+          forwarding: true,
+        }),
       ).toBe("scheduled");
-      expect(playbackDelivery({ source: { ...source, audioDelivery: "pcm" }, outputs })).toBe(
-        "scheduled",
-      );
+      expect(playbackDelivery({ source: pcm, outputs, forwarding: true })).toBe("webrtc");
+      // Without the forwarding relay, or once it failed for this source, it stays on Sendspin.
+      expect(playbackDelivery({ source: pcm, outputs })).toBe("scheduled");
     }
+    expect(
+      playbackDelivery({
+        source: pcm,
+        outputs: [speaker, { ...speaker, deviceId: "kitchen" }],
+        forwarding: true,
+      }),
+    ).toBe("scheduled");
     expect(playbackDelivery({ source, outputs: [speaker] })).toBe("webrtc");
     expect(
       playbackDelivery({

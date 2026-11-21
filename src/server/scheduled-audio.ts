@@ -14,13 +14,14 @@ import {
   SendspinSession,
   type SendspinSessionHooks,
 } from "@sonn-audio/node-sendspin";
-import type { AudioSelection, LiveLead, PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { AudioSelection, PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
 import { ffmpegErrorLog, logPlaybackError, safePlaybackError } from "./playback-log";
 import { useHelper } from "./helpers";
 import { audioInput, pictureStartOf } from "./source-preparation";
 import { opusDuration, oggPackets } from "./audio-packets";
 import { createScheduledCapture, type Ffmpeg } from "./scheduled-capture";
+import { createLiveLead } from "./live-lead";
 import type { CaptureAudioPacket } from "./capture-audio";
 import { compressorFilter } from "../shared/compressor";
 import { liveTitle, type LiveSource } from "../shared/live-input";
@@ -54,7 +55,9 @@ type Run = {
   child?: ChildProcess;
   dispose?: () => void;
   fixed?: boolean;
-  captureLead?: LiveLead;
+  // A relaxed capture's send-ahead, which only rises; Live audio keeps its own.
+  captureLead?: number;
+  live?: ReturnType<typeof createLiveLead>;
   timelineOnly?: boolean;
   // An endless URL stream (Twitch, Live TV; not Live audio, which captures) keeps the source's time:
   // a gap is silence on every speaker while the clock and its pictures run on, and audio that
@@ -65,7 +68,8 @@ type Run = {
   speed: number;
   queues: Record<Wire, Chunk[]>;
   sent: Record<Wire, { at: number; end: number; data: Buffer }[]>;
-  cursors: Map<SendspinSession, { start: number; sent?: number }>;
+  // measuring: it hasn't declared its need, and plays none of the chunks it's sent.
+  cursors: Map<SendspinSession, { start: number; sent?: number; measuring?: boolean }>;
   pipes: Partial<Record<Wire, Readable>>;
   base?: number;
   // A buffered source can resume after a gap. Earlier sound keeps its original play times.
@@ -76,6 +80,9 @@ type Run = {
   timer: ReturnType<typeof setInterval>;
 };
 
+// A speaker has been sent sound to play, not chunks to measure.
+const soundSent = (cursor: { sent?: number; measuring?: boolean }) =>
+  cursor.sent !== undefined && !cursor.measuring;
 // Relaxed's least send-ahead: screens follow the clock too, and they declare nothing. Live has none.
 const leadUs = 1_000_000;
 // Chunks go out this far ahead of their play time, within each player's buffer_capacity: Sendspin prefers
@@ -97,6 +104,13 @@ const emptyMetadata = {
 // A speaker whose socket holds more than this unsent has stopped reading (a frozen tab, a dozing radio).
 // It gets nothing more until it drains; what it missed expires from sent, so it resumes at audio that can still play.
 const backlogBytes = 64 * 1024;
+// One held-back check is ordinary back-pressure; a speaker that took no new sound in most of the last
+// five seconds while some waited for it (its socket backed up, or its declared capacity full) is stalled.
+const stallSeconds = 5;
+// A Sendspin client starts a burst of clock-sync requests at least every 10 s (messaging.md "Clock
+// Synchronization"). One that sent Core nothing for longer is frozen (a paused or suspended tab),
+// even while its browser still drains its socket; such a second counts toward stalled too.
+const quietUs = 10_000_000;
 const wireFormat = (wire: Wire) => ({
   codec: wire === "opus" ? AudioCodec.OPUS : AudioCodec.PCM,
   sampleRate: 48_000,
@@ -160,6 +174,47 @@ export function createScheduledAudio(options: {
   const sockets = new Set<WebSocket>();
   const socketOf = new Map<SendspinSession, WebSocket>();
   const receiverErrors = new Map<string, { group: string; error: string }>();
+  // Each speaker's sends: whether this second held sound back and sent some, or found it quiet,
+  // and whether each of the last few seconds held back without sending any or was quiet.
+  const backlogs = new Map<
+    string,
+    { second: number; held: boolean; sent: boolean; quiet: boolean; seconds: boolean[] }
+  >();
+  // When Core last received anything on each speaker's socket.
+  const heard = new WeakMap<WebSocket, number>();
+  const stalled = (clientId: string) =>
+    (backlogs.get(clientId)?.seconds.filter(Boolean).length ?? 0) > stallSeconds / 2;
+  const took = (
+    clientId: string,
+    check: { held: boolean; sent: boolean; quiet: boolean },
+    nowUs: number,
+  ) => {
+    const second = Math.floor(nowUs / 1e6),
+      backlog = backlogs.get(clientId) ?? {
+        second,
+        held: false,
+        sent: false,
+        quiet: false,
+        seconds: [],
+      };
+    backlogs.set(clientId, backlog);
+    if (second !== backlog.second) {
+      const before = stalled(clientId);
+      const stalling = (backlog.held && !backlog.sent) || backlog.quiet;
+      backlog.seconds = [...backlog.seconds, stalling].slice(-stallSeconds);
+      backlog.second = second;
+      backlog.held = backlog.sent = backlog.quiet = false;
+      if (stalled(clientId) !== before) options.changed();
+    }
+    backlog.held ||= check.held;
+    backlog.sent ||= check.sent;
+    backlog.quiet ||= check.quiet;
+  };
+  const forgetBacklog = (clientId: string) => {
+    const before = stalled(clientId);
+    backlogs.delete(clientId);
+    if (before) options.changed();
+  };
   const sources = new Map<
     string,
     { capture: ReturnType<typeof createScheduledCapture>; details?: LiveSource }
@@ -171,6 +226,7 @@ export function createScheduledAudio(options: {
     joined: (clientId: string) => void;
     formatChanged: (session: SendspinSession) => void;
     sourceChanged: (id: string) => void;
+    started: (clientId: string) => boolean;
     close: () => void;
   }>();
   const children = new Set<ChildProcess>();
@@ -191,21 +247,39 @@ export function createScheduledAudio(options: {
   // Sendspin bounds output delay and min buffer to 5 s.
   const timingLimitMs = 5000;
   const validTiming = (ms: number) => Number.isInteger(ms) && ms >= 0 && ms <= timingLimitMs;
+  // A failed handler retires its connection, so the device reconnects into a clean session.
+  const retire = (socket: WebSocket | undefined, error: unknown) => {
+    console.warn(
+      "Couch: Sendspin session handler failed:",
+      safePlaybackError(error instanceof Error ? error.message : String(error)),
+    );
+    socket?.terminate();
+  };
+  // The SDK contains errors thrown by its hooks without reporting them.
+  const contained =
+    <Rest extends unknown[]>(hook: (session: SendspinSession, ...rest: Rest) => void) =>
+    (session: SendspinSession, ...rest: Rest) => {
+      try {
+        hook(session, ...rest);
+      } catch (error) {
+        retire(socketOf.get(session), error);
+      }
+    };
   const hooks: SendspinSessionHooks = {
-    onFormatChanged: (session) => {
+    onFormatChanged: contained((session) => {
       for (const group of groups) group.formatChanged(session);
-    },
-    onIdentified: (session) => {
+    }),
+    onIdentified: contained((session) => {
       const clientId = session.getClientId()!;
       identified.add(session);
       if (select(clientId)) {
         for (const group of groups) group.joined(clientId);
         options.changed();
       }
-    },
-    onPlayerState: (_session, update) => {
-      // The SDK exposes declarations unchanged. Reject invalid timing in the
-      // socket's dispatch boundary before it can poison a shared capture timeline.
+    }),
+    onPlayerState: contained((_session, update) => {
+      // The SDK exposes declarations unchanged. Reject invalid timing before it can
+      // poison a shared capture timeline.
       if (
         [update.minBufferMs, update.staticDelayMs].some(
           (value) => value !== undefined && !validTiming(value),
@@ -221,15 +295,15 @@ export function createScheduledAudio(options: {
         options.saveDelay?.(clientId, update.staticDelayMs!);
       }
       if (delayChanged) options.changed();
-    },
-    onDisconnected: (session) => {
+    }),
+    onDisconnected: contained((session) => {
       const clientId = session.getClientId()!;
       identified.delete(session);
       if (select(clientId)) {
         for (const group of groups) group.joined(clientId);
         options.changed();
       }
-    },
+    }),
   };
 
   // One Playback's speakers: its Sendspin group. It is the Playback's player while its outputs span Devices.
@@ -255,16 +329,11 @@ export function createScheduledAudio(options: {
       );
     };
     // Screens declare nothing, so a new relaxed group keeps its one-second floor.
-    const sendAhead = () => {
-      const minimum = load?.captureIntent === "live" ? 0 : leadUs / 1000;
-      return members.reduce<LiveLead>(
-        (lead, member) => {
-          const ms = playerLead(sessions.get(member.deviceId), minimum);
-          return ms > lead.ms ? { ms, deviceId: member.deviceId } : lead;
-        },
-        { ms: minimum },
+    const sendAhead = () =>
+      Math.max(
+        leadUs / 1000,
+        ...members.map((member) => playerLead(sessions.get(member.deviceId), leadUs / 1000)),
       );
-    };
     let load: SyncedLoad | undefined;
     let input: ReturnType<typeof audioInput> | undefined;
     let run: Run | undefined;
@@ -299,7 +368,6 @@ export function createScheduledAudio(options: {
         (state = {
           ...state,
           volume,
-          liveLead: load?.captureIntent === "live" ? run?.captureLead : undefined,
           ...(run?.base !== undefined && state.status !== "ended" ? { position: position() } : {}),
         }),
       );
@@ -369,9 +437,12 @@ export function createScheduledAudio(options: {
         wire = session && wireOf(session);
       const member = members.find((member) => member.deviceId === clientId);
       if (!member) return;
+      // A session that ended or was replaced ends its Live step: a reloaded page starts with no late
+      // steps, so Core places it afresh too. A player that only reconnected declares the steps it kept.
       for (const previous of run?.cursors.keys() ?? [])
         if (previous.getClientId() === clientId && previous !== session) {
           run!.cursors.delete(previous);
+          run!.live?.left(clientId);
           previous.sendStreamClear();
         }
       if (!session || !run || run.timelineOnly || run.base === undefined) return;
@@ -404,7 +475,8 @@ export function createScheduledAudio(options: {
       }
     };
     // Ends FFmpeg. Speakers drop what they buffered: a paused or seeking Playback goes quiet at once.
-    const halt = (end = false) => {
+    // A pause ends the player stream and keeps the cover (Sendspin stream/end); Play starts a new one.
+    const halt = (how: "clear" | "pause" | "end" = "clear") => {
       generation++;
       if (!run) return;
       clearInterval(run.timer);
@@ -412,17 +484,56 @@ export function createScheduledAudio(options: {
       run.dispose?.();
       run = undefined;
       each((session) => {
-        if (end) {
+        if (how === "end") {
           session.sendStreamEnd();
           session.sendGroupUpdate(PlaybackStateType.STOPPED, id, options.name);
-        } else session.sendStreamClear();
+        } else if (how === "pause") session.endPlaybackStreams();
+        else session.sendStreamClear();
       });
+    };
+    // Plays the timeline with no decoder: a picture-only item, or a live one whose pictures can't
+    // follow its timestamps.
+    const timelineOnly = (current: SyncedLoad) => {
+      const next: Run = {
+        timelineOnly: true,
+        start: state.position,
+        anchored: true,
+        speed: state.speed ?? 1,
+        queues: { opus: [], pcm: [] },
+        sent: { opus: [], pcm: [] },
+        cursors: new Map(),
+        pipes: {},
+        base: serverNowUs() + leadUs,
+        released: Infinity,
+        timer: setInterval(() => tick(next), 50),
+      };
+      run = next;
+      state = {
+        ...state,
+        // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
+        duration: current.live ? null : (current.duration ?? state.duration),
+        seekable: !current.live,
+        timeline: {
+          mapping: current.live ? "unavailable" : "media",
+          ...(current.live
+            ? { error: "This picture-only broadcast has no source timestamp mapping." }
+            : {}),
+        },
+      };
+      report();
     };
     const fail = (message: string) => {
       if (logError) logError(load?.audioSource ?? load?.source, message);
       else if (options.logError) options.logError(id, load?.audioSource ?? load?.source, message);
       else logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
-      halt(true);
+      // A decoder that runs only for its pictures' clock (no speaker) costs them only that clock,
+      // whatever failed (a stream with no sound, a link): they play on the plain timeline.
+      if (load && !members.length && !load.liveSourceId && !run?.timelineOnly) {
+        halt();
+        timelineOnly(load);
+        return;
+      }
+      halt("end");
       state = { ...state, status: "error", buffering: false, error: message };
       report();
     };
@@ -435,7 +546,8 @@ export function createScheduledAudio(options: {
     const start = async () => {
       const current = load!,
         attempt = ++generation;
-      state = { ...state, status: "loading", buffering: false, error: null };
+      // A decoder that runs again (a speaker joined a picture-only run) gives back its timestamps.
+      state = { ...state, status: "loading", buffering: false, error: null, timeline: undefined };
       const signal = AbortSignal.timeout(15_000);
       const inputUrl = current.audioSource ?? current.source;
       const credentialOrigin = current.credentialOrigin ?? current.source;
@@ -448,41 +560,28 @@ export function createScheduledAudio(options: {
           new URL(inputUrl).origin !== new URL(credentialOrigin).origin
         )
           stripCrossOriginHeaders(headers);
-        if ((!members.length || current.hasAudio === false) && !current.liveSourceId) {
-          const next: Run = {
-            timelineOnly: true,
-            start: state.position,
-            anchored: true,
-            speed: state.speed ?? 1,
-            queues: { opus: [], pcm: [] },
-            sent: { opus: [], pcm: [] },
-            cursors: new Map(),
-            pipes: {},
-            base: serverNowUs() + leadUs,
-            released: Infinity,
-            timer: setInterval(() => tick(next), 50),
-          };
-          run = next;
-          state = {
-            ...state,
-            // A recording still in progress (a Twitch VOD of a running stream) has no end yet.
-            duration: current.live ? null : (current.duration ?? state.duration),
-            seekable: !current.live,
-            timeline: {
-              mapping: current.live ? "unavailable" : "media",
-              ...(current.live
-                ? { error: "This picture-only broadcast has no source timestamp mapping." }
-                : {}),
-            },
-          };
-          report();
+        // An endless stream's decoder runs with no speaker too: its timestamps are the clock its
+        // pictures follow. Raw MPEG-TS screens can't map them, so those keep the plain timeline.
+        const clock = !!current.live && !current.radio && !current.mpegts;
+        if (((!members.length && !clock) || current.hasAudio === false) && !current.liveSourceId) {
+          timelineOnly(current);
           return;
         }
         if (current.liveSourceId && sources.has(current.liveSourceId)) {
-          const source = sources.get(current.liveSourceId)!.capture;
+          const { capture: source, details } = sources.get(current.liveSourceId)!;
+          const live = current.captureIntent === "live";
+          // Sender-timed AirPlay plays at its capture times, the sender's, as Live does: a speaker
+          // that joins doesn't move it, and each plays at its own step.
+          const log = (line: string) =>
+            console.log(
+              `${new Date().toISOString()} ${id.slice(0, 8)} ${line}`.replace(
+                /[\p{Cc}\u2028\u2029]/gu,
+                " ",
+              ),
+            );
           const next: Run = {
             fixed: true,
-            captureLead: sendAhead(),
+            live: live || details?.senderTimed ? createLiveLead(log) : undefined,
             start: 0,
             anchored: true,
             speed: 1,
@@ -493,6 +592,7 @@ export function createScheduledAudio(options: {
             released: 0,
             timer: setInterval(() => tick(next), 50),
           };
+          if (!next.live) next.captureLead = sendAhead();
           run = next;
           next.dispose = source.subscribe((event) => {
             if (run !== next) return;
@@ -506,17 +606,15 @@ export function createScheduledAudio(options: {
               next.cursors.clear();
               next.base = undefined;
               next.released = 0;
-              next.captureLead = sendAhead();
+              next.live?.restart();
+              if (!next.live) next.captureLead = sendAhead();
               each((session) => session.sendStreamClear());
               report();
               return;
             }
-            const lead = sendAhead();
-            if (!next.captureLead || lead.ms > next.captureLead.ms) {
-              next.captureLead = lead;
-              report();
-            }
-            const at = event.at + next.captureLead.ms * 1000;
+            next.live?.arrived(event.wire, event.at, serverNowUs());
+            if (!next.live) next.captureLead = Math.max(next.captureLead!, sendAhead());
+            const at = event.at + (next.live ? 0 : next.captureLead!) * 1000;
             if (next.base === undefined) {
               next.base = at;
               for (const member of members) begin(member.deviceId);
@@ -850,7 +948,7 @@ export function createScheduledAudio(options: {
         }
         if (ended) {
           const at = position();
-          halt(true);
+          halt("end");
           state = { ...state, position: at };
         }
         return;
@@ -861,13 +959,13 @@ export function createScheduledAudio(options: {
       if (current.base === undefined) {
         if (first === Infinity || !current.anchored) return;
         // Chunk timestamps are shared by the group; each player adds its own delay.
-        current.base = now + sendAhead().ms * 1000 - first;
+        current.base = now + sendAhead() * 1000 - first;
         if (!current.fixed && !current.sourceTimed)
           current.clock = [{ at: current.base, offset: 0 }];
         for (const member of members) begin(member.deviceId, current.base + first);
         if (run !== current) return;
       } else if (!current.fixed && !current.sourceTimed && first !== Infinity) {
-        const ahead = sendAhead().ms * 1000;
+        const ahead = sendAhead() * 1000;
         if (current.base + first < now + ahead / 2) {
           // Only future sound moves. Pictures finish the sound already scheduled, wait through
           // the gap and resume when the recovered sound actually starts.
@@ -877,10 +975,49 @@ export function createScheduledAudio(options: {
           current.clock!.push({ at: current.base + offset, offset });
         }
       }
+      // How much later than its capture the latest Live listener plays.
+      let latest = 0;
       for (const wire of wires) {
         const list = current.queues[wire],
           sent = current.sent[wire];
-        while (sent[0] && sent[0].end <= now) sent.shift();
+        // Each Live listener gets the same chunks, stamped later by its own step.
+        // Couch's own listener declares a buffer of 0 until it has measured its output and how late
+        // chunks reach it: it has no need yet, nor has a player that hasn't reported its state. One
+        // whose state declares no buffer at all (another Sendspin player) needs at least Core's
+        // input side. Couch's gets its chunks to measure, stamped well past any need (measureMs),
+        // and plays none of them.
+        const later = new Map<SendspinSession, number>(),
+          measuring = new Set<SendspinSession>();
+        for (const session of current.cursors.keys()) {
+          if (wireOf(session) !== wire) continue;
+          if (!current.live) {
+            later.set(session, 0);
+            continue;
+          }
+          const clientId = session.getClientId()!,
+            available = session.isAvailable() !== undefined,
+            undeclared = session.getPlayerTiming().minBufferMs === 0;
+          if (undeclared && available) {
+            measuring.add(session);
+            // Before the input side is known every chunk would be late: it gets none.
+            const ms = current.live.measureMs(wire);
+            later.set(session, ms === undefined ? 0 : (ms + playerLead(session, 0)) * 1000);
+            continue;
+          }
+          const ms = current.live.leadMs(
+            clientId,
+            wire,
+            undeclared || !available ? undefined : playerLead(session, 0),
+            session.getClientName() ?? clientId,
+          );
+          later.set(session, ms * 1000);
+        }
+        // Chunks stay until the latest listener on this wire has played them, or measured them.
+        const kept = Math.max(0, ...later.values());
+        // How late the latest listener that plays them plays.
+        for (const [session, lateUs] of later)
+          if (!measuring.has(session)) latest = Math.max(latest, lateUs);
+        while (sent[0] && sent[0].end + kept <= now) sent.shift();
         while (list[0] && (current.fixed || current.base + list[0].offset - sendUs <= now)) {
           const chunk = list.shift()!,
             at = current.base + chunk.offset;
@@ -888,31 +1025,61 @@ export function createScheduledAudio(options: {
           if (current.sourceTimed && at + chunk.duration <= now) continue;
           sent.push({ at, end: at + chunk.duration, data: chunk.data });
         }
-        // Output delay advances a player's playback, so its held bytes and missed deadlines
-        // use that compensated time (Sendspin Player Buffer Accounting, including 13-byte headers).
+        // Output delay advances a player's playback, so its missed deadlines use that compensated
+        // time. The SDK counts what each player holds (Sendspin Player Buffer Accounting).
         // Cursors already contain only this run's active members.
         for (const [session, cursor] of current.cursors) {
-          if (wireOf(session) !== wire) continue;
-          const capacity = session.getPlayerBufferCapacity() || 1024 * 1024,
-            socket = socketOf.get(session);
+          const lateUs = later.get(session);
+          if (lateUs === undefined) continue;
+          // The SDK holds a player's stream until it may play (its first state, available) and
+          // drops audio meanwhile, so nothing counts as sent before the stream is open. A stream it
+          // ended (an unavailable player) took its held audio along, so that audio goes again.
+          if (!session.getActiveStreams().includes("player")) {
+            cursor.sent = undefined;
+            session.sendStreamStart(wireFormat(wire));
+            if (!session.getActiveStreams().includes("player")) continue;
+          }
+          // Taken before a measuring listener is placed: its first sound is the first chunk after.
+          const first = !soundSent(cursor);
+          // It declared its need: what it was sent to measure isn't for hearing, and what follows is
+          // stamped at its step.
+          if (cursor.measuring && !measuring.has(session)) {
+            session.sendStreamClear();
+            cursor.measuring = false;
+          }
+          if (measuring.has(session)) cursor.measuring = true;
+          const socket = socketOf.get(session);
           const delay = (session.getPlayerTiming().staticDelayMs ?? 0) * 1000;
-          let held = 0;
+          const before = cursor.sent;
+          let held = (socket?.bufferedAmount ?? 0) > backlogBytes;
           for (const chunk of sent) {
             if (chunk.at < cursor.start) continue;
-            if (cursor.sent !== undefined && chunk.at <= cursor.sent) {
-              if (chunk.end - delay > now) held += chunk.data.length + 13;
-              continue;
-            }
-            if (chunk.at - delay <= now) continue;
+            if (cursor.sent !== undefined && chunk.at <= cursor.sent) continue;
+            if (chunk.at + lateUs - delay <= now) continue;
             if (
-              held + chunk.data.length + 13 > capacity ||
+              session.timeUntilPlayerCapacityUs(chunk.data.length + session.getAudioHeaderSize()) >
+                0 ||
               (socket?.bufferedAmount ?? 0) > backlogBytes
-            )
+            ) {
+              held = true;
               break;
-            session.sendPcmAudioFrame({ data: chunk.data, timestampUs: chunk.at });
-            held += chunk.data.length + 13;
+            }
+            session.sendPcmAudioFrame({
+              data: chunk.data,
+              timestampUs: chunk.at + lateUs,
+              durationUs: chunk.end - chunk.at,
+            });
             cursor.sent = chunk.at;
           }
+          // A speaker at level 0 is silent, so Chrome may run a hidden tab's timers once a minute
+          // (intensive throttling) and space its bursts far apart: quiet doesn't count for it.
+          const quiet =
+            socket !== undefined &&
+            members.find((member) => member.deviceId === session.getClientId())?.level !== 0 &&
+            serverNowUs() - (heard.get(socket) ?? 0) > quietUs;
+          took(session.getClientId()!, { held, sent: cursor.sent !== before, quiet }, now);
+          // Its first sound in this run: it no longer joins.
+          if (first && soundSent(cursor)) options.changed();
         }
         if (
           current.pipes[wire]?.isPaused() &&
@@ -920,17 +1087,17 @@ export function createScheduledAudio(options: {
         )
           current.pipes[wire]!.resume();
       }
-      // Waiting for the source: the speakers have played everything they were sent.
+      // Waiting for the source: the speakers, Live listeners at their steps, have played everything they were sent.
       const drained =
         Object.values(current.queues).every((list) => !list.length) &&
-        now >= current.base + current.released;
+        now >= current.base + current.released + latest;
       const starving =
         (current.exit === undefined && drained) || soundClock(current, now).buffering;
       const status =
         now >= current.base && (!starving || current.sourceTimed) ? "playing" : "loading";
       if (current.exit === 0 && drained) {
         const at = position();
-        halt(true);
+        halt("end");
         state = { ...state, position: at, status: "ended", buffering: false };
         report();
       } else if (
@@ -944,16 +1111,21 @@ export function createScheduledAudio(options: {
     };
     const pause = () => {
       const at = position();
-      halt();
+      halt("pause");
       state = { ...state, position: at, status: "paused", buffering: false };
       report();
     };
 
     const synced = {
+      // Whether this speaker has been sent sound in the current run.
+      started: (clientId: string) =>
+        [...(run?.cursors ?? [])].some(
+          ([session, cursor]) => session.getClientId() === clientId && soundSent(cursor),
+        ),
       sourceChanged(sourceId: string) {
         if (load?.liveSourceId === sourceId) each((session) => session.sendMetadata(metadata()));
       },
-      // A picture-only timeline has no decoder to learn an unlisted VOD's length; its screens report it.
+      // A screen can learn a film's length before the decoder does, or be its only source.
       duration(playbackId: string, seconds: number) {
         if (
           load?.playbackId !== playbackId ||
@@ -962,7 +1134,7 @@ export function createScheduledAudio(options: {
           !Number.isFinite(seconds)
         )
           return;
-        state = { ...state, duration: seconds };
+        state = { ...state, duration: seconds, seekable: !load.live && !load.radio };
         report();
       },
       // The screens: Devices whose picture follows this group's clock.
@@ -978,7 +1150,9 @@ export function createScheduledAudio(options: {
         for (const member of before)
           if (!next.some((item) => item.deviceId === member.deviceId)) {
             clearReceiverError(member.deviceId);
+            forgetBacklog(member.deviceId);
             sessions.get(member.deviceId)?.sendMetadata(emptyMetadata);
+            run?.live?.left(member.deviceId);
             for (const session of run?.cursors.keys() ?? [])
               if (session.getClientId() === member.deviceId) {
                 run!.cursors.delete(session);
@@ -1088,7 +1262,7 @@ export function createScheduledAudio(options: {
             if (state.status === "playing" || state.status === "loading") void restart();
             break;
           case "stop":
-            halt(true);
+            halt("end");
             load = undefined;
             each((session) => session.sendMetadata(emptyMetadata));
             state = idle();
@@ -1097,7 +1271,7 @@ export function createScheduledAudio(options: {
         }
       },
       close() {
-        halt(true);
+        halt("end");
         each((session) => session.sendMetadata(emptyMetadata));
         groups.delete(synced);
         for (const member of members) clearReceiverError(member.deviceId);
@@ -1161,14 +1335,11 @@ export function createScheduledAudio(options: {
           if (binary) session.handleBinary(data as Buffer);
           else session.handleText(String(data));
         } catch (error) {
-          console.warn(
-            "Couch: Sendspin session handler failed:",
-            safePlaybackError(error instanceof Error ? error.message : String(error)),
-          );
-          socket.terminate();
+          retire(socket, error);
         }
       };
       socket.on("message", (data, binary) => {
+        heard.set(socket, serverNowUs());
         if (socket.readyState !== 1) return;
         if (socket.bufferedAmount <= backlogBytes && !pending.length) return dispatch(data, binary);
         // Pause requests while replies cannot drain. Keep their order: dropping a Noise frame loses its nonce.
@@ -1214,6 +1385,10 @@ export function createScheduledAudio(options: {
       receivers: [...receiverErrors].map(
         ([clientId, value]) => [clientId, value.error, value.group] as const,
       ),
+      stalled: [...sessions.keys()].filter(stalled),
+      started: [...sessions.keys()].filter((clientId) =>
+        [...groups].some((group) => group.started(clientId)),
+      ),
     }),
     registerSource(id: string, details?: LiveSource) {
       if (sources.has(id)) return;
@@ -1226,6 +1401,7 @@ export function createScheduledAudio(options: {
             options.changed();
           },
           childStarted,
+          details?.intent !== "live",
         ),
       });
     },

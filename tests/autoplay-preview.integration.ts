@@ -152,3 +152,38 @@ test("playing an Autoplay pick makes room in a full queue by retiring only playe
     store.close();
   }
 });
+
+test("Up next pages through the whole Autoplay list, and any of it plays", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("whole");
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    () => {},
+    {
+      resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }),
+      resolveContinuation: () => ({
+        title: "Playlist",
+        entries: Array.from({ length: 60 }, (_, index) => entry(`track-${index}`)),
+      }),
+    },
+  );
+  try {
+    session.command({ type: "enqueue", entry: entry("opening"), playNow: true });
+    await flush();
+    assert.equal(session.state.autoplay?.upcoming.length, 10);
+    assert.equal(session.state.autoplay?.total, 60);
+    const page = session.autoplayPage(50);
+    assert.deepEqual(
+      page.entries.map((item) => item.id),
+      Array.from({ length: 10 }, (_, index) => `track-${50 + index}`),
+    );
+    assert.equal(page.total, 60);
+    session.command({ type: "play", entryId: "track-55" });
+    assert.equal(session.state.currentEntryId, "track-55");
+    assert.equal(session.state.autoplay?.total, 4);
+  } finally {
+    session.close();
+    store.close();
+  }
+});

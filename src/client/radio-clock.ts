@@ -5,6 +5,14 @@ import { useDurationClock } from "./components/DurationBar";
 /** Progress ticks slowly; metadata changes at each known broadcast/freshness boundary. */
 export function useRadioClock(guides: RadioGuide[] = [], programme?: RadioProgrammeDetails | null) {
   const progressNow = useDurationClock(!!programme || guides.length > 0);
+  return Math.max(progressNow, useRadioBoundaryClock(guides, programme));
+}
+
+/** Changes only at each known broadcast/freshness boundary: enough to tell what's on, not how far it got. */
+export function useRadioBoundaryClock(
+  guides: RadioGuide[] = [],
+  programme?: RadioProgrammeDetails | null,
+) {
   const [boundaryNow, tick] = useState(Date.now);
   const now = Date.now();
   let next = Infinity,
@@ -27,8 +35,12 @@ export function useRadioClock(guides: RadioGuide[] = [], programme?: RadioProgra
   useEffect(() => {
     tick(Date.now());
     if (!Number.isFinite(next)) return;
-    const timer = setTimeout(() => tick(Date.now()), Math.max(1, next - Date.now()));
+    // A timer may fire a little before the wall clock reaches it: the boundary has passed all the same.
+    const timer = setTimeout(
+      () => tick(Math.max(Date.now(), next)),
+      Math.max(1, next - Date.now()),
+    );
     return () => clearTimeout(timer);
   }, [next, previous]);
-  return Math.max(progressNow, boundaryNow);
+  return boundaryNow;
 }

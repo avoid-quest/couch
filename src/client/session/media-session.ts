@@ -1,12 +1,10 @@
-import { useEffect, useEffectEvent } from "react";
+import { useContext, useEffect, useEffectEvent } from "react";
 import type { Action } from "../../shared/protocol";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
-import { useQuery } from "@tanstack/react-query";
-import { radioProgrammesQuery } from "@/api/radio";
 import { useRadioClock } from "@/radio-clock";
-import { isRadio, freshRadioProgramme, radioNow } from "../../shared/radio";
+import { isRadio, freshRadioProgramme } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
-import { usePlaybackClock } from "./playback-clock";
+import { PlaybackClockContext, positionAt } from "./playback-clock";
 import { livePlayback } from "./playback-controls";
 import { liveTitle } from "../../shared/live-input";
 
@@ -23,8 +21,11 @@ const actions = [
 // Media Session feeds the system's media keys and Now Playing (macOS Now
 // Playing, Windows media controls, Linux MPRIS) while this page plays media.
 export function useMediaSession() {
-  const { state, connected, run, credentials } = useSessionGate();
-  const clock = usePlaybackClock();
+  const { state, connected, run } = useSessionGate();
+  // Core's anchor, not a position that ticks: the browser moves the position on at its rate itself, so
+  // it's set again only when the anchor changes. Set every second, it made Android update its media
+  // notification every second; on the rig a phone in a relaxed group lost sound once a second then.
+  const clock = useContext(PlaybackClockContext);
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   // A joined Live Source owns system controls, independently of the ordinary queue.
@@ -41,18 +42,12 @@ export function useMediaSession() {
     (listening || (current && ["playing", "paused", "loading"].includes(player.status)))
       ? player.playbackId
       : null;
-  const stationId = current?.source.startsWith("radio:") ? current.source.slice(6) : "";
-  const guides = useQuery({
-    ...radioProgrammesQuery(credentials ?? { origin: "", token: "" }),
-    enabled: connected && !!credentials && !!stationId,
-    refetchInterval: 60_000,
-  });
-  const now = useRadioClock(Object.values(guides.data ?? {}), state?.radioProgramme);
+  // Core sends the station's or channel's programme, from its guide, with the Playback.
+  const now = useRadioClock([], state?.radioProgramme);
   const programme =
-    (state?.radioProgramme?.playbackId === playbackId
+    state?.radioProgramme?.playbackId === playbackId
       ? freshRadioProgramme(state?.radioProgramme, now)
-      : null) ??
-    (stationId && playbackId ? radioNow(guides.data?.[stationId], stationId, now) : null);
+      : null;
   const title = listening
     ? source
       ? liveTitle(source)
@@ -63,8 +58,7 @@ export function useMediaSession() {
     : (programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "");
   const album = listening ? "" : (programme?.album ?? current?.collection?.title ?? "");
   const artwork = listening ? null : (programme?.artworkUrl ?? current?.thumbnail ?? null);
-  const live = listening || !!current?.live || isRadio(current);
-  const position = clock.playbackId === playbackId ? clock.position : 0;
+  const live = listening || !!current?.endless || isRadio(current);
   const duration = live
     ? null
     : clock.playbackId === playbackId
@@ -153,9 +147,19 @@ export function useMediaSession() {
     if (playbackId && duration && Number.isFinite(duration))
       navigator.mediaSession.setPositionState({
         duration,
-        position: Math.min(position, duration),
+        position: Math.min(clock.playbackId === playbackId ? positionAt(clock) : 0, duration),
         playbackRate: player?.speed || 1,
       });
     else navigator.mediaSession.setPositionState();
-  }, [playbackId, listening, playing, player?.speed, position, duration]);
+  }, [
+    playbackId,
+    listening,
+    playing,
+    player?.speed,
+    clock.playbackId,
+    clock.position,
+    clock.at,
+    clock.rate,
+    duration,
+  ]);
 }

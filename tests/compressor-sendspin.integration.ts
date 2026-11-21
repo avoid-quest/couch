@@ -71,7 +71,8 @@ test(
       const key = keys[index]!,
         frames: { timestamp: number; bytes: Buffer }[] = [];
       let starts = 0,
-        clears = 0;
+        clears = 0,
+        ends = 0;
       const client = new SendspinClient(key.peerId, `Receiver ${index}`, [Roles.PLAYER], {
         playerSupport: {
           supported_formats: [{ codec, channels: 2, sample_rate: 48_000, bit_depth: 16 }],
@@ -88,6 +89,10 @@ test(
         clears++;
         frames.length = 0;
       });
+      client.addStreamEndListener(() => {
+        ends++;
+        frames.length = 0;
+      });
       client.addAudioChunkListener((timestamp, bytes) =>
         frames.push({ timestamp, bytes: Buffer.from(bytes) }),
       );
@@ -100,6 +105,9 @@ test(
         },
         get clears() {
           return clears;
+        },
+        get ends() {
+          return ends;
         },
       };
     }
@@ -157,9 +165,9 @@ test(
         originals.get(frame.timestamp),
         "A receiver's volume must not change the shared samples",
       );
-    const pausedClears = pcm.clears;
+    const pausedEnds = pcm.ends;
     group.send({ type: "pause", playbackId: "tone", paused: true });
-    await until(() => state?.status === "paused" && pcm.clears > pausedClears);
+    await until(() => state?.status === "paused" && pcm.ends > pausedEnds);
     group.send({
       type: "compressor",
       playbackId: "tone",

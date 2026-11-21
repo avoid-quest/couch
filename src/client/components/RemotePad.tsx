@@ -95,7 +95,13 @@ export function RemotePad({
     </Button>
   );
   return (
-    <div className="mx-auto grid w-full max-w-72 gap-6">
+    // A held Enter clicks a button again on each repeat; one physical press is one press on the TV.
+    <div
+      className="mx-auto grid w-full max-w-72 gap-6"
+      onKeyDown={(event) => {
+        if (event.repeat && event.key === "Enter") event.preventDefault();
+      }}
+    >
       <section
         data-remote-pad
         aria-label="TV directions"

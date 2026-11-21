@@ -35,6 +35,11 @@ An ordinary programme on one permitted destination, with its own playback state.
 A shared programme whose picture and sound follow a common timeline, with
 collaborative programme controls and ordinary buffering.
 
+**Endless**:
+An item with no end, such as a radio station, a Live TV channel, a stream or a
+shared capture. A radio archive with a real duration is an ordinary item.
+_Avoid_: Live for anything outside Live audio and live screen sharing.
+
 **Live audio**:
 An ongoing audio publication intended for timely listening close to the source
 event. Its audience follows the source and controls its own listening, without

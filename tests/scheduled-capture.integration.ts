@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createSendspin } from "../src/server/sendspin";
 import { createScheduledAudio } from "../src/server/scheduled-audio";
+import { createScheduledCapture } from "../src/server/scheduled-capture";
+import { createLiveLead } from "../src/server/live-lead";
 import type { PlayerState } from "../src/shared/protocol";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const until = async (check: () => boolean, message: string, ms = 5000) => {
@@ -105,5 +107,62 @@ test(
     group.duration("pictures", 0.2);
     await until(() => states.at(-1)?.status === "ended", "the timeline never ended");
     assert.equal(states.at(-1)!.duration, 0.2);
+  },
+);
+
+test(
+  "Live Opus leaves the encoder frame by frame through silence, so Core's input side doesn't rise",
+  { timeout: 20_000 },
+  async (t) => {
+    const errors: string[] = [];
+    const source = createScheduledCapture(
+      async () => process.env.COUCH_TEST_FFMPEG ?? "ffmpeg",
+      (error) => errors.push(error),
+    );
+    // A rise needs half a minute of slow seconds, so the silence gets its own lead from 3 s on:
+    // its first reading is the silence's second second, as the noise's is.
+    const lead = createLiveLead(),
+      silent = createLiveLead();
+    const nowUs = () => (performance.timeOrigin + performance.now()) * 1000;
+    let first: number | undefined;
+    source.subscribe((event) => {
+      if (event.type !== "chunk") return;
+      first ??= Date.now();
+      lead.arrived(event.wire, event.at, nowUs());
+      if (Date.now() >= first + 3000) silent.arrived(event.wire, event.at, nowUs());
+    });
+    // A sound card's 128-frame blocks, each sent once its last sample is captured: two seconds of
+    // noise, then digital silence.
+    const rate = 48_000,
+      block = 128,
+      startUs = nowUs();
+    let position = 0;
+    const timer = setInterval(() => {
+      while (startUs + ((position + block) / rate) * 1e6 < nowUs()) {
+        const noise = position < 2 * rate;
+        source.write({
+          generation: "silence",
+          sequence: position / block,
+          samplePosition: position,
+          capturedAtUs: Math.round(startUs + (position / rate) * 1e6),
+          sampleRate: rate,
+          channels: 2,
+          pcm: new Float32Array(block * 2).map(() => (noise ? Math.random() * 0.2 - 0.1 : 0)),
+        });
+        position += block;
+      }
+    }, 1);
+    t.after(() => {
+      clearInterval(timer);
+      source.close();
+    });
+    await until(() => first !== undefined, "the encoder sent nothing");
+    await sleep(first! + 2500 - Date.now());
+    const noise = lead.leadMs("noise", "opus", 0);
+    await sleep(first! + 5300 - Date.now());
+    assert.deepEqual(errors, []);
+    // Silence gathered in the muxer made it ~100 ms later; a busy host moves it a few 5 ms steps.
+    const silence = silent.leadMs("silence", "opus", 0);
+    assert.ok(silence <= noise + 25, `silence plays at ${silence} ms, noise at ${noise} ms`);
   },
 );

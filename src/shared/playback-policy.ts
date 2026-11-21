@@ -2,25 +2,30 @@ import type { LiveSource } from "./live-input";
 import type { Action, Output, PlaybackControls, PlaybackSummary } from "./protocol";
 
 // Delivery is a Core decision. A split picture/speaker needs a clock even with
-// one speaker; timestamped captures retain their deadlines with one receiver.
+// one speaker. Live keeps its deadlines with one receiver. A relaxed timestamped
+// capture plays directly on one device through the forwarding relay, when it can
+// carry it (forwarding), and in step on more.
 export function playbackDelivery({
   source,
   outputs,
   inSync,
   mpv,
+  forwarding,
 }: {
   source?: LiveSource;
   outputs: Pick<Output, "deviceId" | "picture" | "sound">[];
   inSync?: boolean;
   mpv?: boolean;
+  forwarding?: boolean;
 }): NonNullable<PlaybackSummary["delivery"]> {
   if (mpv) return "mpv";
-  if (source?.intent === "live" || (source?.audioDelivery === "pcm" && !source.video))
-    return "scheduled";
+  if (source?.intent === "live") return "scheduled";
   const spans =
     new Set(
       outputs.filter((output) => output.picture || output.sound).map((output) => output.deviceId),
     ).size > 1;
+  if (source?.audioDelivery === "pcm" && !source.video)
+    return spans || !forwarding ? "scheduled" : "webrtc";
   if (source) return spans && inSync ? "scheduled" : "webrtc";
   return spans ? "scheduled" : "direct";
 }

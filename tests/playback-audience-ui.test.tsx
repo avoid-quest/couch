@@ -68,6 +68,7 @@ mock.module("../src/client/useCouchHotkeys", () => ({
 }));
 const { PlaybackTransport, PlaybackVolume, LiveParticipation } =
   await import("../src/client/components/PlaybackTransport");
+const { PlayButton } = await import("@videojs/react");
 const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
@@ -95,7 +96,8 @@ function fixture(): ClientSessionState {
         id: "session",
         title: "Concert",
         liveSourceId: "source",
-        intent: "live",
+        mode: "live",
+        plays: "sound",
         delivery: "scheduled",
         status: "playing",
         outputs,
@@ -113,7 +115,13 @@ function fixture(): ClientSessionState {
       },
     ],
     queue: [
-      { id: "entry", title: "Concert", source: "live:source", liveSourceId: "source", live: true },
+      {
+        id: "entry",
+        title: "Concert",
+        source: "live:source",
+        liveSourceId: "source",
+        endless: true,
+      },
       { id: "next", title: "Next", source: "web:https://example.com/movie", duration: 300 },
     ],
     currentEntryId: "entry",
@@ -180,12 +188,11 @@ test("Play/Pause can pause a started programme while it buffers", async () => {
       player: { ...fixture().player, status, buffering: status === "loading" },
     };
     sent.length = 0;
-    const transport = buttons(PlaybackTransport({ state, connected: true, run }))[0]!;
-    expect(transport.props.disabled).toBe(false);
-    await transport.props.onClick!();
-    expect(sent).toEqual([
-      { type: "pause", playbackId: "load-generation", paused: status !== "paused" },
-    ]);
+    // Its press is CouchMedia's (couch-media.test.ts); here the slot must be enabled.
+    const play = elements(PlaybackTransport({ state, connected: true, run })).find(
+      (element) => element.type === PlayButton,
+    )!;
+    expect(play.props.disabled).toBe(false);
     read(() => KeyboardShortcuts({ open: false, onOpenChange() {}, openerRef: { current: null } }));
     for (const key of ["K", "Space"]) {
       const shortcut = shortcuts.find((item) => item.hotkey === key)!;

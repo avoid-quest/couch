@@ -1,6 +1,8 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
+import { utilityProcess } from "electron";
 import type {
   AudioCaptureFormat,
   LiveAudioAction,
@@ -8,8 +10,7 @@ import type {
   NativeBufferFrames,
   NativeChannelMap,
 } from "../src/shared/capture";
-import { isNativeChannelMap } from "../src/shared/audio-settings";
-import { prepareNativeCapture } from "./native-capture";
+import type { ReaderReply, ReaderRequest } from "./native-input-process";
 
 export async function nativeAudioInputs(executable?: string): Promise<NativeAudioInput[]> {
   if (!executable || !existsSync(executable)) return [];
@@ -42,7 +43,9 @@ export async function nativeAudioInputs(executable?: string): Promise<NativeAudi
   return inputs;
 }
 
-/** One already-authorized publication. Each upload gets a fresh sample generation. */
+/** One already-authorized publication, read in its own utility process
+ * (app/native-input-process.ts) so nothing that blocks Main stops its sound.
+ */
 export function nativeAudioInput(
   executable: string,
   input: NativeAudioInput,
@@ -51,137 +54,73 @@ export function nativeAudioInput(
   failed: (message: string, uploadId?: string) => void,
   signal: AbortSignal,
   setDeviceRate = false,
-  channelMap: NativeChannelMap = [0, 1],
+  channelMap?: NativeChannelMap,
 ) {
-  type Producer = Awaited<ReturnType<typeof prepareNativeCapture>>;
-  const lifetime = new AbortController();
-  const canceled = AbortSignal.any([signal, lifetime.signal]);
-  let producer: Producer | undefined,
-    opening: Promise<Producer> | undefined,
-    uploadId: string | undefined,
-    uploadUrl: string | undefined;
-  let muted = false,
-    stopped = false,
-    serial: Promise<unknown> = Promise.resolve();
-  const formatOf = (next: Producer): AudioCaptureFormat => ({
-    sampleRate: next.format.sampleRate,
-    channels: next.format.channels,
-    native: {
-      requestedFrames: bufferFrames,
-      reportedFrames: next.format.ownerHalBufferFrames,
-      inputLatencyMs: next.format.reportedInputLatencyMs,
-      inputChannels: input.channels,
-      channelMap: next.format.channelMap,
-    },
+  const child = utilityProcess.fork(join(import.meta.dirname, "native-input.mjs"), [], {
+    serviceName: "Couch audio input",
+    stdio: "pipe",
   });
-  const prepare = async (): Promise<AudioCaptureFormat> => {
-    if (stopped || signal.aborted) throw new Error("Audio capture was canceled.");
-    if (!isNativeChannelMap(channelMap, input.channels))
-      throw new Error("Choose an available channel or stereo pair for this native input.");
-    const child = spawn(
-      executable,
-      [
-        input.name,
-        input.uid,
-        String(sampleRate),
-        String(bufferFrames),
-        "0",
-        "--channels",
-        channelMap.map((channel) => channel + 1).join(","),
-        ...(setDeviceRate ? ["--set-rate"] : []),
-      ],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    );
-    const pending = (opening = prepareNativeCapture(
-      child,
-      { sampleRate, requestedCallbackFrames: bufferFrames, channelMap },
-      (error) => {
-        if (!stopped && !signal.aborted) failed(error.message, uploadId);
-      },
-      (event) => {
-        if (event.event === "end" || event.event === "ready")
-          console.info("Native audio capture", event);
-      },
-      canceled,
-    ));
-    try {
-      const next = await pending;
-      if (stopped || signal.aborted) {
-        await next.stop();
-        throw new Error("Audio capture was canceled.");
-      }
-      producer = next;
-      next.setMuted(muted);
-      return formatOf(next);
-    } finally {
-      if (opening === pending) opening = undefined;
+  child.stdout?.pipe(process.stdout, { end: false });
+  child.stderr?.pipe(process.stderr, { end: false });
+  const post = (message: ReaderRequest) => child.postMessage(message);
+  const waiting = new Map<
+    number,
+    { resolve(value?: AudioCaptureFormat): void; reject(error: Error): void }
+  >();
+  let nextRequest = 0,
+    exited = false,
+    stopping = false;
+  const exit = new Promise<void>((resolve) =>
+    child.once("exit", () => {
+      exited = true;
+      for (const entry of waiting.values()) entry.reject(new Error("The audio input stopped."));
+      waiting.clear();
+      if (!stopping && !signal.aborted) failed("The audio input stopped.");
+      resolve();
+    }),
+  );
+  child.on("message", (message: ReaderReply) => {
+    if (message.type === "failed") {
+      if (!stopping && !signal.aborted) failed(message.message, message.uploadId);
+      return;
     }
-  };
-  const stopUpload = async () => {
-    uploadId = uploadUrl = undefined;
-    const old = producer;
-    producer = undefined;
-    await old?.stop();
-  };
+    const entry = waiting.get(message.request);
+    if (!entry) return;
+    waiting.delete(message.request);
+    if (message.error === undefined) entry.resolve(message.value);
+    else entry.reject(new Error(message.error));
+  });
+  const request = (
+    call: { type: "prepare" } | { type: "stop" } | { type: "command"; action: LiveAudioAction },
+  ) =>
+    new Promise<AudioCaptureFormat | undefined>((resolve, reject) => {
+      if (exited) return reject(new Error("The audio input stopped."));
+      const id = nextRequest++;
+      waiting.set(id, { resolve, reject });
+      post({ ...call, request: id });
+    });
+  post({ type: "open", executable, input, sampleRate, bufferFrames, setDeviceRate, channelMap });
+  signal.addEventListener(
+    "abort",
+    () => {
+      if (!exited) post({ type: "abort" });
+    },
+    { once: true },
+  );
   return {
-    prepare,
+    prepare: () => request({ type: "prepare" }),
     async stop() {
-      stopped = true;
-      lifetime.abort();
-      const pending = opening;
-      await stopUpload();
-      if (pending)
-        await pending.then(
-          (value) => value.stop(),
-          () => {},
-        );
+      stopping = true;
+      // The reader stops its helper within 4 s (SIGTERM after 2 s, SIGKILL 2 s later); one that
+      // doesn't answer by then is killed with it, so a stuck reader can't hold the next share.
+      if (!exited)
+        await Promise.race([
+          request({ type: "stop" }).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
+      child.kill();
+      await exit;
     },
-    command(action: LiveAudioAction): Promise<AudioCaptureFormat | undefined> {
-      const next = serial.then(async () => {
-        if (stopped || signal.aborted) throw new Error("Audio capture was canceled.");
-        if (action.op === "upload") {
-          if (uploadId) throw new Error("This native input already has an upload.");
-          if (!producer) await prepare();
-          uploadId = action.uploadId;
-          uploadUrl = action.url;
-          try {
-            await producer!.upload(action.url);
-          } catch (error) {
-            await stopUpload();
-            throw error;
-          }
-          return formatOf(producer!);
-        } else if (action.op === "buffer" || action.op === "channels") {
-          if (action.op === "channels" && !isNativeChannelMap(action.channelMap, input.channels))
-            throw new Error("Choose an available channel or stereo pair for this native input.");
-          // Stream settings belong to one helper; replacing it starts a new sample generation.
-          const resume = uploadId,
-            url = uploadUrl,
-            old = producer;
-          producer = undefined;
-          if (action.op === "buffer") bufferFrames = action.bufferFrames;
-          else channelMap = [...action.channelMap];
-          await old?.stop();
-          const format = await prepare();
-          if (resume && url && uploadId === resume) {
-            try {
-              await producer!.upload(url);
-            } catch (error) {
-              await stopUpload();
-              throw error;
-            }
-            return formatOf(producer!);
-          }
-          return format;
-        } else if (action.op === "stop-upload" && uploadId === action.uploadId) await stopUpload();
-        else if (action.op === "mute") {
-          muted = action.muted;
-          producer?.setMuted(muted);
-        }
-        return undefined;
-      });
-      serial = next.catch(() => {});
-      return next;
-    },
+    command: (action: LiveAudioAction) => request({ type: "command", action }),
   };
 }

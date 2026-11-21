@@ -13,7 +13,8 @@ const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]'
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
 let adjusting: HTMLElement | null = null;
-function adjust(fader: HTMLElement | null) {
+/** Hands a TV fader the keys along it, as OK does; null hands them back. */
+export function adjust(fader: HTMLElement | null) {
   adjusting?.removeAttribute("data-adjusting");
   adjusting = fader;
   fader?.setAttribute("data-adjusting", "");
@@ -238,10 +239,12 @@ function sendKey(target: HTMLElement, key: string) {
 
 // Home and Info change the TV's screen/overlay state in App. Other keys act on
 // its real DOM, including Radix portals, without changing a controller's page.
-export function applyTvNavigation(key: NavigationKey) {
+// A phone's Remote (remote) can't reach what is only the TV's own; a game controller, the TV's own input, can.
+export function applyTvNavigation(key: NavigationKey, remote = true) {
   if (key === "home" || key === "info") return false;
   // A nested Radix portal can aria-hide its parent dialog without closing it.
   if (
+    remote &&
     key !== "back" &&
     [...document.querySelectorAll<HTMLElement>(portals)].some(
       (element) => element.closest(localOnly) && rendered(element),
@@ -251,13 +254,15 @@ export function applyTvNavigation(key: NavigationKey) {
   // A held OK ("menu") opens a focused item's menu; on anything else it is OK.
   const ok = key === "select" || key === "menu";
   const previous = remoteNavigation;
-  remoteNavigation = true;
+  remoteNavigation = remote;
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
+    // Keys on the player with its controls hidden bring them back, except in Info over the picture, which has its own.
     if (
       key !== "back" &&
-      (scope.querySelector("[data-player-band=hidden]") ||
+      ((scope.querySelector("[data-player-band=hidden]") &&
+        !document.activeElement?.closest("[data-player-info]")) ||
         document.activeElement?.matches("[data-player-surface]"))
     ) {
       sendKey(
@@ -274,7 +279,7 @@ export function applyTvNavigation(key: NavigationKey) {
       visible(document.activeElement)
         ? document.activeElement
         : null;
-    if (key !== "back" && target?.closest(localOnly)) {
+    if (remote && key !== "back" && target?.closest(localOnly)) {
       if (ok) return true;
       const tablist = target.closest('[role="tablist"]');
       if (tablist && target.matches('[role="tab"]') && (key === "left" || key === "right")) {
@@ -378,6 +383,17 @@ export function useNavigation(onBack: () => void) {
           ?.closest('[role="radiogroup"]')
           ?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []),
       ].filter(visible);
+      // The Volume panel opens on its level (PlaybackTransport.tsx), so one Back closes it: Radix hears this Escape.
+      if (
+        event.key === "Escape" &&
+        fader &&
+        adjusting === fader &&
+        fader.closest("[data-volume]") &&
+        fader.closest('[data-slot="popover-content"]')
+      ) {
+        adjust(null);
+        return;
+      }
       if (fader && (event.key === "Enter" || (event.key === "Escape" && adjusting === fader)))
         adjust(adjusting === fader ? null : fader);
       else if (
@@ -433,7 +449,8 @@ export function useNavigation(onBack: () => void) {
       )
         return;
       event.preventDefault();
-      press = { target, hold: startHold(() => openItemMenu(target)) };
+      // The timer can fire after Couch lost focus, its keyup never coming.
+      press = { target, hold: startHold(() => document.hasFocus() && openItemMenu(target)) };
     };
     const okUp = (event: KeyboardEvent) => {
       if (event.key !== "Enter" || !press) return;

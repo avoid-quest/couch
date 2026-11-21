@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
@@ -12,7 +12,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -103,12 +102,12 @@ export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
 }
 
 /** The saved Live audio settings: Couch-wide, applied to every Live share and its listeners. */
-export function useLiveAudioSettings(enabled = true) {
+function useLiveAudioSettings() {
   const { credentials, connected } = useSessionGate();
   const client = useQueryClient();
   const query = useQuery({
     ...liveAudioSettingsQuery(credentials!),
-    enabled: enabled && !!credentials,
+    enabled: !!credentials,
   });
   // Saves carry only the changed field and merge it into the settings current when sent, so Try again can't
   // write back another admin's later change.
@@ -123,7 +122,7 @@ export function useLiveAudioSettings(enabled = true) {
   return { settings: query.data, save, query, connected };
 }
 
-export function LiveSettingsStatus({ live }: { live: ReturnType<typeof useLiveAudioSettings> }) {
+function LiveSettingsStatus({ live }: { live: ReturnType<typeof useLiveAudioSettings> }) {
   const { query, save, connected } = live;
   if (query.error || save.error)
     return (
@@ -158,74 +157,6 @@ export function LiveSettingsStatus({ live }: { live: ReturnType<typeof useLiveAu
             ? "Saving audio settings…"
             : ""}
     </p>
-  );
-}
-
-/** The floor for every listener's Sendspin buffer. Invalid edits stay visibly unsaved. */
-export function PlaybackBufferInput({
-  id,
-  live,
-  className,
-  disabled,
-}: {
-  id: string;
-  live: ReturnType<typeof useLiveAudioSettings>;
-  className?: string;
-  disabled?: boolean;
-}) {
-  const { settings, save } = live;
-  const [draft, setDraft] = useState<string | null>(null);
-  const [invalid, setInvalid] = useState(false);
-  useEffect(() => {
-    setDraft(null);
-    setInvalid(false);
-  }, [settings?.minBufferMs]);
-  const commit = (input: HTMLInputElement) => {
-    if (!settings || save.isPending) return;
-    const minBufferMs = input.valueAsNumber;
-    const valid =
-      input.validity.valid &&
-      Number.isInteger(minBufferMs) &&
-      minBufferMs >= 0 &&
-      minBufferMs <= 5000;
-    setInvalid(!valid);
-    if (valid && minBufferMs !== settings.minBufferMs) save.mutate({ minBufferMs });
-    else if (valid) setDraft(null);
-  };
-  return (
-    <div className={cn("grid w-44 max-w-full gap-1", className)}>
-      <Input
-        id={id}
-        type="number"
-        min={0}
-        max={5000}
-        step={1}
-        required
-        value={draft ?? settings?.minBufferMs ?? ""}
-        disabled={disabled || !live.connected || !settings}
-        readOnly={save.isPending}
-        aria-busy={save.isPending || undefined}
-        className="read-only:opacity-50"
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? `${id}-error` : undefined}
-        onChange={(event) => {
-          setDraft(event.currentTarget.value);
-          setInvalid(false);
-        }}
-        onBlur={(event) => commit(event.currentTarget)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit(event.currentTarget);
-          }
-        }}
-      />
-      {invalid && (
-        <p id={`${id}-error`} role="alert" className="text-meta text-destructive">
-          Enter a whole number from 0 to 5000.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -289,7 +220,7 @@ export function LiveSettings({
   sharing: LiveSharing;
   onCaptureChange?: () => void;
 }) {
-  const { liveSharing, setError, state } = useSessionGate();
+  const { liveSharing, setError } = useSessionGate();
   const live = useLiveAudioSettings();
   const { settings, save } = live;
   const nativeBuffer = useNativeInputBufferPreference();
@@ -297,11 +228,6 @@ export function LiveSettings({
   const [restarting, setRestarting] = useState(false);
   const [opened, setOpened] = useState<"capture" | "channels" | "codec" | null>(null);
   const native = sharing.captureFormat?.native;
-  // Only the playback carrying the shared lead reports it; other playbacks of this source may come first.
-  const lead = state?.playbacks?.find(
-    (playback) => playback.liveSourceId === sharing.source.id && playback.liveLead,
-  )?.liveLead;
-  const leadDevice = state?.devices?.find((device) => device.id === lead?.deviceId);
   return (
     <div className="grid gap-2 border-t pt-2">
       {native && (
@@ -388,20 +314,7 @@ export function LiveSettings({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <label htmlFor="live-buffer">Playback buffer floor (ms)</label>
-        <PlaybackBufferInput id="live-buffer" live={live} className="ml-auto" />
-      </div>
       <LiveSettingsStatus live={live} />
-      {lead?.deviceId && (
-        <p className="text-meta text-muted-foreground [overflow-wrap:anywhere]">
-          Shared lead: {lead.ms} ms · set by {leadDevice?.name ?? "a previous listener"}
-        </p>
-      )}
-      {/* Core keeps the largest lead a running share has used, so listeners never jump backwards mid-stream. */}
-      <p className="text-meta text-muted-foreground">
-        0 removes the floor. To reduce the shared lead, restart sharing.
-      </p>
     </div>
   );
 }

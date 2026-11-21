@@ -13,6 +13,8 @@ import type {
   ServerMessage,
   SessionState,
 } from "../src/shared/protocol";
+import { withState } from "./whole-state.fixture";
+import { liveFixture } from "./live-input.fixture";
 
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
@@ -55,7 +57,7 @@ test(
       await new Promise<void>((resolve, reject) => {
         socket.once("error", reject);
         socket.onmessage = (event) => {
-          const message = JSON.parse(String(event.data)) as ServerMessage;
+          const message = withState(socket, JSON.parse(String(event.data)) as ServerMessage);
           messages.push(message);
           if (message.type === "state") {
             state = message.state;
@@ -136,6 +138,124 @@ test(
       for (const socket of sockets) socket.terminate();
       await hub.close();
       rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+// Adding an output starts a new output generation; screens already showing the item keep playing.
+test("a playing screen stays Playing when another output joins", { timeout: 20_000 }, async () => {
+  const f = await liveFixture({ extraDevices: 1 });
+  try {
+    const tv = await f.connect(2, "&video=1&audio=1"),
+      laptop = await f.connect(3, "&video=1&audio=1");
+    await f.speaker(2);
+    await f.receiver.command({
+      type: "enqueue",
+      entry: { id: "film", title: "Film", source: `${f.hub.origin}/api/health` },
+      playNow: true,
+      deviceId: tv.id,
+    });
+    await until(() => !!tv.load());
+    tv.report();
+    await until(() => f.receiver.state.player.status === "playing");
+    const loads = tv.messages.length;
+    await f.receiver.command({ type: "output", deviceId: laptop.id, picture: true });
+    await until(() => !!laptop.load() && tv.messages.slice(loads).some((m) => m.type === "player"));
+    const states = () =>
+      Object.fromEntries((f.receiver.state.outputs ?? []).map((o) => [o.deviceId, o.state]));
+    const playing = () => states()[tv.id] === "playing" && states()[laptop.id] === "playing";
+    const report = setInterval(() => {
+      tv.report({ playbackId: tv.load()!.playbackId });
+      laptop.report({ playbackId: laptop.load()!.playbackId });
+    }, 100);
+    try {
+      await until(playing);
+      await f.speaker(1);
+      assert.equal(
+        (await f.receiver.command({ type: "output", deviceId: f.receiver.id, level: 50 })).ok,
+        true,
+      );
+      await until(() => states()[f.receiver.id] !== undefined);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      assert.deepEqual([states()[tv.id], states()[laptop.id]], ["playing", "playing"]);
+    } finally {
+      clearInterval(report);
+    }
+  } finally {
+    await f.close();
+  }
+});
+
+// Back to Direct, the TV's follower loses the group's clock and pauses its picture before its own
+// load arrives: the Playback still plays on as it did.
+test(
+  "a film playing on two screens plays on when one of them leaves",
+  { timeout: 20_000 },
+  async () => {
+    const f = await liveFixture({ extraDevices: 1 });
+    try {
+      const tv = await f.connect(2, "&video=1"),
+        laptop = await f.connect(3, "&video=1");
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "film", title: "Film", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: tv.id,
+      });
+      await until(() => !!tv.load());
+      tv.report();
+      await until(() => f.receiver.state.player.status === "playing");
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: true });
+      await until(
+        () => !!laptop.load() && !!f.receiver.state.playbacks?.some((p) => p.mode === "relaxed"),
+      );
+      const loads = tv.messages.length;
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: false });
+      tv.report({ playbackId: tv.load()!.playbackId, status: "paused", position: 12 });
+      await until(() =>
+        tv.messages.slice(loads).some((m) => m.type === "player" && m.command.type === "load"),
+      );
+      assert.notEqual(tv.load()!.paused, true);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+// Someone presses Pause on the TV while the film goes back to Direct and the TV confirms it before
+// its load: the reload keeps it paused, not the play the group had when the handover began.
+test(
+  "a Pause pressed while a film goes back to one screen holds",
+  { timeout: 20_000 },
+  async () => {
+    const f = await liveFixture({ extraDevices: 1 });
+    try {
+      const tv = await f.connect(2, "&video=1"),
+        laptop = await f.connect(3, "&video=1");
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "film", title: "Film", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: tv.id,
+      });
+      await until(() => !!tv.load());
+      tv.report();
+      await until(() => f.receiver.state.player.status === "playing");
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: true });
+      await until(
+        () => !!laptop.load() && !!f.receiver.state.playbacks?.some((p) => p.mode === "relaxed"),
+      );
+      const loads = tv.messages.length;
+      const { playbackId } = tv.load()!;
+      await f.receiver.command({ type: "output", deviceId: laptop.id, picture: false });
+      void tv.command({ type: "pause", playbackId, paused: true });
+      tv.report({ playbackId, status: "paused", position: 12 });
+      await until(() =>
+        tv.messages.slice(loads).some((m) => m.type === "player" && m.command.type === "load"),
+      );
+      assert.equal(tv.load()!.paused, true);
+    } finally {
+      await f.close();
     }
   },
 );

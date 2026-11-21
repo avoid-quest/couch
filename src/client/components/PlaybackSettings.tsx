@@ -3,6 +3,7 @@ import type { PlaybackControls } from "../../shared/protocol";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCaptionsOptions, usePlaybackRateOptions } from "@videojs/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -14,11 +15,7 @@ import type { WatchingProfile } from "../../shared/viewing";
 import type { Action, PlaybackPreferences as Preferences, QueueEntry } from "../../shared/protocol";
 import type { ClientPlayerState, Credentials } from "@/session/session";
 import { apiJson } from "@/api/client";
-import {
-  playbackDefault,
-  playbackSpeeds,
-  type PlaybackDefaultSetting,
-} from "../../shared/playback-default";
+import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
 import { supportsCurrentVideoQuality } from "../../shared/video-quality";
 import { videoQualityChoice, videoQualityLabels, videoQualityOptions } from "@/video-quality";
 
@@ -340,6 +337,9 @@ export function PlaybackMenu({
   const playbackClock = usePlaybackClock();
   const { disabled, idle, command, saveDefault, messages } = usePlaybackCommands(props);
   const [view, setView] = useState<View | null>(null);
+  // Subtitles and Speed are Video.js's own choices on CouchPlayer's media, which sends them to Core.
+  const captions = useCaptionsOptions({ disabled });
+  const rate = usePlaybackRateOptions({ disabled: idle, formatRate: speedLabel });
   const content = useRef<HTMLDivElement>(null);
   const opener = useRef<View | null>(null);
   // A submenu lands on its chosen value, as a menu's open state does; Back lands on the row that opened it.
@@ -355,26 +355,24 @@ export function PlaybackMenu({
   const tracks = player.tracks ?? [];
   const audio = tracks.filter((track) => track.kind === "audio");
   const subtitles = tracks.filter((track) => track.kind === "subtitle");
-  const subtitle = subtitles.find((track) => track.selected);
   const audioTrack = audio.find((track) => track.selected);
-  const select = (kind: "audio" | "subtitle", index: number) =>
-    command((playbackId) => ({ type: "track", playbackId, kind, index }));
+  const selectAudio = (index: number) =>
+    command((playbackId) => ({ type: "track", playbackId, kind: "audio", index }));
   const chapters = player.chapters ?? [];
   const chapterIndex = chapters.findLastIndex(
     (chapter) => chapter.position <= playbackClock.position,
   );
   const qualityAvailable = supportsCurrentVideoQuality(entry, player);
-  const speeds = [...new Set([...playbackSpeeds, player.speed ?? 1])].sort((a, b) => a - b);
   // Audio is a choice only with more than one track, as YouTube's Audio track row.
   const rows: { view: View; value: string }[] = [
     ...(controls.programme && showTracks
-      ? [{ view: "subtitles" as const, value: subtitle ? trackLabel(subtitle, "Subtitle") : "Off" }]
+      ? [{ view: "subtitles" as const, value: captions?.selectedLabel ?? "Off" }]
       : []),
     ...(controls.programme && showTracks && audio.length > 1
       ? [{ view: "audio" as const, value: audioTrack ? trackLabel(audioTrack, "Audio") : "" }]
       : []),
-    ...(controls.speed && player.seekable && !entry?.live
-      ? [{ view: "speed" as const, value: speedLabel(player.speed ?? 1) }]
+    ...(controls.speed && player.seekable && !entry?.endless
+      ? [{ view: "speed" as const, value: rate?.selectedLabel ?? speedLabel(player.speed ?? 1) }]
       : []),
     ...(controls.programme && qualityAvailable
       ? [{ view: "quality" as const, value: videoQualityLabels[entry?.quality ?? "auto"] }]
@@ -397,20 +395,17 @@ export function PlaybackMenu({
   const body =
     permittedView === "subtitles" ? (
       <>
-        {subtitles.length ? (
+        {captions?.state.availability === "available" ? (
           <ChoiceGroup
             label="Subtitles"
             orientation="vertical"
-            disabled={disabled}
-            value={String(subtitle?.index ?? -1)}
-            onValueChange={(value) => select("subtitle", Number(value))}
-            options={[
-              { value: "-1", label: "Off" },
-              ...subtitles.map((track) => ({
-                value: String(track.index),
-                label: <span className="truncate">{trackLabel(track, "Subtitle")}</span>,
-              })),
-            ]}
+            disabled={captions.disabled}
+            value={captions.value}
+            onValueChange={captions.setValue}
+            options={captions.options.map((option) => ({
+              value: option.value,
+              label: <span className="truncate">{option.label}</span>,
+            }))}
           />
         ) : (
           <p className="py-2 text-muted-foreground">None in this video</p>
@@ -446,7 +441,7 @@ export function PlaybackMenu({
           orientation="vertical"
           disabled={disabled}
           value={String(audioTrack?.index ?? "")}
-          onValueChange={(value) => select("audio", Number(value))}
+          onValueChange={(value) => selectAudio(Number(value))}
           options={audio.map((track) => ({
             value: String(track.index),
             label: <span className="truncate">{trackLabel(track, "Audio")}</span>,
@@ -456,16 +451,16 @@ export function PlaybackMenu({
       </>
     ) : permittedView === "speed" ? (
       <>
-        <ChoiceGroup
-          label="Speed"
-          orientation="vertical"
-          disabled={idle}
-          value={String(player.speed ?? 1)}
-          onValueChange={(value) =>
-            command((playbackId) => ({ type: "speed", playbackId, speed: Number(value) }))
-          }
-          options={speeds.map((speed) => ({ value: String(speed), label: speedLabel(speed) }))}
-        />
+        {rate && (
+          <ChoiceGroup
+            label="Speed"
+            orientation="vertical"
+            disabled={rate.disabled}
+            value={rate.value}
+            onValueChange={rate.setValue}
+            options={rate.options.map((option) => ({ value: option.value, label: option.label }))}
+          />
+        )}
         {saveDefault("speed", "speed")}
       </>
     ) : permittedView === "quality" ? (

@@ -29,7 +29,7 @@ export function supportsCurrentVideoQuality(
     !!player.playbackId &&
     (["playing", "paused"].includes(player.status) ||
       (player.status === "loading" && player.buffering === true)) &&
-    (entry.live === true || player.seekable) &&
+    (entry.endless === true || player.seekable) &&
     (!player.tracks?.length || player.tracks.some((track) => track.kind === "video"))
   );
 }

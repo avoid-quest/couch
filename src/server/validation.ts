@@ -5,6 +5,7 @@ import type {
 } from "../shared/live-input";
 import type {
   Action,
+  BehindMessage,
   ClientMessage,
   MediaTrack,
   PlayerState,
@@ -414,6 +415,23 @@ export function parseLiveUploadFailed(message: string): LiveUploadFailedMessage 
   };
 }
 
+export function parseBehind(message: string): BehindMessage | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(message);
+  } catch {
+    return null;
+  }
+  if (
+    !object(value) ||
+    value.type !== "behind" ||
+    typeof value.picture !== "boolean" ||
+    typeof value.sound !== "boolean"
+  )
+    return null;
+  return { type: "behind", picture: value.picture, sound: value.sound };
+}
+
 const finite = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const playerStatuses = ["idle", "loading", "playing", "paused", "ended", "error"];
@@ -592,7 +610,7 @@ export function parseCommand(message: string): ClientMessage {
       ...guard,
       action: {
         type: "enqueue",
-        entry: { id, title, source, ...(kind ? { kind, live: true } : {}) },
+        entry: { id, title, source, ...(kind ? { kind, endless: true } : {}) },
         ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }),
         ...(value.action.placement === undefined ? {} : { placement: value.action.placement }),
         ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }),
