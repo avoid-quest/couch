@@ -772,26 +772,33 @@ export function PlaysOnLine({
   children?: ReactNode;
   compact?: boolean;
 }) {
-  if (!at?.elsewhere) return <>{children}</>;
+  // The same elements with or without where it plays, so a focused link survives another device joining.
+  const shown = !!at?.elsewhere;
   return (
     <div
       className={
-        compact
-          ? "flex min-w-0 items-center gap-x-2"
-          : "flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"
+        !shown
+          ? "contents"
+          : compact
+            ? "flex min-w-0 items-center gap-x-2"
+            : "flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"
       }
     >
       <div
         className={
-          compact ? "flex min-w-0 items-center gap-x-2 overflow-x-clip empty:hidden" : "contents"
+          shown && compact
+            ? "flex min-w-0 items-center gap-x-2 overflow-x-clip empty:hidden"
+            : "contents"
         }
       >
         {children}
       </div>
-      <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
-        <span className="truncate">on {at.name}</span>
-        {!!at.more && <span className="shrink-0">+{at.more}</span>}
-      </span>
+      {at?.elsewhere && (
+        <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
+          <span className="truncate">on {at.name}</span>
+          {!!at.more && <span className="shrink-0">+{at.more}</span>}
+        </span>
+      )}
     </div>
   );
 }
