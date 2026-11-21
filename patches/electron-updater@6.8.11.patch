@@ -1,5 +1,33 @@
+diff --git a/out/BaseUpdater.js b/out/BaseUpdater.js
+index f7c2965929a773ff54ac3124eec7a023e13ef1c9..5b18c3b308b530dad03cb649734e0af77e044229 100644
+--- a/out/BaseUpdater.js
++++ b/out/BaseUpdater.js
+@@ -126,7 +126,7 @@ class BaseUpdater extends AppUpdater_1.AppUpdater {
+      */
+     // https://github.com/electron-userland/electron-builder/issues/1129
+     // Node 8 sends errors: https://nodejs.org/dist/latest-v8.x/docs/api/errors.html#errors_common_system_errors
+-    async spawnLog(cmd, args = [], env = undefined, stdio = "ignore") {
++    async spawnLog(cmd, args = [], env = undefined, stdio = "ignore", waitForExit = false) {
+         this._logger.info(`Executing: ${cmd} with args: ${args}`);
+         return new Promise((resolve, reject) => {
+             try {
+@@ -136,7 +136,13 @@ class BaseUpdater extends AppUpdater_1.AppUpdater {
+                     reject(error);
+                 });
+                 p.unref();
+-                if (p.pid !== undefined) {
++                if (waitForExit) {
++                    p.once("exit", (code, signal) => {
++                        if (code === 0) resolve(true);
++                        else reject(new Error(`Windows elevation helper failed to start the installer (${signal || code}).`));
++                    });
++                }
++                else if (p.pid !== undefined) {
+                     resolve(true);
+                 }
+             }
 diff --git a/out/NsisUpdater.js b/out/NsisUpdater.js
-index 6fb70b4275a59741d28aecc389c2736909130a3e..7215d4b0328475f3aa75087b68bf9e85b75cb58c 100644
+index 6fb70b4275a59741d28aecc389c2736909130a3e..3e4d23a294a03cbfe613bc2f7315242f4eaf361e 100644
 --- a/out/NsisUpdater.js
 +++ b/out/NsisUpdater.js
 @@ -15,6 +15,26 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
@@ -29,12 +57,13 @@ index 6fb70b4275a59741d28aecc389c2736909130a3e..7215d4b0328475f3aa75087b68bf9e85
      /**
       * The verifyUpdateCodeSignature. You can pass [win-verify-signature](https://github.com/beyondkmp/win-verify-trust) or another custom verify function: ` (publisherName: string[], path: string) => Promise<string | null>`.
       * The default verify function uses [windowsExecutableCodeSignatureVerifier](https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/windowsExecutableCodeSignatureVerifier.ts)
-@@ -121,29 +141,36 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
+@@ -121,29 +141,37 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
              args.push(`--package-file=${packagePath}`);
          }
          const callUsingElevation = () => {
 -            this.spawnLog(path.join(process.resourcesPath, "elevate.exe"), [installerPath].concat(args)).catch(e => this.dispatchError(e));
-+            return this.spawnLog(path.join(process.resourcesPath, "elevate.exe"), [installerPath].concat(args));
++            // Without -wait, elevate exits once Windows accepts or rejects the launch.
++            return this.spawnLog(path.join(process.resourcesPath, "elevate.exe"), [installerPath].concat(args), undefined, "ignore", true);
          };
 -        if (options.isAdminRightsRequired) {
 -            this._logger.info("isAdminRightsRequired is set to true, run installer using elevate.exe");

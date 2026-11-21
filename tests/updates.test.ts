@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
+import childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -122,7 +123,7 @@ afterEach(() => {
 });
 
 // Exercise electron-updater's actual NSIS launch and quit logic on any host.
-const windows = async (spawn: (command: string, args: string[]) => Promise<boolean>) => {
+const windows = async (spawn?: (command: string, args: string[]) => Promise<boolean>) => {
   Object.defineProperty(process, "resourcesPath", { configurable: true, value: temporary });
   let quits = 0;
   const quitting = Promise.withResolvers<void>();
@@ -151,7 +152,7 @@ const windows = async (spawn: (command: string, args: string[]) => Promise<boole
       windowsUpdater!.emit("update-downloaded", { version: available });
       return [];
     },
-    spawnLog: spawn,
+    ...(spawn && { spawnLog: spawn }),
   });
   const updates = start();
   available = "0.3.1";
@@ -195,6 +196,32 @@ test.each(["UNKNOWN", "EACCES"])(
     }
   },
 );
+
+test("a Windows elevation helper must accept the installer before Couch quits", async () => {
+  const { updates, quits, quitting } = await windows();
+  const spawn = childProcess.spawn;
+  let exitCode = 1;
+  const launcher = spyOn(childProcess, "spawn").mockImplementation((command, args, options) => {
+    if (command !== join(temporary, "elevate.exe"))
+      throw Object.assign(new Error("Permission required"), { code: "EACCES" });
+    expect(args).toEqual([join(temporary, "installer.exe"), "--updated", "/S", "--force-run"]);
+    return spawn(process.execPath, ["-e", `process.exit(${exitCode})`], options);
+  });
+  try {
+    const failed = new Promise<void>((resolve) => windowsUpdater!.once("error", () => resolve()));
+    await updates.action({ op: "install", version: "0.3.1" });
+    await Promise.race([failed, quitting]);
+    expect(quits()).toBe(0);
+    expect(updates.state().status).toBe("ready");
+    expect(updates.state().error).toContain("Couldn't install");
+    exitCode = 0;
+    await updates.action({ op: "install", version: "0.3.1" });
+    await quitting;
+    expect(quits()).toBe(1);
+  } finally {
+    launcher.mockRestore();
+  }
+});
 
 test("a Windows shell launch error does not quit Couch or strand Installing", async () => {
   shellError = "No application could open the installer";
