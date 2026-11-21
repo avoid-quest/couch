@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runHelperScript } from "./helper-script.fixture";
 import { createForwarder } from "../src/server/live-forward";
 
 const directories: string[] = [];
@@ -14,12 +15,11 @@ afterEach(() => {
 const helper = () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-forward-"));
   directories.push(directory);
-  const executable = join(directory, "couch-relay");
+  const executable = join(directory, "couch-relay.cjs");
   const log = join(directory, "commands");
   writeFileSync(
     executable,
-    `#!${process.execPath}
-const { appendFileSync } = require("node:fs");
+    `const { appendFileSync } = require("node:fs");
 require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
   appendFileSync(${JSON.stringify(log)}, line + "\\n");
   const command = JSON.parse(line);
@@ -28,7 +28,6 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
 });
 `,
   );
-  chmodSync(executable, 0o755);
   const commands = () =>
     existsSync(log)
       ? readFileSync(log, "utf8")
@@ -41,6 +40,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
 
 test("a peer the helper fails is closed in the helper when Core drops it", async () => {
   const { executable, commands } = helper();
+  using _script = runHelperScript(executable);
   const failed: string[] = [];
   const forwarder = createForwarder({
     executable,

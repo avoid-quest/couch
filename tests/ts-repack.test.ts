@@ -1,29 +1,34 @@
 import { afterEach, expect, mock, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runHelperScript } from "./helper-script.fixture";
 
 const directory = mkdtempSync(join(tmpdir(), "couch-ts-repack-test-"));
-const pidFile = join(directory, "ffmpeg.pid");
+const startedFile = join(directory, "started.json");
+const childInfo = () =>
+  JSON.parse(readFileSync(startedFile, "utf8")) as { pid: number; cwd: string };
 // An FFmpeg that never lists a segment, as when a channel doesn't answer.
-const ffmpeg = join(directory, "ffmpeg");
+const ffmpeg = join(directory, "ffmpeg.cjs");
 writeFileSync(
   ffmpeg,
-  `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`,
-  { mode: 0o755 },
+  `const fs = require("node:fs");
+const file = ${JSON.stringify(startedFile)};
+fs.writeFileSync(file + ".tmp", JSON.stringify({ pid: process.pid, cwd: process.cwd() }));
+fs.renameSync(file + ".tmp", file);
+setInterval(() => {}, 1000);
+`,
 );
 mock.module("../src/server/helpers", () => ({
   useHelper: async () => ({ path: ffmpeg, release() {} }),
 }));
 const { createRepacks } = await import("../src/server/ts-repack");
 
-const previousTemp = process.env.TMPDIR;
-process.env.TMPDIR = directory;
 afterEach(() => {
-  if (existsSync(pidFile) && alive(Number(readFileSync(pidFile, "utf8"))))
-    process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
-  if (previousTemp === undefined) delete process.env.TMPDIR;
-  else process.env.TMPDIR = previousTemp;
+  if (existsSync(startedFile)) {
+    const { pid } = childInfo();
+    if (alive(pid)) process.kill(pid, "SIGKILL");
+  }
   rmSync(directory, { recursive: true, force: true });
 });
 
@@ -41,17 +46,17 @@ const until = async (predicate: () => boolean) => {
 };
 
 test("a load that stops waiting for its playlist stops FFmpeg and removes its folder", async () => {
+  using _script = runHelperScript(ffmpeg);
   const repacks = createRepacks(() => true);
   const controller = new AbortController();
   const playlist = repacks.playlist("load", "http://127.0.0.1:9/channel.ts", controller.signal);
   playlist.catch(() => {});
-  expect(await until(() => existsSync(pidFile))).toBe(true);
-  const pid = Number(readFileSync(pidFile, "utf8"));
+  expect(await until(() => existsSync(startedFile))).toBe(true);
+  const { pid, cwd } = childInfo();
+  expect(existsSync(cwd)).toBe(true);
   controller.abort(new Error("Playback changed."));
   await expect(playlist).rejects.toThrow("Playback changed.");
   expect(await until(() => !alive(pid))).toBe(true);
-  expect(
-    await until(() => !readdirSync(directory).some((name) => name.startsWith("couch-ts-repack-"))),
-  ).toBe(true);
+  expect(await until(() => !existsSync(cwd))).toBe(true);
   await repacks.close();
 });
