@@ -131,6 +131,19 @@ export function createSession(
   // Play and Pause presses so far: a handover's captured play or pause holds only if none came since.
   let pauses = 0;
   let pendingSeek: { playbackId: string; position: number; from: number } | null = null;
+  // changed: Up next moved since Stop, so Undo no longer applies, but the Playback is still held for other Undos.
+  let stopped:
+    | {
+        entryId: string;
+        player: PlayerState;
+        timer: ReturnType<typeof setTimeout>;
+        changed?: true;
+      }
+    | undefined;
+  const forgetStop = () => {
+    clearTimeout(stopped?.timer);
+    stopped = undefined;
+  };
   let webRetried = false;
   let quiescing = false;
   let continuation = store.playbackContinuation();
@@ -273,6 +286,12 @@ export function createSession(
     const cursorEntryId =
       state.queue.slice(0, cursor + 1).findLast((entry) => retained.has(entry.id))?.id ?? null;
     store.saveQueue(queue, cursorEntryId);
+    if (
+      stopped &&
+      (queue.length !== state.queue.length ||
+        queue.some((entry, i) => entry.id !== state.queue[i]!.id))
+    )
+      stopped.changed = true;
     state.queue = queue;
     state.queueRemoval = undefined;
     state.queueCursorEntryId = cursorEntryId;
@@ -657,7 +676,7 @@ export function createSession(
   const play = (
     entryId: string,
     fromStart = false,
-    reason: "play" | "next" | "retry" = "play",
+    reason: "play" | "next" | "retry" | "undoStop" = "play",
     authorize = () => {},
     playedBy?: PlaybackActor,
     selectedEntryIds: string[] = [],
@@ -726,7 +745,9 @@ export function createSession(
     const preferences = { ...state.preferences!.profile };
     state.playedBy = undefined;
     state.currentEntryId = entry.id;
-    state.presentationId = reason === "play" ? playbackId : null;
+    const resume = reason === "undoStop" ? stopped?.player : undefined;
+    forgetStop();
+    state.presentationId = reason === "play" || reason === "undoStop" ? playbackId : null;
     state.player = {
       ...state.player,
       playbackId,
@@ -809,6 +830,8 @@ export function createSession(
           type: "load",
           playbackId,
           ...media,
+          ...(resume?.seekable ? { startPosition: resume.position } : {}),
+          ...(resume?.status === "paused" ? { paused: true } : {}),
           ...(isRadio(currentEntry) ? { radio: true } : {}),
           preferences: { ...preferences, ...state.preferences!.device },
         });
@@ -950,6 +973,7 @@ export function createSession(
     });
   };
   const stop = () => {
+    forgetStop();
     try {
       store.savePlaybackContinuation(null);
     } catch {
@@ -1033,6 +1057,7 @@ export function createSession(
   };
   const end = (required: boolean) => {
     quiescing = true;
+    forgetStop();
     cancelContinuation();
     playIntent++;
     cancelRadioRetry();
@@ -1296,6 +1321,9 @@ export function createSession(
     },
     get pauses() {
       return pauses;
+    },
+    get stoppedId() {
+      return stopped?.player.playbackId;
     },
     get state() {
       return structuredClone(state);
@@ -1628,10 +1656,26 @@ export function createSession(
           currentPlayback(action.playbackId);
           next(authorize, playedBy);
           break;
-        case "stop":
+        case "stop": {
           if (action.playbackId !== undefined) currentPlayback(action.playbackId);
+          const { currentEntryId, player } = state;
           stop();
+          if (currentEntryId && player.playbackId) {
+            // Keep the Playback past Stop so the controller's six-second Undo can reach it.
+            const timer = setTimeout(() => {
+              stopped = undefined;
+              broadcast();
+            }, 10_000).unref();
+            stopped = { entryId: currentEntryId, player, timer };
+          }
           break;
+        }
+        case "undoStop": {
+          if (!stopped || stopped.changed || stopped.player.playbackId !== action.stoppedId)
+            throw new Error("Up next or playback changed. Try again.");
+          play(stopped.entryId, false, "undoStop", authorize, playedBy);
+          break;
+        }
         case "enqueueRadio":
         case "enqueueWeb":
           throw new Error("Resolve this catalog item before adding it to the queue.");

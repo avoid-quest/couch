@@ -174,7 +174,7 @@ export function playsOn(state: Outputs) {
 }
 
 /** Whether this Device shows the looked-at Playback's picture. */
-export const showsPicture = (state: Outputs) =>
+export const showsPicture = (state: Pick<SessionState, "outputs"> | null | undefined) =>
   !!state?.outputs?.some((output) => output.deviceId === deviceId() && output.picture);
 
 /**

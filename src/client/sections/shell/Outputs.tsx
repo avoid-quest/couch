@@ -41,7 +41,7 @@ import { livePlayback } from "@/session/playback-controls";
 import { cn } from "@/lib/utils";
 import { Level } from "@/components/Level";
 import { sounding } from "@/playback-status";
-import { deviceId, type playsOn } from "@/session/device-id";
+import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
@@ -761,37 +761,6 @@ function Options({ id, sync, children }: { id: string; sync?: string; children?:
 /** A disabled menu item's one-word reason, at its end. */
 const Why = ({ reason }: Control) =>
   reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
-
-/**
- * "on {name} +N": where the controlled Playback plays when that isn't only this Device. The now-playing bar and the
- * player say it the same way: first under the title, so it reads on from it, in the ink, not the muted metadata.
- */
-export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return (
-    <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
-      <span className="truncate">on {at.name}</span>
-      {!!at.more && <span className="shrink-0">+{at.more}</span>}
-    </span>
-  );
-}
-
-/** Where it plays, then where it comes from (its links), as one line: the player's summary and Home's Stage say it alike. */
-export function PlaysOnLine({
-  at,
-  children,
-}: {
-  at: ReturnType<typeof playsOn>;
-  children?: ReactNode;
-}) {
-  return at?.elsewhere ? (
-    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm">
-      <PlaysOn at={at} />
-      {children}
-    </div>
-  ) : (
-    <>{children}</>
-  );
-}
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:
 // Sendspin's static delay, 0–500 ms, to the picture too where another device shows one. It applies only while the

@@ -46,7 +46,8 @@ import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn, showsPicture } from "@/session/device-id";
-import { PlaysOnLine, WhereItPlays } from "@/sections/shell/Outputs";
+import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
+import { WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
@@ -772,8 +773,10 @@ export function PlayerPage({
             </div>
             {(byline || context) && (
               <div className="col-start-2 col-end-4 flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
-                {byline && <p className="min-w-0 truncate">{byline}</p>}
-                {context}
+                <PlaysOnLine at={at} overPicture>
+                  {byline && <p className="min-w-0 truncate">{byline}</p>}
+                  {context}
+                </PlaysOnLine>
               </div>
             )}
           </div>
@@ -802,13 +805,14 @@ export function PlayerPage({
                     {linkedTitle}
                   </h1>
                 )}
-                {livePlayback(state) && current.subtitle && (
-                  <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
-                    {current.subtitle}
-                  </p>
-                )}
-                {/* Where it plays leads the line under the title, as in the now-playing bar. */}
-                <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
+                <PlaysOnLine at={at}>
+                  {livePlayback(state) && current.subtitle && (
+                    <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
+                      {current.subtitle}
+                    </p>
+                  )}
+                  {copyContext}
+                </PlaysOnLine>
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
                 )}

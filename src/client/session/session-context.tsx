@@ -424,7 +424,13 @@ export function SessionGate({
             targetDeviceId,
           );
         } else {
-          await command(action, targetDeviceId);
+          // Bind Stop and its Undo to the same item if another controller advances the queue.
+          const stoppedId =
+            action.type === "stop" && (action.playbackId ?? before?.player.playbackId);
+          await command(
+            stoppedId ? { type: "stop", playbackId: stoppedId } : action,
+            targetDeviceId,
+          );
           if (
             current() &&
             (((action.type === "enqueue" ||

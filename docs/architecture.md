@@ -37,6 +37,7 @@ localhost page only), the interface size and TV presentation.
   in the app, origin storage in a browser), and Core accepts changes only from
   that device's own connection. Core rechecks consent after resolving a source
   and before an mpv fallback. Sharing never grants update or restart rights.
+  A window sees a Playback's title only while its Device may control that Playback.
 
 ## LAN and certificates
 
@@ -55,8 +56,15 @@ Playback is a queue, current item, position, pause, speed and tracks, plus its
 outputs: each Device's `Output { picture, sound }`. A Device's outputs serve one
 Playback at a time.
 
-- Each controller looks at the Playback its selected Device serves. Core keeps
-  that choice in memory; a restart restores queues without outputs.
+- Each controller looks at the Playback its selected Device serves. When that
+  Playback stops or ends, Core moves the controller to the Playback running on
+  its own Device, else the newest running Playback it may control, else the
+  usual idle selection. A controller with nothing selected looks at a Playback
+  waiting for a Device, else the newest running one it may control; TVs keep to
+  their own. Remote and its Up next select the TV only while open:
+  leaving them or disconnecting restores the previous Playback when it still
+  runs and may be controlled, else the same fallback. A restart restores queues
+  without outputs.
 - **Play on** a Device isolates that Device; ordinary Play keeps the current mix.
   Move here (`solo`) is refused, changing nothing, while another device's private
   output would stay behind.

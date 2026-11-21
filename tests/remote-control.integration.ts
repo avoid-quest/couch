@@ -118,7 +118,7 @@ async function fixture() {
 }
 
 test(
-  "Remote selects a joined TV without output consent and keeps target through idle reconnect",
+  "Remote selects a joined TV without output consent and can rebind after reconnect",
   { timeout: 10000 },
   async () => {
     const f = await fixture();
@@ -165,7 +165,9 @@ test(
       f.phone.socket.terminate();
       await until(() => f.phone.socket.readyState === WebSocket.CLOSED);
       const returned = await f.connect(f.phoneToken, phoneId);
-      assert.equal(returned.state.controlling, tvId);
+      assert.equal(returned.state.controlling, hostId);
+      assert.equal((await returned.command({ type: "control", deviceId: tvId })).ok, true);
+      await until(() => returned.state.controlling === tvId);
       f.tv.socket.terminate();
       await until(
         () => returned.state.devices?.find((device) => device.id === tvId)?.online === false,

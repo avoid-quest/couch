@@ -90,6 +90,14 @@ test(
       );
       await command({ type: "play", entryId: "film" });
       await until(() => state!.currentEntryId === "film");
+      // Removing the stopped item keeps the Playback for Remove's own Undo.
+      await command({ type: "stop" });
+      await command({ type: "remove", entryId: "film" });
+      await until(() => !!state!.queueRemoval);
+      await command({ type: "restoreRemoved", token: state!.queueRemoval!.token });
+      await until(() => state!.queue.some((entry) => entry.id === "film"));
+      await command({ type: "play", entryId: "film" });
+      await until(() => state!.currentEntryId === "film");
       // A Stop nobody undoes still ends the Playback.
       await command({ type: "stop" });
       await until(() => state!.queue.length === 0 && !state!.playback, 15_000);

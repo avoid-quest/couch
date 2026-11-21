@@ -134,7 +134,11 @@ export type Output = {
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
 export type PlaybackSummary = {
   id: string;
-  title: string | null;
+  title?: string | null;
+  thumbnail?: string;
+  running?: true;
+  // This window may not control this Playback, so its title, artwork and source are left out.
+  private?: true;
   status: PlayerState["status"];
   outputs: Output[];
   hostOnly?: boolean;
@@ -229,7 +233,7 @@ export type SessionState = {
   systemAudio?: SoundRouteState;
 };
 
-// What every window shares, whichever Playback it looks at.
+// The Couch as this window sees it, whichever Playback it looks at.
 type CouchState = Pick<
   SessionState,
   | "versions"
@@ -278,7 +282,9 @@ export type Action =
   | { type: "compressor"; playbackId: string; settings: Partial<CompressorSettings> }
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "askEveryDevice"; enabled: boolean }
-  | { type: "control"; deviceId: string }
+  | { type: "control"; deviceId: string | null }
+  // The PlaybackSummary id stays with the queue when its playing item changes.
+  | { type: "selectPlayback"; playbackId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
   // With playNow, deviceId plays on that Device, which this window then controls.
@@ -341,6 +347,7 @@ export type Action =
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
+  | { type: "undoStop"; stoppedId: string }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
   // sound. allSpeakers (All, which only older clients offer) trims the Playback's existing sound from 0 to 100,
   // preserving its outputs and every Device's volume and mute.

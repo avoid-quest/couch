@@ -20,7 +20,8 @@ import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn } from "@/session/device-id";
 import { focusPageControl } from "@/navigation";
-import { PlaysOn, WhereItPlays } from "./Outputs";
+import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
+import { WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
 import { isRadio } from "../../../shared/radio";
 
@@ -236,24 +237,25 @@ export function NowPlayingBar({
                   {title}
                 </span>
               </Button>
-              {/* Where it plays leads, as in the player; the context gives way first, so the device and the status stay readable. */}
+              {/* The context gives way first so the device and status stay readable. */}
               <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
-                {at?.elsewhere && <PlaysOn at={at} />}
-                {livePlayback(state) && current.subtitle && (
-                  <span className="min-w-0 truncate" title={current.subtitle}>
-                    {current.subtitle}
-                  </span>
-                )}
-                <MediaContext
-                  creator={current.creator}
-                  collection={current.collection}
-                  radio={
-                    radio && programme && current.source.startsWith("radio:")
-                      ? { id: current.source.slice(6), title: current.title }
-                      : undefined
-                  }
-                  className="min-w-0 shrink flex-nowrap overflow-x-clip text-meta whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1"
-                />
+                <PlaysOnLine at={at} compact>
+                  {livePlayback(state) && current.subtitle && (
+                    <span className="min-w-0 truncate" title={current.subtitle}>
+                      {current.subtitle}
+                    </span>
+                  )}
+                  <MediaContext
+                    creator={current.creator}
+                    collection={current.collection}
+                    radio={
+                      radio && programme && current.source.startsWith("radio:")
+                        ? { id: current.source.slice(6), title: current.title }
+                        : undefined
+                    }
+                    className="min-w-0 shrink flex-nowrap overflow-x-clip text-meta whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1"
+                  />
+                </PlaysOnLine>
                 <span
                   role="status"
                   className="max-w-full shrink-0 truncate empty:hidden"
