@@ -153,7 +153,7 @@ function validAction(value: unknown): value is Action {
     case "compressor":
       return id(value.playbackId) && isCompressorPatch(value.settings);
     case "control":
-      return id(value.deviceId);
+      return value.deviceId === null || id(value.deviceId);
     case "text":
       return (
         id(value.deviceId) &&
@@ -289,6 +289,8 @@ function validAction(value: unknown): value is Action {
       return id(value.playbackId);
     case "stop":
       return value.playbackId === undefined || id(value.playbackId);
+    case "undoStop":
+      return id(value.stoppedId);
     case "sharing":
       return isDeviceSharing(value.sharing);
     case "solo":

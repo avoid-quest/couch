@@ -460,8 +460,6 @@ export async function createHub(options: HubOptions) {
       transport: TransportIntent;
     };
     preview?: { resolved: NonNullable<Playback["resolved"]>; controller: AbortController };
-    // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
-    undoable?: ReturnType<typeof setTimeout>;
     // Its shared source had no receiving output: the first output chosen in Where it plays starts it. Each
     // request to choose counts up, so Where it plays opens again. held: the publisher's own output while its capture plays;
     // it keeps the control that output gave, and it returns when another item becomes current.
@@ -618,8 +616,6 @@ export async function createHub(options: HubOptions) {
             (entry) => entry.id === (state.currentEntryId ?? state.queueCursorEntryId),
           )?.liveSourceId === sourceId
         ) {
-          clearTimeout(playback.undoable);
-          playback.undoable = undefined;
           // Its receivers' players close with the item, so they hear who stopped sharing first: sent now, since the
           // scheduled flush would find the playback settled and gone. The publisher, as the actor, hears nothing.
           playback.session.notice(
@@ -765,8 +761,11 @@ export async function createHub(options: HubOptions) {
     all().find((playback) => stateOf(playback).player.playbackId === playbackId);
   // The output Device each controller chose (Play on, or following its mix) while Core runs.
   const targets = new Map<string, string>();
-  // An explicit Remote choice stays on its TV through idle/disconnect/output changes.
-  const remoteControllers = new Set<string>();
+  // Windows share their Device's selection. The last open Remote chooses its TV temporarily.
+  const remoteControllers = new Map<
+    string,
+    { windows: Map<Socket<SocketData>, string>; previous?: string }
+  >();
   const tvSocket = (id: string) => {
     const socket = newest(id);
     return socket?.data.tv ? socket : undefined;
@@ -787,8 +786,10 @@ export async function createHub(options: HubOptions) {
   // An explicit choice stays selected while it is shared. Otherwise a receiving Device
   // shows its own playback; idle controllers default to the server's own Device.
   const selected = (actorId: string) => {
+    const binding = remoteControllers.get(actorId);
+    if (binding) return [...binding.windows.values()].at(-1)!;
     const target = targets.get(actorId);
-    if (target && (remoteControllers.has(actorId) || target === actorId)) return target;
+    if (target === actorId) return target;
     const choice =
       target && shares(target, actorId) ? target : memberOf(actorId) ? actorId : hostId();
     return memberOf(choice) || newest(choice) ? choice : actorId;
@@ -813,7 +814,7 @@ export async function createHub(options: HubOptions) {
       // Outputs already moved: `left` restores an implicit receiver's previous selection.
       const choice =
         target && shares(target, id) ? target : left.includes(id) || memberOf(id) ? id : hostId();
-      if (remoteControllers.has(id) || !left.includes(choice)) continue;
+      if (!left.includes(choice)) continue;
       const output = outputFor(to, id);
       targets.set(id, output.picture || output.sound ? to : id);
     }
@@ -896,6 +897,48 @@ export async function createHub(options: HubOptions) {
   const requirePlayback = (playback: Playback, actor: string) => {
     if (!controls(playback, actor))
       throw new ControllerError("This playback is not sharing its outputs.", 403);
+  };
+  const controlDevice = (playback: Playback, actor: string) => {
+    const outputs = mixOf(playback).filter((output) => allows(output, actor));
+    return (
+      outputs.find((output) => output.deviceId === targets.get(actor)) ??
+      outputs.find((output) => output.deviceId === actor) ??
+      outputs[0]
+    )?.deviceId;
+  };
+  const restoreSelection = (actor: string, previous?: Playback, ended?: Playback) => {
+    for (const playback of [previous, memberOf(actor), ...all().reverse()]) {
+      if (!playback || playback === ended || !playback.outputs.length) continue;
+      const state = stateOf(playback);
+      if (!state.currentEntryId || !active(state.player.status)) continue;
+      if (mpvPlayback !== playback && !playback.outputs.some((output) => newest(output.deviceId)))
+        continue;
+      const device = controlDevice(playback, actor);
+      if (device) {
+        targets.set(actor, device);
+        return;
+      }
+    }
+    if (!ended) targets.delete(actor);
+    const current = memberOf(selected(actor));
+    if (current && current !== ended && !controls(current, actor)) targets.set(actor, actor);
+  };
+  const restoreControllers = (ended: Playback) => {
+    const devices = mixOf(ended).map((output) => output.deviceId);
+    for (const actor of new Set([...targets.keys(), ...[...sockets].map(deviceOf)]))
+      if (
+        !remoteControllers.has(actor) &&
+        (lookedAt(actor) === ended || devices.includes(targets.get(actor) ?? ""))
+      )
+        restoreSelection(actor, undefined, ended);
+  };
+  const releaseRemote = (socket: Socket<SocketData>) => {
+    const actor = deviceOf(socket);
+    const binding = remoteControllers.get(actor);
+    if (!binding?.windows.delete(socket) || binding.windows.size) return;
+    remoteControllers.delete(actor);
+    // A window that controlled nothing before Remote keeps controlling nothing.
+    if (binding.previous) restoreSelection(actor, playbacks.get(binding.previous));
   };
   const intentOf = (playback: Playback | undefined) =>
     playback && live.source(sourceOf(playback) ?? "")?.intent;
@@ -3252,7 +3295,7 @@ export async function createHub(options: HubOptions) {
   };
   // When the queue ends, the Playback ends (#644 End).
   const settle = (playback: Playback) => {
-    if (playbacks.get(playback.id) !== playback || playback.undoable) return;
+    if (playbacks.get(playback.id) !== playback || playback.session.stoppedId) return;
     const state = stateOf(playback);
     const cursor = state.queue.findIndex(
       (entry) => entry.id === (state.currentEntryId ?? state.queueCursorEntryId),
@@ -3261,6 +3304,7 @@ export async function createHub(options: HubOptions) {
       state.currentEntryId === null ||
       (state.player.status === "ended" && !state.autoplay?.pending);
     if (!done || state.queue.length > cursor + 1) return;
+    restoreControllers(playback);
     live.closePlayback(playback.id);
     playbacks.delete(playback.id);
     for (const output of [...playback.outputs]) release(playback, output.deviceId, false);
@@ -3690,6 +3734,7 @@ export async function createHub(options: HubOptions) {
     }
     shared.delete(id);
     targets.delete(id);
+    remoteControllers.delete(id);
     for (const socket of sockets)
       if (socket.data.deviceId === id) {
         live.disconnect(socket, name);
@@ -4916,6 +4961,7 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        releaseRemote(socket);
         // The Device is a TV while its newest tab is; with none left it stays what it last was.
         const next = newest(deviceOf(socket));
         if (next) store.saveDeviceTv(deviceOf(socket), next.data.tv);
@@ -5409,11 +5455,19 @@ export async function createHub(options: HubOptions) {
               applyConsent();
             }
           } else if (action.type === "control") {
-            requireControl(action.deviceId, deviceId);
-            if (!tvSocket(action.deviceId))
-              throw new Error("The TV interface is disconnected. Try again when it reconnects.");
-            targets.set(deviceId, action.deviceId);
-            remoteControllers.add(deviceId);
+            if (action.deviceId === null) releaseRemote(socket);
+            else {
+              requireControl(action.deviceId, deviceId);
+              if (!tvSocket(action.deviceId))
+                throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+              const binding = remoteControllers.get(deviceId) ?? {
+                windows: new Map(),
+                previous: memberOf(selected(deviceId))?.id,
+              };
+              binding.windows.delete(socket);
+              binding.windows.set(socket, action.deviceId);
+              remoteControllers.set(deviceId, binding);
+            }
             broadcast();
           } else if (action.type === "navigate" || action.type === "text") {
             const target = action.deviceId ?? selected(deviceId);
@@ -5636,6 +5690,11 @@ export async function createHub(options: HubOptions) {
                 : "entryId" in action
                   ? holding(action.entryId, action.type === "play")
                   : undefined;
+            if (action.type === "undoStop") {
+              playback = all().find((item) => item.session.stoppedId === action.stoppedId);
+              if (!playback || (!mixOf(playback).length && lookedAt(deviceId) !== playback))
+                throw new Error("Undo expired. Check the current queue.");
+            }
             playback ??=
               action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
             // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
@@ -5661,30 +5720,19 @@ export async function createHub(options: HubOptions) {
             );
             permitted();
             requireAction(playback, action, deviceId);
-            if (action.type === "play") present(playback, playedBy);
-            const previousUndo = playback.undoable;
-            if (action.type === "stop") {
-              const stopped = playback;
-              stopped.undoable = setTimeout(() => {
-                stopped.undoable = undefined;
-                if (!closed) settle(stopped);
-              }, 10_000);
-              stopped.undoable.unref();
-            }
+            if (action.type === "play" || (action.type === "undoStop" && !mixOf(playback).length))
+              present(playback, playedBy);
             if (action.type === "remove") {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find((entry) => entry.id === action.entryId)?.title;
             }
-            try {
-              await playback.session.command(action, permitted, playedBy);
-            } catch (error) {
-              if (action.type === "stop") {
-                clearTimeout(playback.undoable);
-                playback.undoable = previousUndo;
-              }
-              throw error;
+            await playback.session.command(action, permitted, playedBy);
+            if (action.type === "stop") restoreControllers(playback);
+            if (action.type === "undoStop") {
+              const device = controlDevice(playback, deviceId);
+              if (device && !remoteControllers.has(deviceId)) targets.set(deviceId, device);
+              broadcast();
             }
-            if (action.type === "stop") clearTimeout(previousUndo);
             if (
               action.type === "preferences" ||
               action.type === "savePlaybackDefault" ||

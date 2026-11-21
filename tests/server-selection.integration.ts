@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import { applyUndo, undoPlan } from "../src/client/session/undo";
 import { withState } from "./whole-state.fixture";
 
 const hostId = "h".repeat(43),
@@ -78,9 +79,14 @@ async function fixture() {
         }),
     };
   }
-  const host = await connect(hostToken, hostId),
+  const host = await connect(hostToken, hostId, "&tv=1"),
     phone = await connect(phoneToken, phoneId),
     speaker = await connect(speakerToken, speakerId, "&audio=1&video=1");
+  const entry = (id: string) => ({
+    id,
+    title: id,
+    source: `http://127.0.0.1:${address.port}/media`,
+  });
   return {
     hub,
     host,
@@ -96,7 +102,9 @@ async function fixture() {
       if (!response.ok) throw new Error(result.error);
       return result;
     },
-    entry: (id: string) => ({ id, title: id, source: `http://127.0.0.1:${address.port}/media` }),
+    entry,
+    play: (controller: typeof phone, id: string, deviceId: string) =>
+      controller.command({ type: "enqueue", entry: entry(id), playNow: true, deviceId }),
     reconnect: async () => {
       phone.socket.close();
       await until(() => phone.socket.readyState === WebSocket.CLOSED);
@@ -111,6 +119,106 @@ async function fixture() {
     },
   };
 }
+
+test("Stop returns to this Device's film and Undo returns to the stopped Playback", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.phone, "film", phoneId);
+    await until(() => f.phone.state.currentEntryId === "film");
+    const film = f.phone.state.playback;
+    await f.play(f.phone, "radio", speakerId);
+    await until(() => f.phone.state.currentEntryId === "radio");
+    const radio = f.phone.state;
+    const stoppedId = radio.player.playbackId!;
+    await f.play(f.host, "newer", hostId);
+    await f.phone.command({ type: "stop" });
+    await until(() => f.phone.state.playback === film);
+    assert.equal(f.phone.state.controlling, phoneId);
+    assert.equal(f.phone.state.currentEntryId, "film");
+    const undo = undoPlan({ type: "stop", playbackId: stoppedId }, radio, f.phone.state);
+    assert.ok(undo);
+    await applyUndo(undo, f.phone.command, () => f.phone.state);
+    await until(
+      () => f.phone.state.playback === radio.playback && f.phone.state.currentEntryId === "radio",
+    );
+    assert.equal(f.phone.state.controlling, speakerId);
+    assert.notEqual(f.phone.state.player.playbackId, stoppedId);
+    await assert.rejects(f.phone.command({ type: "undoStop", stoppedId }));
+  } finally {
+    await f.close();
+  }
+});
+
+test("an ended Playback returns to the newest running Playback the controller may control", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.host, "shared", hostId);
+    await f.play(f.speaker, "newer", speakerId);
+    for (const expected of ["newer", "shared"]) {
+      await f.play(f.phone, "ended", phoneId);
+      await f.phone.command({ type: "remove", entryId: "ended" });
+      await until(() => f.phone.state.currentEntryId === expected);
+      assert.equal(f.phone.state.controls?.programme, true);
+      await f.speaker.command({ type: "sharing", sharing: { audio: false, video: false } });
+    }
+  } finally {
+    await f.close();
+  }
+});
+
+test("leaving Remote or closing its window restores the previously controlled Playback", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.phone, "here", phoneId);
+    await f.play(f.phone, "film", speakerId);
+    await until(() => f.phone.state.currentEntryId === "film");
+    const film = f.phone.state.playback;
+    await f.phone.command({ type: "control", deviceId: hostId });
+    await until(() => f.phone.state.controlling === hostId);
+    await f.phone.command({ type: "control", deviceId: null });
+    await until(() => f.phone.state.playback === film);
+    assert.equal(f.phone.state.controlling, speakerId);
+    await f.phone.command({ type: "control", deviceId: hostId });
+    await until(() => f.phone.state.controlling === hostId);
+    const returned = await f.reconnect();
+    assert.equal(returned.state.playback, film);
+    assert.equal(returned.state.controlling, speakerId);
+    await returned.command({ type: "control", deviceId: hostId });
+    await f.speaker.command({ type: "remove", entryId: "film" });
+    await returned.command({ type: "control", deviceId: null });
+    await until(() => returned.state.currentEntryId === "here");
+  } finally {
+    await f.close();
+  }
+});
+
+test("leaving Remote never hands a window a Playback it did not control before", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.speaker, "elsewhere", speakerId);
+    await until(() => !!f.phone.state.playbacks?.some((item) => item.title === "elsewhere"));
+    assert.equal(f.phone.state.playback, null);
+    await f.phone.command({ type: "control", deviceId: hostId });
+    await f.phone.command({ type: "control", deviceId: null });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(f.phone.state.controlling, hostId);
+    assert.equal(f.phone.state.playback, null);
+  } finally {
+    await f.close();
+  }
+});
+
+test("unpairing a Playback's last receiver releases it even when nothing else plays", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.phone, "film", speakerId);
+    await f.rest(`/api/devices/${speakerId}`, undefined, hostToken);
+    await until(() => f.phone.state.devices?.some((device) => device.id === speakerId) === false);
+    assert.equal(f.phone.state.controlling, hostId);
+  } finally {
+    await f.close();
+  }
+});
 
 test(
   "controllers start on server outputs and return to their selected live mix",
