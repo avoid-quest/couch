@@ -457,24 +457,6 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
               info.formats.every((format) => object(format) && format.vcodec === "none")) ||
             undefined;
         media.publicNetwork = true;
-        media.renewal = {
-          current: {
-            source: media.source,
-            audioSource: media.audioSource,
-            hlsSelection: media.hlsSelection,
-          },
-          renew: (cancellation) =>
-            resolveWebMedia(
-              source,
-              cancellation,
-              quality,
-              streamingCommunityOrigin,
-              vp9,
-              subtitleLanguage,
-              playbackId,
-              output,
-            ),
-        };
         if (direct) {
           media.metadata = { ...media.metadata, ...direct.metadata };
           media.preview = media.metadata.endless ? undefined : (direct.preview ?? media.preview);
@@ -507,6 +489,24 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           await response?.body?.cancel();
           if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
         }
+        media.renewal = {
+          current: {
+            source: media.source,
+            audioSource: media.audioSource,
+            hlsSelection: media.hlsSelection,
+          },
+          renew: (cancellation) =>
+            resolveWebMedia(
+              source,
+              cancellation,
+              quality,
+              streamingCommunityOrigin,
+              vp9,
+              subtitleLanguage,
+              playbackId,
+              output,
+            ),
+        };
         const transport = new URL(media.source);
         const at = Number(transport.searchParams.get("ts")) * 1000;
         // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a

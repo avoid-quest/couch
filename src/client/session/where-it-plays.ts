@@ -282,7 +282,7 @@ const filtersOf = (row: Row): Filter[] => [
   ...(row.level.sound ? ["sound" as const] : []),
   ...(row.output?.delayActive ? ["sync" as const] : []),
   ...(row.output?.state === "behind" || row.output?.state === "stalled" ? ["behind" as const] : []),
-  ...(row.output?.state === "cant-play" ? ["error" as const] : []),
+  ...(row.output?.error || row.output?.state === "cant-play" ? ["error" as const] : []),
   ...(!row.device.online ? ["offline" as const] : []),
 ];
 /** Each count over every device, zeros left out: Picture 2 · Sound 3 · Offline 1. */

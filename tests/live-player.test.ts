@@ -104,12 +104,19 @@ class FixtureNode {
 }
 let nodes: FixtureNode[] = [];
 let loaded = () => {};
+let loadFailed = (_error: Error) => {};
 class FixtureContext {
   state = "running";
   currentTime = 0;
   sampleRate = 48_000;
   destination = {};
-  audioWorklet = { addModule: () => new Promise<void>((resolve) => (loaded = resolve)) };
+  audioWorklet = {
+    addModule: () =>
+      new Promise<void>((resolve, reject) => {
+        loaded = resolve;
+        loadFailed = reject;
+      }),
+  };
   createGain() {
     return { connect() {}, gain: { setTargetAtTime() {} } };
   }
@@ -164,6 +171,31 @@ test("an error in a running Worker doesn't stop its player", () => {
   console.error = logged;
   expect(stopped).toEqual([]);
   player.destroy();
+});
+
+test("a tap after a failed worklet load starts sound on the same Live player", async () => {
+  const player = new LivePlayer({
+    playerId: "fixture",
+    baseUrl: "http://localhost",
+    minBufferMs: 60,
+  });
+  try {
+    const first = player.unlock();
+    loadFailed(new Error("Couldn't load the worklet"));
+    await expect(first).rejects.toThrow("Couldn't load the worklet");
+    const retry = player.unlock();
+    loaded();
+    await retry;
+    await reading();
+    cores[0]!.onAudioData({
+      serverTimeUs: 100_000,
+      sampleRate: 48_000,
+      samples: [new Float32Array(240), new Float32Array(240)],
+    });
+    expect(nodes[0]!.chunks).toBe(1);
+  } finally {
+    player.destroy();
+  }
 });
 
 test("a stream cleared while the worklet loads still counts the loss the worklet reports", async () => {

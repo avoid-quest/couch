@@ -107,7 +107,6 @@ export class CouchMedia extends EventTarget {
   #run: Run;
   #seek: Seek | null = null;
   #scrubbing = false;
-  #element: { media: HTMLMediaElement; detach: AbortController } | null = null;
   #subtitlesPending = false;
   readonly textTracks = new SubtitleTrackList();
 
@@ -115,7 +114,6 @@ export class CouchMedia extends EventTarget {
     super();
     this.#source = source;
     this.#run = run;
-    this.#follow(source.local);
     this.#applySubtitles();
   }
 
@@ -125,7 +123,6 @@ export class CouchMedia extends EventTarget {
     let was = this.#snapshot();
     this.#source = source;
     this.#run = run;
-    this.#follow(source.local);
     if (before.playbackId !== source.playbackId) {
       this.#endSeek();
       this.#emit("emptied", "loadstart");
@@ -356,10 +353,7 @@ export class CouchMedia extends EventTarget {
   }
 
   // Video.js reads its time every frame while it plays; a paused element's seek or progress still needs telling.
-  #follow(media: HTMLMediaElement | null) {
-    if (this.#element?.media === media) return;
-    this.#element?.detach.abort();
-    this.#element = null;
+  follow(media: HTMLMediaElement | null) {
     if (!media) return;
     const detach = new AbortController();
     for (const event of ["timeupdate", "seeked"])
@@ -371,7 +365,7 @@ export class CouchMedia extends EventTarget {
         },
         { signal: detach.signal },
       );
-    this.#element = { media, detach };
+    return () => detach.abort();
   }
 
   #applySubtitles() {
