@@ -762,34 +762,37 @@ function Options({ id, sync, children }: { id: string; sync?: string; children?:
 const Why = ({ reason }: Control) =>
   reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
 
-/**
- * "on {name} +N": where the controlled Playback plays when that isn't only this Device. The now-playing bar and the
- * player say it the same way: first under the title, so it reads on from it, in the ink, not the muted metadata.
- */
-export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return (
-    <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
-      <span className="truncate">on {at.name}</span>
-      {!!at.more && <span className="shrink-0">+{at.more}</span>}
-    </span>
-  );
-}
-
-/** Where it plays, then where it comes from (its links), as one line: the player's summary and Home's Stage say it alike. */
+/** Where it comes from, then where it plays; in the bar the context gives way first. */
 export function PlaysOnLine({
   at,
   children,
+  compact = false,
 }: {
   at: ReturnType<typeof playsOn>;
   children?: ReactNode;
+  compact?: boolean;
 }) {
-  return at?.elsewhere ? (
-    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm">
-      <PlaysOn at={at} />
-      {children}
+  if (!at?.elsewhere) return <>{children}</>;
+  return (
+    <div
+      className={
+        compact
+          ? "flex min-w-0 items-center gap-x-2"
+          : "flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"
+      }
+    >
+      <div
+        className={
+          compact ? "flex min-w-0 items-center gap-x-2 overflow-x-clip empty:hidden" : "contents"
+        }
+      >
+        {children}
+      </div>
+      <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
+        <span className="truncate">on {at.name}</span>
+        {!!at.more && <span className="shrink-0">+{at.more}</span>}
+      </span>
     </div>
-  ) : (
-    <>{children}</>
   );
 }
 

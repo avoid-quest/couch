@@ -802,13 +802,14 @@ export function PlayerPage({
                     {linkedTitle}
                   </h1>
                 )}
-                {livePlayback(state) && current.subtitle && (
-                  <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
-                    {current.subtitle}
-                  </p>
-                )}
-                {/* Where it plays leads the line under the title, as in the now-playing bar. */}
-                <PlaysOnLine at={at}>{copyContext}</PlaysOnLine>
+                <PlaysOnLine at={at}>
+                  {livePlayback(state) && current.subtitle && (
+                    <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
+                      {current.subtitle}
+                    </p>
+                  )}
+                  {copyContext}
+                </PlaysOnLine>
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
                 )}

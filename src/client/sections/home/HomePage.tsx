@@ -323,8 +323,7 @@ export function HomePage() {
   const live = !!(current?.endless || current?.kind === "radio");
   const at = playsOn(state);
   const show = useStationShow();
-  // Where it plays reads "on {name}" before the links, on one line, as in the now-playing bar and the player. A
-  // station without its show reads Radio, as the player does, never its stream's host.
+  // A station without its show reads Radio, as the player does, never its stream's host.
   const status = playbackStatus(state, connected);
   const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
   const playingMeta = metaLine(
@@ -347,18 +346,17 @@ export function HomePage() {
     current &&
     playing && (
       <HomeHero
+        at={at}
         context={
-          <PlaysOnLine at={at}>
-            <MediaContext
-              collection={current.collection}
-              creator={current.creator}
-              radio={
-                isRadio(current) && current.source.startsWith("radio:")
-                  ? { id: current.source.slice(6), title: current.title }
-                  : undefined
-              }
-            />
-          </PlaysOnLine>
+          <MediaContext
+            collection={current.collection}
+            creator={current.creator}
+            radio={
+              isRadio(current) && current.source.startsWith("radio:")
+                ? { id: current.source.slice(6), title: current.title }
+                : undefined
+            }
+          />
         }
         thumbnail={show?.artworkUrl ?? current.thumbnail}
         shape={entryShape(current)}
@@ -869,6 +867,7 @@ function HomeHero({
   title,
   meta,
   context,
+  at = null,
   progress,
   open,
   children,
@@ -878,6 +877,7 @@ function HomeHero({
   title: string;
   meta?: string;
   context?: ReactNode;
+  at?: ReturnType<typeof playsOn>;
   progress?: ReactNode;
   open?: () => void;
   children?: ReactNode;
@@ -930,10 +930,12 @@ function HomeHero({
       {/* The meta line and its links read as one block under the title. */}
       {(meta || context) && (
         <div className="home-hero-meta flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {meta && (
-            <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>
-          )}
-          {context}
+          <PlaysOnLine at={at}>
+            {meta && (
+              <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>
+            )}
+            {context}
+          </PlaysOnLine>
         </div>
       )}
       {progress}
