@@ -41,7 +41,7 @@ import { livePlayback } from "@/session/playback-controls";
 import { cn } from "@/lib/utils";
 import { Level } from "@/components/Level";
 import { sounding } from "@/playback-status";
-import { deviceId, type playsOn } from "@/session/device-id";
+import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
@@ -761,47 +761,6 @@ function Options({ id, sync, children }: { id: string; sync?: string; children?:
 /** A disabled menu item's one-word reason, at its end. */
 const Why = ({ reason }: Control) =>
   reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
-
-/** Where it comes from, then where it plays; in the bar the context gives way first. */
-export function PlaysOnLine({
-  at,
-  children,
-  compact = false,
-}: {
-  at: ReturnType<typeof playsOn>;
-  children?: ReactNode;
-  compact?: boolean;
-}) {
-  // The same elements with or without where it plays, so a focused link survives another device joining.
-  const shown = !!at?.elsewhere;
-  return (
-    <div
-      className={
-        !shown
-          ? "contents"
-          : compact
-            ? "flex min-w-0 items-center gap-x-2"
-            : "flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm"
-      }
-    >
-      <div
-        className={
-          shown && compact
-            ? "flex min-w-0 items-center gap-x-2 overflow-x-clip empty:hidden"
-            : "contents"
-        }
-      >
-        {children}
-      </div>
-      {at?.elsewhere && (
-        <span className="flex min-w-0 max-w-full shrink-0 gap-1 font-medium text-foreground">
-          <span className="truncate">on {at.name}</span>
-          {!!at.more && <span className="shrink-0">+{at.more}</span>}
-        </span>
-      )}
-    </div>
-  );
-}
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:
 // Sendspin's static delay, 0–500 ms, to the picture too where another device shows one. It applies only while the

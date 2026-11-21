@@ -59,7 +59,9 @@ Playback at a time.
 - Each controller looks at the Playback its selected Device serves. When that
   Playback stops or ends, Core moves the controller to the Playback running on
   its own Device, else the newest running Playback it may control, else the
-  usual idle selection. Remote and its Up next select the TV only while open:
+  usual idle selection. A controller with nothing selected looks at a Playback
+  waiting for a Device, else the newest running one it may control; TVs keep to
+  their own. Remote and its Up next select the TV only while open:
   leaving them or disconnecting restores the previous Playback when it still
   runs and may be controlled, else the same fallback. A restart restores queues
   without outputs.

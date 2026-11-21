@@ -136,6 +136,7 @@ function validAction(value: unknown): value is Action {
     case "updateLiveMetadata":
       return id(value.sourceId) && liveMetadata(value.metadata);
     case "leave":
+    case "selectPlayback":
       return id(value.playbackId);
     case "removeLiveListener":
       return id(value.playbackId) && id(value.deviceId);

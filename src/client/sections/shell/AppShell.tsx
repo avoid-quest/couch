@@ -191,6 +191,17 @@ function useShellValue() {
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
+  const pickedPicture = useRef<string | null>(null);
+  const selectPlayback = async (id: string) => {
+    const picked = state?.playbacks?.find((playback) => playback.id === id);
+    // Picking a film already showing here keeps the page we picked it from.
+    pickedPicture.current = id !== state?.playback && showsPicture(picked) ? id : null;
+    if (!(await run({ type: "selectPlayback", playbackId: id }))) {
+      if (pickedPicture.current === id) pickedPicture.current = null;
+      return;
+    }
+    if (playerTarget) changePage("Now");
+  };
   const pictured =
     !!picture && !state?.playbacks?.find((playback) => playback.id === state.playback)?.audioOnly;
   const presentation = state?.presentationId;
@@ -213,10 +224,18 @@ function useShellValue() {
       shownPicture.current = { picture: before.picture, presentation, settled: !presentation };
     const current = shownPicture.current!;
     const newlySelected = picture && picture !== current.picture;
+    const picked = picture && picture === pickedPicture.current;
+    if (picked) pickedPicture.current = null;
     const explicitlyStarted = !!state.playedBy && !current.settled;
     // Consume audio-only starts too: a retry can temporarily clear their media flags.
     if (explicitlyStarted) current.settled = true;
-    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now")
+    if (
+      pictured &&
+      !picked &&
+      current.settled &&
+      (newlySelected || explicitlyStarted) &&
+      section !== "Now"
+    )
       openPlayer();
     current.picture = picture;
   }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
@@ -397,6 +416,7 @@ function useShellValue() {
       sectionForPath(...(lastBrowsePath.current.split("?") as [string, string?])) ?? "Home",
     recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection,
+    selectPlayback,
     openPlayer,
     leavePlayer,
     focusSearch,

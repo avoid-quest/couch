@@ -69,13 +69,13 @@ async function fixture() {
       get state() {
         return state!;
       },
-      command: (action: Action) =>
+      command: (action: Action, targetDeviceId?: string) =>
         new Promise<void>((resolve, reject) => {
           const requestId = String(++sequence);
           pending.set(requestId, (message) =>
             message.ok ? resolve() : reject(new Error(message.error)),
           );
-          socket.send(JSON.stringify({ type: "command", requestId, action }));
+          socket.send(JSON.stringify({ type: "command", requestId, action, targetDeviceId }));
         }),
     };
   }
@@ -119,6 +119,43 @@ async function fixture() {
     },
   };
 }
+
+test("a controller picks a running Playback and keeps its selection when a private pick is refused", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.phone, "film", phoneId);
+    await until(() => f.phone.state.currentEntryId === "film");
+    const film = f.phone.state.playback!;
+    await f.play(f.speaker, "radio", speakerId);
+    await until(() => f.speaker.state.currentEntryId === "radio");
+    const radio = f.speaker.state.playback!;
+
+    await f.phone.command({ type: "control", deviceId: hostId });
+    await f.phone.command({ type: "selectPlayback", playbackId: radio }, hostId);
+    await f.phone.command({ type: "control", deviceId: null });
+    await until(() => f.phone.state.playback === radio);
+    assert.equal(f.phone.state.controlling, speakerId);
+
+    await assert.rejects(
+      f.speaker.command({ type: "selectPlayback", playbackId: film }),
+      /not sharing its outputs/,
+    );
+    await f.speaker.command({ type: "enqueue", entry: f.entry("next") });
+    await until(() => f.phone.state.queue.some((entry) => entry.id === "next"));
+    assert.equal(f.speaker.state.playback, radio);
+    assert.equal(f.speaker.state.controlling, speakerId);
+
+    await f.phone.command({ type: "stop" });
+    await until(() => f.phone.state.currentEntryId === "film" && !f.speaker.state.currentEntryId);
+    await assert.rejects(
+      f.phone.command({ type: "selectPlayback", playbackId: radio }),
+      /no longer running/,
+    );
+    assert.equal(f.phone.state.controlling, phoneId);
+  } finally {
+    await f.close();
+  }
+});
 
 test("Stop returns to this Device's film and Undo returns to the stopped Playback", async () => {
   const f = await fixture();
@@ -197,12 +234,32 @@ test("leaving Remote never hands a window a Playback it did not control before",
   try {
     await f.play(f.speaker, "elsewhere", speakerId);
     await until(() => !!f.phone.state.playbacks?.some((item) => item.title === "elsewhere"));
-    assert.equal(f.phone.state.playback, null);
+    const idle = f.phone.state.playback;
     await f.phone.command({ type: "control", deviceId: hostId });
     await f.phone.command({ type: "control", deviceId: null });
     await new Promise((resolve) => setTimeout(resolve, 200));
+    // Still nothing chosen: the Couch's own Device, and what an idle window looks at.
     assert.equal(f.phone.state.controlling, hostId);
-    assert.equal(f.phone.state.playback, null);
+    assert.equal(f.phone.state.playback, idle);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an idle window reaches what plays elsewhere, and its Play still starts on the Couch", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.speaker, "elsewhere", speakerId);
+    await until(() => f.phone.state.currentEntryId === "elsewhere");
+    assert.equal(f.phone.state.controls?.programme, true);
+    // The Couch's own window, a TV, keeps to its own Playback.
+    assert.equal(f.host.state.playback, null);
+    await f.phone.command({ type: "enqueue", entry: f.entry("film"), playNow: true });
+    await until(() => f.phone.state.currentEntryId === "film");
+    assert.deepEqual(
+      f.phone.state.outputs?.map((output) => output.deviceId),
+      [hostId],
+    );
   } finally {
     await f.close();
   }
@@ -405,8 +462,11 @@ test(
         deviceId: speakerId,
       });
       await f.speaker.command({
-        type: "enqueue",
-        entry: f.entry("film"),
+        type: "enqueueWeb",
+        entryId: "film",
+        title: "film",
+        url: f.entry("film").source,
+        thumbnail: "https://example.com/film.jpg",
         playNow: true,
         deviceId: speakerId,
       });
@@ -416,12 +476,14 @@ test(
           item.outputs.some((output) => output.deviceId === speakerId),
         );
       assert.equal(summary(f.phone.state)?.title, "film");
+      assert.equal(summary(f.phone.state)?.thumbnail, "https://example.com/film.jpg");
       assert.equal(summary(f.phone.state)?.private, undefined);
 
       await f.speaker.command({ type: "sharing", sharing: { audio: true, video: false } });
       await until(() => !!summary(f.phone.state)?.private && !!summary(f.host.state)?.private);
       for (const viewer of [f.phone, f.host]) {
         assert.equal("title" in summary(viewer.state)!, false);
+        assert.equal("thumbnail" in summary(viewer.state)!, false);
         assert.equal(summary(viewer.state)?.private, true);
       }
       assert.equal(summary(f.speaker.state)?.title, "film");

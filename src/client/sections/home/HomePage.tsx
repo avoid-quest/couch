@@ -31,7 +31,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
-import { PlaysOnLine } from "@/sections/shell/Outputs";
+import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";

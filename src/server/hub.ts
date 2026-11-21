@@ -759,7 +759,7 @@ export async function createHub(options: HubOptions) {
     });
   const playing = (playbackId: string) =>
     all().find((playback) => stateOf(playback).player.playbackId === playbackId);
-  // The output Device each controller chose (Play on, or following its mix) while Core runs.
+  // The output Device each controller chose or followed while Core runs.
   const targets = new Map<string, string>();
   // Windows share their Device's selection. The last open Remote chooses its TV temporarily.
   const remoteControllers = new Map<
@@ -801,12 +801,16 @@ export async function createHub(options: HubOptions) {
     return actor;
   };
   // A window looks at the Playback in whose mix its selected Device is (a held publisher included). An idle
-  // one looks at the newest Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
+  // one looks at the newest Playback waiting for a Device (a saved Up next, or one whose last output was switched off),
+  // else the newest one running that it may control, so it can reach it; a TV keeps to its own.
   const lookedAt = (deviceId: string) =>
     memberOf(selected(deviceId)) ??
     (remoteControllers.has(deviceId)
       ? undefined
-      : all().findLast((playback) => !playback.outputs.length));
+      : (all().findLast((playback) => !playback.outputs.length) ??
+        (deviceId === hostId() || store.deviceTv(deviceId)
+          ? undefined
+          : all().findLast((playback) => isRunning(playback) && controls(playback, deviceId)))));
   // Windows controlling a Device that the Playback moved off follow it (Solo, mpv fallback, or the Device stops serving).
   const follow = (left: string[], to: string) => {
     for (const id of new Set([hostId(), ...store.devices().map((device) => device.id)])) {
@@ -906,13 +910,22 @@ export async function createHub(options: HubOptions) {
       outputs[0]
     )?.deviceId;
   };
+  const selectDevice = (actor: string, device: string) => {
+    remoteControllers.delete(actor);
+    targets.set(actor, device);
+  };
+  const isRunning = (playback: Playback) => {
+    const state = stateOf(playback);
+    return (
+      playback.outputs.length > 0 &&
+      !!state.currentEntryId &&
+      active(state.player.status) &&
+      (mpvPlayback === playback || playback.outputs.some((output) => newest(output.deviceId)))
+    );
+  };
   const restoreSelection = (actor: string, previous?: Playback, ended?: Playback) => {
     for (const playback of [previous, memberOf(actor), ...all().reverse()]) {
-      if (!playback || playback === ended || !playback.outputs.length) continue;
-      const state = stateOf(playback);
-      if (!state.currentEntryId || !active(state.player.status)) continue;
-      if (mpvPlayback !== playback && !playback.outputs.some((output) => newest(output.deviceId)))
-        continue;
+      if (!playback || playback === ended || !isRunning(playback)) continue;
       const device = controlDevice(playback, actor);
       if (device) {
         targets.set(actor, device);
@@ -2525,10 +2538,7 @@ export async function createHub(options: HubOptions) {
       playback.createdFor = actor;
       assign(playback, [outputFor(deviceId, actorId)]);
     } else requireProgramme(playback, actorId);
-    if (on) {
-      remoteControllers.delete(actorId);
-      targets.set(actorId, on);
-    }
+    if (on) selectDevice(actorId, on);
     playback.outputs = playback.outputs.map((output) => ({
       ...output,
       local: output.local || output.deviceId === actorId,
@@ -3083,15 +3093,15 @@ export async function createHub(options: HubOptions) {
         const loaded =
           playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         const source = live.source(sourceOf(playback) ?? "");
+        const current = state.currentEntryId ? state.queue[cursor] : undefined;
         return {
           id: playback.id,
           title:
             source?.intent === "live"
               ? liveTitle(source)
-              : ((
-                  state.queue.find((entry) => entry.id === state.currentEntryId) ??
-                  state.queue[cursor + 1]
-                )?.title ?? null),
+              : ((current ?? state.queue[cursor + 1])?.title ?? null),
+          thumbnail: current?.thumbnail,
+          running: isRunning(playback) || undefined,
           status: state.player.status,
           outputs: outputViews.get(playback)!,
           delivery: deliveryOf(playback),
@@ -3168,7 +3178,13 @@ export async function createHub(options: HubOptions) {
       if (!couchViews.has(couchView)) {
         const summaries = shared.playbacks.map((summary): PlaybackSummary =>
           privateIds.has(summary.id)
-            ? { ...summary, title: undefined, liveSourceId: undefined, private: true }
+            ? {
+                ...summary,
+                title: undefined,
+                thumbnail: undefined,
+                liveSourceId: undefined,
+                private: true,
+              }
             : summary,
         );
         couchViews.set(
@@ -5202,6 +5218,7 @@ export async function createHub(options: HubOptions) {
             )
               throw new Error("This command addresses another TV. Select it before using Remote.");
             if (
+              action.type !== "selectPlayback" &&
               "playbackId" in action &&
               action.playbackId &&
               servedBy(guardedTarget) !== playing(action.playbackId)
@@ -5454,6 +5471,13 @@ export async function createHub(options: HubOptions) {
               });
               applyConsent();
             }
+          } else if (action.type === "selectPlayback") {
+            const picked = playbacks.get(action.playbackId);
+            if (picked) requirePlayback(picked, deviceId);
+            const device = picked && isRunning(picked) && controlDevice(picked, deviceId);
+            if (!device) throw new Error("That playback is no longer running.");
+            selectDevice(deviceId, device);
+            broadcast();
           } else if (action.type === "control") {
             if (action.deviceId === null) releaseRemote(socket);
             else {

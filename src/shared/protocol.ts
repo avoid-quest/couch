@@ -135,7 +135,9 @@ export type Output = {
 export type PlaybackSummary = {
   id: string;
   title?: string | null;
-  // This window may not control this Playback, so its title and source are left out.
+  thumbnail?: string;
+  running?: true;
+  // This window may not control this Playback, so its title, artwork and source are left out.
   private?: true;
   status: PlayerState["status"];
   outputs: Output[];
@@ -281,6 +283,8 @@ export type Action =
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "askEveryDevice"; enabled: boolean }
   | { type: "control"; deviceId: string | null }
+  // The PlaybackSummary id stays with the queue when its playing item changes.
+  | { type: "selectPlayback"; playbackId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
   // With playNow, deviceId plays on that Device, which this window then controls.

@@ -20,7 +20,8 @@ import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn } from "@/session/device-id";
 import { focusPageControl } from "@/navigation";
-import { PlaysOnLine, WhereItPlays } from "./Outputs";
+import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
+import { WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
 import { isRadio } from "../../../shared/radio";
 
