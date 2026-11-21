@@ -60,6 +60,8 @@ function AttachCouchMedia({ state, run }: Props) {
   const loaded = useBufferedEnd(state?.player.playbackId);
   const source = couchMediaSource(state, clock, loaded);
   const [media] = useState(() => new CouchMedia(source, run));
+  const local = source.local;
+  useLayoutEffect(() => media.follow(local), [media, local]);
   // Live shows no timeline or Play button (PlaybackTransport), so nothing reads Video.js's state there. Attached, its
   // time feature reads the time every animation frame while it plays: a frame each, on the thread Live is heard from.
   const live = livePlayback(state);

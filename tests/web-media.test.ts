@@ -1,5 +1,7 @@
-import { expect, test } from "bun:test";
-import { parseMedia } from "../src/server/web-media";
+import { expect, spyOn, test } from "bun:test";
+import * as network from "../src/server/public-network";
+import { createWebMediaResolver, parseMedia } from "../src/server/web-media";
+import * as extractor from "../src/server/yt-dlp";
 
 // StreamingCommunity's plugin returns a video and an audio rendition of one HLS master (#700).
 test("a split m3u8 pair from one master plays the master, with no separate sound", () => {
@@ -69,4 +71,30 @@ test("an HLS variant plays its master, capped at the chosen variant's height", (
   // Without a height the master couldn't keep the chosen quality.
   const { height: _, ...unsized } = stream;
   expect(parseMedia(unsized, "").source).toBe(stream.url);
+});
+
+test("an endless HLS variant that refuses playback renews from the master it fell back to", async () => {
+  const master = "https://media.example/master.m3u8";
+  const stream = {
+    is_live: true,
+    protocol: "m3u8_native",
+    url: "https://media.example/selected.m3u8",
+    manifest_url: master,
+    vcodec: "avc1",
+    acodec: "mp4a",
+  };
+  const extract = spyOn(extractor, "resolveWithYtDlp").mockImplementation(
+    (_args, _options, _provider, accept) => accept(JSON.stringify(stream)),
+  );
+  const request = spyOn(network, "publicFetch").mockResolvedValue(
+    new Response(null, { status: 403 }),
+  );
+  try {
+    const media = await createWebMediaResolver()("https://media.example/concert");
+    expect(media.source).toBe(master);
+    expect(media.renewal?.current.source).toBe(master);
+  } finally {
+    request.mockRestore();
+    extract.mockRestore();
+  }
 });

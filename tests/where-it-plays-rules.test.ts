@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ClientSessionState } from "../src/client/session/session";
 import {
+  arrange,
   chooserFor,
   chooserRequest,
+  counts,
   picker,
   playOnTargets,
   reopens,
@@ -103,6 +105,17 @@ const screen = {
   audio: true,
   video: true,
 } as const;
+
+test("Can't play counts and shows an output when its Playback fails", () => {
+  const state = session({
+    film: { status: "error" },
+    outputs: [both("tv", { error: "Couldn't start media" })],
+  });
+  const devices = rows(state);
+  const count = counts(devices).find((item) => item.filter === "error")?.count ?? 0;
+  const visible = arrange(devices, undefined, "error").playing.map((item) => item.device.id);
+  expect({ count, visible }).toEqual({ count: 1, visible: ["tv"] });
+});
 
 describe("Picture and Sound", () => {
   test("each adds its own channel, sound at the device's own level", () => {

@@ -162,8 +162,7 @@ export class LivePlayer {
   // Call from a tap, before any other await, as the SDK's unlock().
   async unlock() {
     const context = this.open();
-    if (context.state !== "running") await context.resume();
-    await this.ready;
+    await Promise.all([this.ready, context.state !== "running" && context.resume()]);
   }
 
   destroy() {
@@ -263,28 +262,38 @@ export class LivePlayer {
     const context = new AudioContext({
       sampleRate: this.feed?.sampleRate ?? 48_000,
     });
-    const gain = context.createGain();
     this.context = context;
+    this.ready = this.attach(context).catch((error) => {
+      // A worklet caches a failed module fetch. A tap needs a fresh context to fetch it again.
+      if (this.context === context) {
+        this.context = this.gain = this.node = undefined;
+        void context.close().catch(() => {});
+      }
+      throw error;
+    });
+    return context;
+  }
+
+  private async attach(context: AudioContext) {
+    await context.audioWorklet.addModule(workletUrl);
+    if (this.context !== context) return;
+    const gain = context.createGain();
     this.gain = gain;
     this.updateVolume();
     gain.connect(context.destination);
+    const node = new AudioWorkletNode(context, "couch-live", {
+      numberOfInputs: 0,
+      outputChannelCount: [2],
+    });
+    node.connect(gain);
+    this.node = node;
+    // Chunks and the worklet's reports pass between the feed and the worklet directly.
+    const { port1, port2 } = new MessageChannel();
+    node.port.postMessage({ port: port1 }, [port1]);
+    this.send({ type: "port", port: port2 }, [port2]);
+    this.sendClock();
     context.addEventListener("statechange", () => this.interrupt());
     this.reader = setInterval(() => this.read(), readingMs);
-    this.ready = context.audioWorklet.addModule(workletUrl).then(() => {
-      if (this.context !== context) return;
-      const node = new AudioWorkletNode(context, "couch-live", {
-        numberOfInputs: 0,
-        outputChannelCount: [2],
-      });
-      node.connect(gain);
-      this.node = node;
-      // Chunks and the worklet's reports pass between the feed and the worklet directly.
-      const { port1, port2 } = new MessageChannel();
-      node.port.postMessage({ port: port1 }, [port1]);
-      this.send({ type: "port", port: port2 }, [port2]);
-      this.sendClock();
-    });
-    return context;
   }
 
   private updateVolume() {

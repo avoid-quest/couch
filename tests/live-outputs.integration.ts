@@ -41,6 +41,15 @@ const direct = (load: Load | undefined) =>
 const receivers = (client: Client) => client.state.outputs?.map((output) => output.deviceId);
 const sharedPlaybacks = (client: Client, sourceId = "screen") =>
   client.state.playbacks?.filter((playback) => playback.liveSourceId === sourceId) ?? [];
+function assertPrivateScreen(viewer: Client, receiver: Client) {
+  const id = receiver.state.playback;
+  assert.ok(sharedPlaybacks(receiver).some((playback) => playback.id === id));
+  const summary = viewer.state.playbacks?.find((playback) => playback.id === id);
+  assert.ok(summary?.private);
+  assert.equal(summary.liveSourceId, undefined);
+  assert.equal(summary.title, undefined);
+  assert.equal(summary.thumbnail, undefined);
+}
 const consent = (client: Client, id: string) =>
   client.state.devices?.find((device) => device.id === id)?.sharing;
 const lastCommand = (client: Client) =>
@@ -230,7 +239,7 @@ test(
         },
       );
       assert.equal(f.receiver.state.player.status, "playing");
-      assert.equal(sharedPlaybacks(other).length, 1);
+      assertPrivateScreen(other, f.receiver);
       assert.equal(other.state.playback, null, "Other has nothing of Receiver's to view");
       assert.deepEqual(consent(other, f.receiver.id), { audio: false, video: false });
       // An outputless request to choose is not another place it plays: the refusal is about privacy, not ambiguity.
@@ -244,7 +253,10 @@ test(
         ).ok,
         true,
       );
-      await until(() => sharedPlaybacks(other).length === 2);
+      await until(() =>
+        sharedPlaybacks(other).some((item) => item.id === f.publisher.state.playback),
+      );
+      assertPrivateScreen(other, f.receiver);
       assert.match(
         (await other.command({ type: "playLive", sourceId: "screen", deviceId: other.id })).error!,
         /playing privately on Receiver/,
@@ -457,8 +469,11 @@ test(
         ).ok,
         true,
       );
-      await until(() => sharedPlaybacks(f.publisher).length === 2);
+      await until(() =>
+        sharedPlaybacks(f.publisher).some((item) => item.id === f.publisher.state.playback),
+      );
       assert.notEqual(f.publisher.state.playback, f.receiver.state.playback);
+      assertPrivateScreen(f.publisher, f.receiver);
       assert.equal(
         (await f.publisher.command({ type: "stop", playbackId: playbackId! })).ok,
         false,
