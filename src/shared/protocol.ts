@@ -134,7 +134,9 @@ export type Output = {
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
 export type PlaybackSummary = {
   id: string;
-  title: string | null;
+  title?: string | null;
+  // This window may not control this Playback, so its title and source are left out.
+  private?: true;
   status: PlayerState["status"];
   outputs: Output[];
   hostOnly?: boolean;
@@ -229,7 +231,7 @@ export type SessionState = {
   systemAudio?: SoundRouteState;
 };
 
-// What every window shares, whichever Playback it looks at.
+// The Couch as this window sees it, whichever Playback it looks at.
 type CouchState = Pick<
   SessionState,
   | "versions"

@@ -37,6 +37,7 @@ localhost page only), the interface size and TV presentation.
   in the app, origin storage in a browser), and Core accepts changes only from
   that device's own connection. Core rechecks consent after resolving a source
   and before an mpv fallback. Sharing never grants update or restart rights.
+  A window sees a Playback's title only while its Device may control that Playback.
 
 ## LAN and certificates
 

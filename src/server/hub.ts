@@ -3091,7 +3091,7 @@ export async function createHub(options: HubOptions) {
       liveSources: live.sources(),
     };
     const views = new Map<string, string>();
-    const couchMessage = JSON.stringify({ type: "couch", couch: shared } satisfies ServerMessage);
+    const couchViews = new Map<string, string>();
     const outputMessages = new Map<Playback | undefined, string>();
     // A synchronous flush shares level reads, then discards them before the next change.
     const levels = new Map<Playback | undefined, Map<string, number>>();
@@ -3116,9 +3116,30 @@ export async function createHub(options: HubOptions) {
         socket.close(4001, "Pair this device again.");
         continue;
       }
-      const playback = lookedAt(deviceOf(socket)),
-        device = selected(deviceOf(socket)),
-        moves = controlled(playback, deviceOf(socket));
+      const actor = deviceOf(socket);
+      const privateIds = new Set<string>();
+      for (const playback of playbacks.values())
+        if (!controls(playback, actor)) privateIds.add(playback.id);
+      // Windows with the same private Playbacks share one serialized Couch view for this flush.
+      const couchView = [...privateIds].join(",");
+      if (!couchViews.has(couchView)) {
+        const summaries = shared.playbacks.map((summary): PlaybackSummary =>
+          privateIds.has(summary.id)
+            ? { ...summary, title: undefined, liveSourceId: undefined, private: true }
+            : summary,
+        );
+        couchViews.set(
+          couchView,
+          JSON.stringify({
+            type: "couch",
+            couch: { ...shared, playbacks: summaries },
+          } satisfies ServerMessage),
+        );
+      }
+      const target = lookedAt(actor),
+        playback = target && !privateIds.has(target.id) ? target : undefined,
+        device = selected(actor),
+        moves = controlled(playback, actor);
       // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
       // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
       const volume = Math.round(
@@ -3129,7 +3150,7 @@ export async function createHub(options: HubOptions) {
             ),
           ),
         ),
-        actions = capabilities(playback, deviceOf(socket)),
+        actions = capabilities(target, actor),
         view = `${playback?.id}:${device}:${volume}:${JSON.stringify(actions)}`;
       if (!views.has(view)) {
         const state = playback ? stateOf(playback) : idle();
@@ -3178,7 +3199,7 @@ export async function createHub(options: HubOptions) {
       const sent = sentStates.get(socket) ?? {};
       sentStates.set(socket, sent);
       for (const [part, message] of [
-        ["couch", couchMessage],
+        ["couch", couchViews.get(couchView)!],
         ["playback", views.get(view)!],
         ["outputs", outputMessages.get(playback)!],
       ] as const)
@@ -3226,7 +3247,8 @@ export async function createHub(options: HubOptions) {
     if (closed) return;
     const message = JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage);
     for (const socket of sockets)
-      if (lookedAt(deviceOf(socket)) === playback) send(socket, message);
+      if (lookedAt(deviceOf(socket)) === playback && controls(playback, deviceOf(socket)))
+        send(socket, message);
   };
   // When the queue ends, the Playback ends (#644 End).
   const settle = (playback: Playback) => {
@@ -3481,7 +3503,9 @@ export async function createHub(options: HubOptions) {
   // Saved Playbacks come back idle, with no outputs, until a Device plays them.
   for (const id of store.playbackIds()) settle(createPlayback(id));
   const queueOf = (actor: PlaybackActor | undefined) => {
-    const playback = lookedAt(actor?.deviceId ?? hostId());
+    const deviceId = actor?.deviceId ?? hostId();
+    const playback = lookedAt(deviceId);
+    if (playback) requirePlayback(playback, deviceId);
     return playback ? stateOf(playback) : idle();
   };
   const playlists = createPlaylists({

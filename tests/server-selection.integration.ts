@@ -285,6 +285,57 @@ test(
 );
 
 test(
+  "Playback titles follow the outputs each device may control as sharing changes",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("first"),
+        playNow: true,
+        deviceId: speakerId,
+      });
+      await f.speaker.command({
+        type: "enqueue",
+        entry: f.entry("film"),
+        playNow: true,
+        deviceId: speakerId,
+      });
+      await until(() => f.phone.state.currentEntryId === "film");
+      const summary = (state: SessionState) =>
+        state.playbacks?.find((item) =>
+          item.outputs.some((output) => output.deviceId === speakerId),
+        );
+      assert.equal(summary(f.phone.state)?.title, "film");
+      assert.equal(summary(f.phone.state)?.private, undefined);
+
+      await f.speaker.command({ type: "sharing", sharing: { audio: true, video: false } });
+      await until(() => !!summary(f.phone.state)?.private && !!summary(f.host.state)?.private);
+      for (const viewer of [f.phone, f.host]) {
+        assert.equal("title" in summary(viewer.state)!, false);
+        assert.equal(summary(viewer.state)?.private, true);
+      }
+      assert.equal(summary(f.speaker.state)?.title, "film");
+      assert.equal(summary(f.speaker.state)?.private, undefined);
+      // The phone still selects this device for its shared speakers, but the film uses its private screen too.
+      assert.equal(f.phone.state.controlling, speakerId);
+      await until(() => !f.phone.state.queue.length);
+      await assert.rejects(f.rest("/api/playlists", { name: "Copy" }), /not sharing its outputs/);
+
+      await f.speaker.command({ type: "sharing", sharing: { audio: true, video: true } });
+      await until(
+        () => f.phone.state.currentEntryId === "film" && summary(f.host.state)?.title === "film",
+      );
+      assert.equal(summary(f.phone.state)?.title, "film");
+      assert.equal(summary(f.phone.state)?.private, undefined);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
   "explicit Play on cannot replace a target's private video while its audio is shared",
   { timeout: 15_000 },
   async () => {
