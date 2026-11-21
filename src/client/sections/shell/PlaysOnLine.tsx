@@ -127,7 +127,8 @@ export function PlaysOnLine({
   const { state } = useSessionGate();
   const choices =
     state?.playbacks?.filter((playback) => playback.running && !playback.private) ?? [];
-  const canPick = choices.length > 1;
+  // Also when the controlled Playback stopped running (it can't play), so a running one stays in reach.
+  const canPick = choices.some((playback) => playback.id !== state?.playback);
   // The same elements with or without where it plays, so a focused link survives another device joining.
   const shown = !!at && (canPick || (at.elsewhere && !overPicture));
   const label = at && (
