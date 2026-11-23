@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
-import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn } from "@/session/device-id";
 import { focusPageControl } from "@/navigation";
 import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
@@ -193,167 +192,160 @@ export function NowPlayingBar({
   // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
   return (
     <div className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
-      <CouchPlayer state={state} run={run}>
-        <footer
-          data-now-playing
-          onFocusCapture={() => {
-            focusWithin.current = true;
-          }}
-          onBlurCapture={() => {
-            focusWithin.current = false;
-          }}
-          aria-label="Now playing"
-          style={roomStyle(light)}
-          className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target)"
-        >
-          <PlaybackTimeline
-            state={state}
-            connected={connected}
-            className="bar-timeline absolute inset-x-5 top-0 z-10 -translate-y-1/2 max-sm:inset-x-4 [&_[data-time-labels]]:hidden"
-          />
-          {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
+      <footer
+        data-now-playing
+        onFocusCapture={() => {
+          focusWithin.current = true;
+        }}
+        onBlurCapture={() => {
+          focusWithin.current = false;
+        }}
+        aria-label="Now playing"
+        style={roomStyle(light)}
+        className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target)"
+      >
+        <PlaybackTimeline
+          state={state}
+          connected={connected}
+          className="bar-timeline absolute inset-x-5 top-0 z-10 -translate-y-1/2 max-sm:inset-x-4 [&_[data-time-labels]]:hidden"
+        />
+        {/* Two lines beside the artwork at its own shape, as a mini-player's. The title is the control, across the whole
           line, and the artwork a pointer target for it; the line under it keeps its own links, so they sit outside the
           title's button. Those links drop their row height here and keep a 24px hit area that doesn't push the line apart. */}
-          <div className="relative flex min-w-0 items-center gap-4 max-sm:gap-3 max-sm:pr-4">
-            <button
-              data-bar-art
-              type="button"
-              tabIndex={-1}
-              aria-hidden="true"
-              className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-md shadow-[0_.375rem_1rem_rgb(0_0_0/45%)] bg-black/40 max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto"
+        <div className="relative flex min-w-0 items-center gap-4 max-sm:gap-3 max-sm:pr-4">
+          <button
+            data-bar-art
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="relative flex h-14 max-w-28 min-w-14 shrink-0 items-center justify-center overflow-hidden rounded-md shadow-[0_.375rem_1rem_rgb(0_0_0/45%)] bg-black/40 max-sm:h-12 max-sm:min-w-12 [&_img]:aspect-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-28 [&>span]:aspect-square [&>span]:h-full [&>span]:w-auto"
+            onClick={() => onOpen()}
+          >
+            {artwork}
+          </button>
+          <div data-bar-title className="grid min-w-0 flex-1 gap-1">
+            <Button
+              variant="link"
+              className="h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title leading-tight font-medium text-foreground touch:min-h-0 max-sm:text-body"
+              aria-label={`Open player: ${title}`}
               onClick={() => onOpen()}
             >
-              {artwork}
-            </button>
-            <div data-bar-title className="grid min-w-0 flex-1 gap-1">
-              <Button
-                variant="link"
-                className="h-auto min-h-0 w-full min-w-0 justify-start rounded-sm p-0 text-left text-title leading-tight font-medium text-foreground touch:min-h-0 max-sm:text-body"
-                aria-label={`Open player: ${title}`}
-                onClick={() => onOpen()}
+              {/* Keep the collapsed bar compact; the player shows the whole title. */}
+              <span className="truncate" title={title}>
+                {title}
+              </span>
+            </Button>
+            {/* The context gives way first so the device and status stay readable. */}
+            <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
+              <PlaysOnLine at={at} compact>
+                {livePlayback(state) && current.subtitle && (
+                  <span className="min-w-0 truncate" title={current.subtitle}>
+                    {current.subtitle}
+                  </span>
+                )}
+                <MediaContext
+                  creator={current.creator}
+                  collection={current.collection}
+                  radio={
+                    radio && programme && current.source.startsWith("radio:")
+                      ? { id: current.source.slice(6), title: current.title }
+                      : undefined
+                  }
+                  className="min-w-0 shrink flex-nowrap overflow-x-clip text-meta whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1"
+                />
+              </PlaysOnLine>
+              <span
+                role="status"
+                className="max-w-full shrink-0 truncate empty:hidden"
+                title={status}
               >
-                {/* Keep the collapsed bar compact; the player shows the whole title. */}
-                <span className="truncate" title={title}>
-                  {title}
-                </span>
-              </Button>
-              {/* The context gives way first so the device and status stay readable. */}
-              <div className="flex min-w-0 items-center gap-x-2 overflow-x-clip text-meta text-muted-foreground">
-                <PlaysOnLine at={at} compact>
-                  {livePlayback(state) && current.subtitle && (
-                    <span className="min-w-0 truncate" title={current.subtitle}>
-                      {current.subtitle}
-                    </span>
-                  )}
-                  <MediaContext
-                    creator={current.creator}
-                    collection={current.collection}
-                    radio={
-                      radio && programme && current.source.startsWith("radio:")
-                        ? { id: current.source.slice(6), title: current.title }
-                        : undefined
-                    }
-                    className="min-w-0 shrink flex-nowrap overflow-x-clip text-meta whitespace-nowrap [&_a]:-my-1 [&_a]:min-h-0 [&_a]:py-1"
-                  />
-                </PlaysOnLine>
-                <span
-                  role="status"
-                  className="max-w-full shrink-0 truncate empty:hidden"
-                  title={status}
-                >
-                  {status}
-                </span>
-              </div>
+                {status}
+              </span>
             </div>
           </div>
-          <PlaybackTransport
+        </div>
+        <PlaybackTransport state={state} connected={connected} run={run} moreClassName={desktop} />
+        <div
+          data-bar-tools
+          className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0"
+        >
+          <VolumeButton
             state={state}
             connected={connected}
             run={run}
-            moreClassName={desktop}
+            className={livePlayback(state) ? undefined : desktop}
           />
-          <div
-            data-bar-tools
-            className="-mr-2.5 flex shrink-0 items-center justify-self-end gap-0.5 max-sm:gap-0"
+          {!livePlayback(state) && <WhereItPlays state={state} connected={connected} run={run} />}
+          <UpNextButton state={state} className={desktop} onClick={() => onOpen("queue")} />
+          {/* The player's own Playback menu, for whatever plays, here or on another device. */}
+          {!livePlayback(state) && (
+            <Popover open={menu} onOpenChange={setMenu}>
+              <PopoverTrigger asChild>
+                <Button
+                  ref={gear}
+                  data-panel="settings"
+                  variant="ghost"
+                  size="icon-lg"
+                  className={desktop}
+                  aria-label="Playback"
+                  title="Playback"
+                  disabled={!settings}
+                >
+                  <Settings aria-hidden="true" />
+                </Button>
+              </PopoverTrigger>
+              {menu && settings && (
+                <PlaybackMenu
+                  {...settings}
+                  trigger={gear.current}
+                  tracks={!isAudioOnly(playback, current, player.tracks)}
+                  details={
+                    details && (
+                      <Button asChild variant="ghost" className={playbackMenuRow}>
+                        <Link
+                          to={detailHref(details)}
+                          aria-label="Details"
+                          onClick={(event) => {
+                            // As the player's own Details: in the section it was opened from, and Back returns to the gear.
+                            setMenu(false);
+                            if (
+                              event.button ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.shiftKey ||
+                              event.altKey
+                            )
+                              return;
+                            event.preventDefault();
+                            detailNavigation.open(
+                              details,
+                              '[data-now-playing] button[aria-label="Playback"]',
+                            );
+                          }}
+                        >
+                          Details
+                          <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
+                        </Link>
+                      </Button>
+                    )
+                  }
+                />
+              )}
+            </Popover>
+          )}
+          {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
+          <Button
+            data-player-last
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Open player"
+            title="Open player"
+            onClick={() => onOpen()}
           >
-            <VolumeButton
-              state={state}
-              connected={connected}
-              run={run}
-              className={livePlayback(state) ? undefined : desktop}
-            />
-            {!livePlayback(state) && <WhereItPlays state={state} connected={connected} run={run} />}
-            <UpNextButton state={state} className={desktop} onClick={() => onOpen("queue")} />
-            {/* The player's own Playback menu, for whatever plays, here or on another device. */}
-            {!livePlayback(state) && (
-              <Popover open={menu} onOpenChange={setMenu}>
-                <PopoverTrigger asChild>
-                  <Button
-                    ref={gear}
-                    data-panel="settings"
-                    variant="ghost"
-                    size="icon-lg"
-                    className={desktop}
-                    aria-label="Playback"
-                    title="Playback"
-                    disabled={!settings}
-                  >
-                    <Settings aria-hidden="true" />
-                  </Button>
-                </PopoverTrigger>
-                {menu && settings && (
-                  <PlaybackMenu
-                    {...settings}
-                    trigger={gear.current}
-                    tracks={!isAudioOnly(playback, current, player.tracks)}
-                    details={
-                      details && (
-                        <Button asChild variant="ghost" className={playbackMenuRow}>
-                          <Link
-                            to={detailHref(details)}
-                            aria-label="Details"
-                            onClick={(event) => {
-                              // As the player's own Details: in the section it was opened from, and Back returns to the gear.
-                              setMenu(false);
-                              if (
-                                event.button ||
-                                event.metaKey ||
-                                event.ctrlKey ||
-                                event.shiftKey ||
-                                event.altKey
-                              )
-                                return;
-                              event.preventDefault();
-                              detailNavigation.open(
-                                details,
-                                '[data-now-playing] button[aria-label="Playback"]',
-                              );
-                            }}
-                          >
-                            Details
-                            <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                          </Link>
-                        </Button>
-                      )
-                    }
-                  />
-                )}
-              </Popover>
-            )}
-            {/* A mini-player's expand arrow, as YouTube Music's: up, into the player, unlike fullscreen's corners. */}
-            <Button
-              data-player-last
-              variant="ghost"
-              size="icon-lg"
-              aria-label="Open player"
-              title="Open player"
-              onClick={() => onOpen()}
-            >
-              <ChevronUp aria-hidden="true" />
-            </Button>
-          </div>
-        </footer>
-      </CouchPlayer>
+            <ChevronUp aria-hidden="true" />
+          </Button>
+        </div>
+      </footer>
     </div>
   );
 }

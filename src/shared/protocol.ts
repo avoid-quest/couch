@@ -343,6 +343,7 @@ export type Action =
     }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
+  | { type: "holdSpeed"; playbackId: string; held: boolean }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }

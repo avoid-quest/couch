@@ -445,6 +445,12 @@ export function createSession(
     if (playbackId !== state.player.playbackId)
       throw new Error("The playing item changed. Use the current state and try again.");
   };
+  // Keep the chosen speed until the renderer confirms it. A temporary 2× hold never becomes a reload or profile default.
+  let rate: { playbackId: string; speed: number; holds: number } | undefined;
+  const chosenPlayer = () =>
+    rate && rate.playbackId === state.player.playbackId
+      ? { ...state.player, speed: rate.speed }
+      : state.player;
   let loaded: Extract<PlaybackCommand, { type: "load" }> | null = null;
   // Errors finish the active progress record; retry retains the original viewing owner and actor.
   let progressContext: { profileId: string; playedBy?: PlaybackActor } | undefined;
@@ -538,7 +544,7 @@ export function createSession(
     if (!expiry || Date.now() < expiry.at || activePlayIntent !== playIntent) return false;
     const recover = expiry.recover;
     expiry = undefined; // One replacement transport per explicit Play, including failed checks.
-    const previous = state.player;
+    const previous = chosenPlayer();
     const recovery = { paused: pendingPause ?? previous.status === "paused" };
     webRecovery = recovery;
     resolution?.abort();
@@ -897,7 +903,7 @@ export function createSession(
       authorize();
       options.prepareAudio?.(entry);
       switchOver(fresh);
-      const previous = state.player;
+      const previous = chosenPlayer();
       const paused = pendingPause ?? previous.status === "paused";
       const position =
         pendingSeek?.playbackId === previous.playbackId ? pendingSeek.position : previous.position;
@@ -1179,7 +1185,8 @@ export function createSession(
       retry = false,
       held?: { paused: boolean; pauses: number },
     ) {
-      const { playbackId, status, position, speed } = state.player;
+      const { playbackId, status, position } = state.player;
+      const speed = rate?.playbackId === playbackId && rate.holds ? 2 : chosenPlayer().speed;
       if (
         !loaded ||
         loaded.playbackId !== playbackId ||
@@ -1318,6 +1325,25 @@ export function createSession(
       );
       if (current) stop();
       else broadcast();
+    },
+    holdSpeed(playbackId: string) {
+      currentPlayback(playbackId);
+      const entry = state.queue.find((item) => item.id === state.currentEntryId);
+      const speed = chosenPlayer().speed ?? 1;
+      if (!entry || entry.endless || isRadio(entry) || !state.player.seekable || speed >= 2) return;
+      if (!started() || state.player.status === "paused") return;
+      const hold = rate?.playbackId === playbackId ? rate : { playbackId, speed, holds: 0 };
+      rate = hold;
+      if (hold.holds++ === 0) send({ type: "speed", playbackId, speed: 2 });
+      return {
+        playbackId,
+        release() {
+          hold.holds--;
+          if (rate !== hold || hold.holds || !admitted() || state.player.playbackId !== playbackId)
+            return;
+          send({ type: "speed", playbackId, speed: hold.speed });
+        },
+      };
     },
     get pauses() {
       return pauses;
@@ -1573,7 +1599,7 @@ export function createSession(
           const patch =
             action.type === "preferences"
               ? action.preferences
-              : playbackDefault(state.player, action.setting);
+              : playbackDefault(chosenPlayer(), action.setting);
           if (!patch) throw new Error("Can't save this as a default.");
           const profile = { ...state.preferences!.profile, ...patch };
           store.saveProfilePreferences(action.profileId, profile);
@@ -1605,6 +1631,10 @@ export function createSession(
           else send(action);
           break;
         case "speed":
+          currentPlayback(action.playbackId);
+          rate = { playbackId: action.playbackId, speed: action.speed, holds: 0 };
+          send(action);
+          break;
         case "subtitleDelay":
           currentPlayback(action.playbackId);
           send(action);
@@ -1658,7 +1688,8 @@ export function createSession(
           break;
         case "stop": {
           if (action.playbackId !== undefined) currentPlayback(action.playbackId);
-          const { currentEntryId, player } = state;
+          const { currentEntryId } = state;
+          const player = chosenPlayer();
           stop();
           if (currentEntryId && player.playbackId) {
             // Keep the Playback past Stop so the controller's six-second Undo can reach it.
@@ -1702,6 +1733,11 @@ export function createSession(
         return;
       }
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
+      if (
+        rate &&
+        (rate.playbackId !== player.playbackId || (!rate.holds && rate.speed === player.speed))
+      )
+        rate = undefined;
       const requestedAudio = pendingAudioSelection ? audioSelection : null;
       const audio = player.tracks?.filter((track) => track.kind === "audio") ?? [],
         selected = audio.find((track) => track.selected);

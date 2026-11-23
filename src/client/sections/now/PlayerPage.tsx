@@ -5,7 +5,6 @@ import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
-import { useCouchHotkeys } from "@/useCouchHotkeys";
 import {
   useCallback,
   useEffect,
@@ -39,12 +38,23 @@ import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
 import { useBottomBar } from "@/sections/shell/NowPlayingBar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
+import {
+  Container,
+  Gesture,
+  Hotkey,
+  SeekIndicator,
+  useDoubleTapGesture,
+  useTapGesture,
+} from "@videojs/react";
+import { useCouchPlayer } from "@/components/CouchPlayer";
+import { useKeyHold } from "@tanstack/react-hotkeys";
+import { useCouchHotkeys } from "@/useCouchHotkeys";
+import { startHold } from "@/hold";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { isAudioOnly } from "./player-presentation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
-import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { WhereItPlays } from "@/sections/shell/Outputs";
@@ -67,6 +77,9 @@ import {
 import { useRadioClock } from "@/radio-clock";
 import { useStationShow } from "@/sections/home/on-air";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
+
+const feedback =
+  "pointer-events-none absolute z-10 rounded-full bg-black/70 px-3 py-1 text-sm font-medium text-white tabular-nums";
 
 type Panel = "settings";
 // From 960px audio's Up next opens over the room beside the title (index.css), so the queue doesn't repeat what plays.
@@ -126,10 +139,6 @@ export function PlayerPage({
       '[aria-label="Playback controls"] button:not(:disabled), [data-live-participation] button:not(:disabled)',
     );
   const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
-  // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
-  const tap = useRef<boolean | null>(null);
-  // What the picture's last click asked for, so a double-click's second click can undo it.
-  const clicked = useRef(false);
   // The band's control a click opened (a Popover, Up next), whose return of focus hands it to the picture.
   const clickOpened = useRef<Element | null>(null);
   const closeQueue = useCallback(() => {
@@ -199,9 +208,6 @@ export function PlayerPage({
   );
   const artworkStage = audioOnly || !picture;
   const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
-  useCouchHotkeys([
-    { hotkey: "F", enabled: canFullscreen, action: () => void fullscreen.toggle() },
-  ]);
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   // Now playing is calm: artwork, title and where it comes from. Info shows the rest in place (a show's genres and host,
   // its broadcast, synopsis and the next show; an item's trail and end). It belongs to what this Playback shows, so
@@ -253,7 +259,14 @@ export function PlayerPage({
   useEffect(() => {
     if (queueOpen && !restoreDetailFocus(location.state.detailFocus)) queueClose.current?.focus();
   }, [queueOpen]);
-  const { transportReady, pausable } = playbackCapabilities(state, connected);
+  const {
+    audioReady,
+    transportReady,
+    pausable,
+    playing: underway,
+    canTogglePaused,
+    seekable,
+  } = playbackCapabilities(state, connected);
   // Unattended playback starts on the picture so automatic focus cannot pin the bands open.
   // A TV already driven by keys keeps its transport entry point.
   useEffect(() => {
@@ -442,7 +455,6 @@ export function PlayerPage({
     if (queueOpen) closeQueue();
     setInfoFor(open ? infoKey : null);
   };
-  useCouchHotkeys([{ hotkey: "I", enabled: artworkStage && !!current, action: toggleInfo }]);
   useEffect(() => {
     window.addEventListener("couch-info", toggleInfo);
     return () => window.removeEventListener("couch-info", toggleInfo);
@@ -451,10 +463,88 @@ export function PlayerPage({
   const roomArt = currentProgramme?.artworkUrl || current?.thumbnail;
   const roomLight = useArtworkLight(artworkStage ? roomArt : undefined);
   const [artFrame, artRatio] = useArtRatio(roomArt, 1);
+  const radio = isRadio(current);
+  const osd = !!current && !artworkStage;
+  // iPhone Safari fills the window with the Player but has no document fullscreen.
+  const gesturesEnabled = !tvPresentation && !queueOpen && !panel;
+  const playerKeys = !tvPresentation && !livePlayback(state);
+  const seekKeys = playerKeys && transportReady && seekable;
+  const volumeKeys = playerKeys && available && audioReady;
+  const touchGestures = gesturesEnabled && osd && (fullscreen.fullscreen || !fullscreen.supported);
+  const dismissQueue = queueOpen && (osd || queueBeside);
+  const shownAtTouch = useRef(shown);
+  useTapGesture(
+    () => {
+      if (dismissQueue) closeQueue();
+      else if (shownAtTouch.current && autoHide) hide();
+      else wake();
+    },
+    { pointer: "touch" },
+  );
+  useTapGesture(closeQueue, { pointer: "mouse", disabled: !dismissQueue });
+  useDoubleTapGesture(fullscreen.toggle, {
+    pointer: "mouse",
+    disabled: !canFullscreen || dismissQueue,
+  });
+
+  const speed =
+    gesturesEnabled &&
+    transportReady &&
+    seekable &&
+    playbackControls(state).speed &&
+    !current?.endless &&
+    !radio;
+  const playbackId = player?.playbackId;
+  const canHold = speed && underway && !!playbackId;
+  const transport = useCouchPlayer();
+  const press = useRef<{ touch?: { x: number; y: number }; end: (tap?: boolean) => void } | null>(
+    null,
+  );
+  const spaceDown = useKeyHold("Space");
+  const [holdState, setHoldState] = useState<"pending" | "fast" | null>(null);
+  function beginHold(touch?: { x: number; y: number }) {
+    if (!canHold || press.current) return;
+    // Returning focus to a control cancels the press.
+    surface()?.focus({ preventScroll: true });
+    setHoldState("pending");
+    const timer = startHold(() => {
+      setHoldState("fast");
+      void run({ type: "holdSpeed", playbackId, held: true });
+    });
+    press.current = {
+      touch,
+      end(tap) {
+        press.current = null;
+        setHoldState(null);
+        if (timer.release()) {
+          if (tap) transport.state.pause();
+        } else {
+          void run({ type: "holdSpeed", playbackId, held: false });
+        }
+      },
+    };
+  }
+  useCouchHotkeys([
+    {
+      hotkey: "Space",
+      enabled: playerKeys && canTogglePaused,
+      backgroundOnly: true,
+      action: () => {
+        if (canHold) beginHold();
+        else if (transport.state.paused) void transport.state.play();
+        else transport.state.pause();
+      },
+    },
+    { hotkey: "F", enabled: canFullscreen, action: fullscreen.toggle },
+    { hotkey: "I", enabled: artworkStage && !!current, action: toggleInfo },
+  ]);
+  useEffect(() => {
+    if (holdState && !spaceDown && !press.current?.touch) press.current?.end(document.hasFocus());
+  }, [spaceDown, holdState]);
+  useEffect(() => () => press.current?.end(), [canHold, playbackId, touchGestures]);
   // An explicitly opened queue remains available after playback stops.
   if (!current && !queueOpen && !playerTarget) return null;
 
-  const radio = isRadio(current);
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
     if (
@@ -538,7 +628,6 @@ export function PlayerPage({
         : current.subtitle && !mediaSubtitle(current)
           ? ""
           : current.subtitle || (radio ? "Radio" : source);
-  const osd = !!current && !artworkStage;
   const separateWindow = separate && ["playing", "paused"].includes(player?.status ?? "");
   const nowPlaying =
     player?.nowPlaying &&
@@ -665,43 +754,72 @@ export function PlayerPage({
       onFocus={wake}
       onBlur={wake}
     >
-      {/* The picture is the player's surface. It fills the window and never moves or resizes: every panel lies over it. It
-        takes focus when the player opens, and keys on it are shortcuts (useCouchHotkeys counts a tabindex of -1 as
-        background). As on YouTube, a click on a video plays or pauses (on audio, a stray click leaves the music alone),
-        a click while Up next is open only closes it, and a double-click toggles fullscreen; a tap shows or hides the controls. */}
       {/* Video keeps black letterbox bars in every view. Artwork stands in its room. */}
       {current && artworkStage && <div aria-hidden="true" className="room" />}
-      <div
+      <Container
         ref={showPicture}
         data-player-surface
         tabIndex={-1}
         role="group"
         aria-label={title ? `Player: ${title}` : "Player"}
-        className="player-video absolute inset-0 outline-none"
+        className={cn(
+          "player-video absolute inset-0 outline-none",
+          touchGestures && "touch-manipulation select-none [-webkit-touch-callout:none]",
+        )}
         onPointerDown={(event) => {
-          tap.current = event.pointerType === "touch" ? shown : null;
+          if (event.pointerType !== "touch") return;
+          shownAtTouch.current = shown;
+          if (!event.isPrimary) press.current?.end();
+          else if (touchGestures) beginHold({ x: event.clientX, y: event.clientY });
         }}
-        onClick={(event) => {
-          if (queueOpen && (osd || queueBeside)) {
-            closeQueue();
-            return;
-          }
-          if (tap.current !== null) {
-            if (tap.current && autoHide) {
-              clearTimeout(timer.current);
-              setShown(false);
-            } else wake();
-            return;
-          }
-          if (audioOnly || !active || !player?.playbackId || !transportReady || !pausable) return;
-          // A double-click's second click undoes its first, so the double-click only toggles fullscreen.
-          clicked.current = event.detail % 2 ? playing : !clicked.current;
-          void run({ type: "pause", playbackId: player.playbackId, paused: clicked.current });
+        onPointerMove={(event) => {
+          const origin = press.current?.touch;
+          // As on row menus, allow a resting finger to move slightly.
+          if (
+            origin &&
+            event.pointerType === "touch" &&
+            Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10
+          )
+            press.current?.end();
         }}
-        onDoubleClick={() => {
-          if (tap.current === null && canFullscreen) void fullscreen.toggle();
+        onLostPointerCapture={() => {
+          if (press.current?.touch) press.current.end();
         }}
-      ></div>
+        onContextMenu={(event) => {
+          if (press.current?.touch) event.preventDefault();
+        }}
+        onBlur={() => press.current?.end()}
+      >
+        <Hotkey keys="ArrowLeft" action="seekStep" value={-5} disabled={!seekKeys} />
+        <Hotkey keys="ArrowRight" action="seekStep" value={5} disabled={!seekKeys} />
+        <Hotkey keys="ArrowUp" action="volumeStep" disabled={!volumeKeys} />
+        <Hotkey keys="ArrowDown" action="volumeStep" disabled={!volumeKeys} />
+        <Hotkey keys="<" action="speedDown" disabled={!speed} />
+        <Hotkey keys=">" action="speedUp" disabled={!speed} />
+        {!dismissQueue && !audioOnly && active && transportReady && pausable && (
+          <Gesture type="tap" pointer="mouse" action="togglePaused" />
+        )}
+        {touchGestures && transportReady && seekable && (
+          <>
+            <Gesture type="doubletap" region="left" pointer="touch" action="seekStep" />
+            <Gesture type="doubletap" region="right" pointer="touch" action="seekStep" />
+            <SeekIndicator.Root
+              aria-hidden="true"
+              className={cn(
+                feedback,
+                "group top-1/2 -translate-1/2 data-[direction=backward]:left-1/4 data-[direction=forward]:left-3/4",
+              )}
+            >
+              <SeekIndicator.Value className="group-data-[direction=backward]:before:content-['−'] group-data-[direction=forward]:before:content-['+']" />
+            </SeekIndicator.Root>
+          </>
+        )}
+        {holdState === "fast" && player?.speed === 2 && (
+          <span role="status" className={cn(feedback, "top-1/4 left-1/2 -translate-x-1/2")}>
+            2×
+          </span>
+        )}
+      </Container>
       {osd && statusView}
       {pictureUnmapped && (
         <p
@@ -932,11 +1050,9 @@ export function PlayerPage({
       {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
         picture; what it opened returns focus to the picture once it closes, off the TV. A keyboard's click (detail 0)
         keeps focus where the keyboard put it, and what it opened returns focus to its control. */}
-      {/* Video.js's player for the band's controls; every action goes to Core (CouchPlayer). */}
-      <CouchPlayer state={state} run={run}>
+      {current && (
         <div
           ref={band}
-          hidden={!current}
           data-player-band={shown ? "shown" : "hidden"}
           inert={!shown}
           onClick={(event) => {
@@ -1075,7 +1191,7 @@ export function PlayerPage({
             </div>
           </div>
         </div>
-      </CouchPlayer>
+      )}
     </section>
   );
 }

@@ -322,3 +322,41 @@ for (const relative of [false, true])
       await f.close();
     }
   });
+
+test("a speed hold restores the chosen speed on disconnect and yields to an explicit speed change", async () => {
+  const f = await liveFixture();
+  try {
+    await f.receiver.command({
+      type: "enqueue",
+      entry: { id: "film", title: "Film", source: f.hub.origin + "/api/health" },
+      playNow: true,
+      deviceId: f.receiver.id,
+    });
+    await until(() => !!f.receiver.load());
+    const playbackId = f.receiver.load()!.playbackId;
+    f.receiver.report({ position: 5, duration: 60, seekable: true, speed: 1.25 });
+    await until(() => f.receiver.state.player.speed === 1.25);
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    const host = await f.connect(-1);
+    const hold = (held: boolean) => host.command({ type: "holdSpeed", playbackId, held });
+    const speeds = () =>
+      f.receiver.messages.flatMap((message) =>
+        message.type === "player" && message.command.type === "speed"
+          ? [message.command.speed]
+          : [],
+      );
+    assert.equal((await hold(true)).ok, true);
+    await until(() => speeds().at(-1) === 2);
+    f.receiver.report({ position: 5, duration: 60, seekable: true, speed: 2 });
+    await until(() => f.receiver.state.player.speed === 2);
+    await f.receiver.command({ type: "speed", playbackId, speed: 1.5 });
+    await hold(false);
+    assert.deepEqual(speeds(), [2, 1.5]);
+    await hold(true);
+    await until(() => speeds().at(-1) === 2);
+    host.socket.terminate();
+    await until(() => speeds().at(-1) === 1.5);
+  } finally {
+    await f.close();
+  }
+});

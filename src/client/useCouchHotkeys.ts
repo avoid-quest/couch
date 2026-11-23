@@ -17,13 +17,14 @@ const isBackground = (target: Element | null | undefined) => !target?.closest(co
 
 // Radix portals and focused controls keep ownership of their keyboard input.
 export function useCouchHotkeys(shortcuts: Shortcut[]) {
+  const active = shortcuts.filter(({ enabled }) => enabled !== false);
   useHotkeys(
-    shortcuts.map(({ hotkey, action, enabled, backgroundOnly }) => ({
+    active.map(({ hotkey, action, backgroundOnly }) => ({
       hotkey,
-      options: { enabled: enabled ?? true },
       callback: (event) => {
         const target = event.target instanceof HTMLElement ? event.target : document.activeElement;
         if (event.defaultPrevented || event.isComposing || event.repeat) return;
+        if (hotkey === "," && event.key !== ",") return;
         if (
           target?.closest(
             '[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]',

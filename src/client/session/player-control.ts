@@ -48,6 +48,5 @@ export function remotePlayerSession(
     run,
     command: (action) =>
       ready ? session.command(action, targetDeviceId) : Promise.reject(new Error(status)),
-    seekBy: (seconds) => (ready ? session.seekBy(seconds, targetDeviceId) : Promise.resolve(false)),
   };
 }

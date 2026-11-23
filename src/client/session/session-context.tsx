@@ -99,7 +99,6 @@ export type SessionGateValue = SessionBag & {
   setError: (error: string | null) => void;
   run: (action: Action, targetDeviceId?: string) => Promise<boolean>;
   queue: <T>(title: string, work: () => Promise<T>) => Promise<T>;
-  seekBy: (seconds: number, targetDeviceId?: string) => Promise<boolean>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
   pairingOrigin: string;
@@ -479,27 +478,6 @@ export function SessionGate({
     [command, offerUndo, queue, readObservation],
   );
 
-  const seekBy = useCallback(
-    (seconds: number, targetDeviceId?: string) => {
-      const player = readObservation()?.player;
-      return player?.playbackId &&
-        player.seekable &&
-        (["playing", "paused"].includes(player.status) ||
-          (player.status === "loading" && player.buffering === true))
-        ? run(
-            {
-              type: "seek",
-              playbackId: player.playbackId,
-              position: seconds,
-              relative: true,
-            },
-            targetDeviceId,
-          )
-        : Promise.resolve(false);
-    },
-    [readObservation, run],
-  );
-
   const savePairing = useCallback((value: Required<Credentials>) => {
     try {
       localStorage.setItem(tokenKey, value.token);
@@ -549,7 +527,6 @@ export function SessionGate({
       connected,
       run,
       queue,
-      seekBy,
       offerUndo,
       reconnect,
       startLive,
@@ -588,7 +565,6 @@ export function SessionGate({
       connected,
       run,
       queue,
-      seekBy,
       offerUndo,
       reconnect,
       startLive,
