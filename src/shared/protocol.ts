@@ -462,6 +462,7 @@ export type ConnectionInfo = {
 
 // Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
 export type AppMessage =
+  | { type: "errorReporting"; enabled: boolean }
   | { type: "display"; requestId: string; state?: DisplayState; error?: string }
   | { type: "updates"; requestId: string; state?: UpdateState; error?: string }
   | { type: "tvMode"; requestId: string; error?: string }

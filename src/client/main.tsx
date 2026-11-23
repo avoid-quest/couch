@@ -1,4 +1,5 @@
 import "./console-errors";
+import { reactErrorOptions } from "./sentry";
 import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
@@ -26,7 +27,7 @@ function SessionRouter() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
+createRoot(document.getElementById("root")!, reactErrorOptions).render(
   <StrictMode>
     <NativeModeGate>
       <SessionGate

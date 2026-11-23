@@ -152,6 +152,11 @@ if (captureId) {
       };
     },
     deviceName: (name) => call("device-name", name),
+    errorReporting: (enabled) => {
+      if (enabled === true && !navigator.userActivation.isActive)
+        return Promise.reject(new Error("Turn on error reports in Settings."));
+      return call("error-reporting", enabled);
+    },
     deviceSharing: (sharing) => call("device-sharing", sharing),
     captureSources: () => call("capture-sources"),
     systemAudioCapture: process.argv.includes("--couch-system-audio"),

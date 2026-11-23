@@ -1,6 +1,26 @@
 import { expect, test } from "bun:test";
 import { appDiagnostic } from "../app/diagnostics";
 import { redact } from "../packaging/tv/redact.js";
+import { sentryOptions } from "../src/shared/sentry";
+
+test("Sentry spans keep route timings without the device address or pairing link", () => {
+  const link = "https://living-room.example:4100/pair/tv?token=private#pair=123456";
+  const span = sentryOptions.beforeSendSpan({
+    name: link,
+    attributes: {
+      "url.full": link,
+      "url.query": "token=private",
+      "url.fragment": "pair=123456",
+      "server.address": "living-room.example",
+      "network.local.address": "192.0.2.1",
+      "client.port": 4242,
+      "user_agent.original": "another device",
+      "http.response.status_code": 200,
+    },
+  });
+  expect(span.name).toBe("/pair/tv");
+  expect(span.attributes).toEqual({ "url.full": "/pair/tv", "http.response.status_code": 200 });
+});
 
 test("app evidence keeps only hosts for complete URL tokens, including embedded separators", () => {
   for (const separator of ["", "\n", "\u2028"]) {

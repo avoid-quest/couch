@@ -66,6 +66,14 @@ Without `--ref`, a run uses the default branch, not your work. Package gets the
 Mac signing secrets, so run it only on code the owner trusts. Runs use
 Blacksmith runners; Mac and Windows minutes cost more than Linux.
 
+Package reads `COUCH_SENTRY_DESKTOP_DSN`, `COUCH_SENTRY_CORE_DSN` and
+`COUCH_SENTRY_CLIENT_DSN` from repository variables. It uses the
+`SENTRY_AUTH_TOKEN` Actions secret (`org:ci`) to upload source maps to the
+matching projects before packaging. The installers carry the public DSNs and
+tag reports with `couch@<version>`, including the `-preview.N` suffix. Preview
+builds use the `preview` environment and stable builds use `production`.
+Both sample 10% of performance traces on devices that opt in.
+
 ## Releases
 
 - **Preview** `vX.Y.Z-preview.N`: Release on `main` with `channel=preview`. It
