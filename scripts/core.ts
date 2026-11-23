@@ -1,8 +1,32 @@
+import { basename } from "node:path";
+import { sentryDefines, uploadSourceMaps } from "./sentry";
 import { watch } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { SentryCli } from "@sentry/cli";
+import { readFile, rm } from "node:fs/promises";
 
 // Bundles Core and its audio worker for Node and the app's utilityProcess.
 export const coreBundle = "build/core.mjs";
+
+// Bun writes a debug ID comment, but Node and Electron need the SDK's runtime snippet too.
+async function bunBundleText(result: Bun.BuildOutput, output: string, project: string) {
+  const bundle = await result.outputs[0]!.text();
+  const map = result.outputs.find((file) => file.kind === "sourcemap");
+  if (!map) return bundle;
+  const mapPath = `${output}.map`;
+  const cli = new SentryCli(null, {});
+  try {
+    await Bun.write(output, bundle.replace(/^\/\/# debugId=.*$/m, ""));
+    await Bun.write(mapPath, map);
+    await cli.execute(["sourcemaps", "inject", output, mapPath], true);
+    await cli.execute(
+      ["sourcemaps", "upload", "--project", project, "--wait", output, mapPath],
+      true,
+    );
+    return await Bun.file(output).text();
+  } finally {
+    await rm(mapPath, { force: true });
+  }
+}
 
 // Unminified, so the installed app's log has readable stack traces.
 // A release build passes the identity of the dist it serves, so browsers loading
@@ -19,10 +43,15 @@ export async function buildCore(identity?: string) {
       entrypoints: [entry],
       target: "node",
       format: "esm",
-      ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}),
+      naming: basename(output),
+      sourcemap: identity && output === coreBundle && uploadSourceMaps ? "linked" : "none",
+      define: {
+        ...sentryDefines("core", identity ? "production" : "development"),
+        ...(identity ? { COUCH_BUILD_INFO: JSON.stringify(identity) } : {}),
+      },
     });
     if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
-    const bundle = await result.outputs[0]!.text();
+    const bundle = await bunBundleText(result, output, "couch-core");
     const changed = bundle !== (await readFile(output, "utf8").catch(() => null));
     if (changed || (output === coreBundle && workerChanged)) await Bun.write(output, bundle);
     if (output !== coreBundle) workerChanged = changed;
@@ -41,10 +70,13 @@ export async function buildApp() {
       entrypoints: [entry],
       target: "node",
       format,
+      naming: basename(output),
+      sourcemap: entry === "app/main.ts" && uploadSourceMaps ? "linked" : "none",
       external: ["electron"],
+      define: sentryDefines("desktop", "production"),
     });
     if (!result.success) throw new AggregateError(result.logs, `${entry} build failed`);
-    await Bun.write(output, await result.outputs[0]!.text());
+    await Bun.write(output, await bunBundleText(result, output, "couch-desktop"));
   }
 }
 

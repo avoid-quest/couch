@@ -18,6 +18,7 @@ import { SettingsLayout } from "./SettingsLayout";
 import { useSettingsScope } from "./settings-scope";
 import { TvInterfaceSize } from "./couch/TvInterfaceSize";
 import { CouchChoice } from "./this-device/CouchChoice";
+import { ErrorReportingSetting } from "./this-device/ErrorReportingSetting";
 import { DeviceNameSettings } from "./this-device/DeviceNameSettings";
 import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
 import { DeviceTextSize } from "./this-device/DeviceTextSize";
@@ -42,6 +43,7 @@ export function ThisDevicePage() {
     <SettingsLayout section="device">
       <SettingsSection>
         <DeviceNameSettings />
+        <ErrorReportingSetting />
         {/* A TV shows the Couch's shared text size, which its TV page changes. */}
         {!tvPresentation ? (
           <DeviceTextSize />

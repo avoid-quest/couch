@@ -1,3 +1,5 @@
+import { setCoreReporting } from "./server/sentry";
+import { logger } from "@sentry/node";
 import { linuxBluetooth } from "./server/bluetooth-linux";
 import { createNativeDisplay } from "./server/display-native";
 import { createNativeUpdates } from "./server/updates-native";
@@ -39,6 +41,7 @@ type ParentPort = {
 };
 const app = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
 const native = !!app;
+setCoreReporting(native && process.env.COUCH_ERROR_REPORTING === "1");
 const allowLanHttp = process.env.COUCH_ALLOW_HTTP === "1";
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
@@ -94,6 +97,7 @@ const hub = await createHub({
     .filter(Boolean),
 });
 
+logger.info("Couch Core ready");
 if (app)
   app.postMessage({
     type: "ready",
@@ -126,6 +130,7 @@ app?.on("message", ({ data }) => {
   if (data.type === "display") nativeDisplay.receive(data);
   else if (data.type === "updates") nativeUpdates.receive(data);
   else if (data.type === "tvMode") nativeTvMode.receive(data);
+  else if (data.type === "errorReporting") setCoreReporting(data.enabled);
   else if (data.type === "renamed") hub.renamed();
   else if (data.type === "shutdown") void close();
 });

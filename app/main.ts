@@ -36,6 +36,7 @@ import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-shar
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
 import { createLiveAudio } from "./live-audio";
+import { setDesktopReporting } from "./sentry";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
 
@@ -114,6 +115,10 @@ const write = (path: string, text: string) => {
   renameSync(`${path}.tmp`, path);
 };
 
+const reportingPath = join(dataDir, "error-reporting.json");
+let errorReporting = readJson(reportingPath) === true;
+if (primary) setDesktopReporting(errorReporting);
+
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
 type Choice = AppMode & { pins?: Record<string, string>; tvPresentation?: boolean };
@@ -187,6 +192,7 @@ function startCore() {
     env: {
       ...process.env,
       COUCH_NODE_PATH: process.execPath,
+      COUCH_ERROR_REPORTING: errorReporting ? "1" : "0",
       ...(app.isPackaged && process.platform === "darwin"
         ? { COUCH_QJS_PATH: join(process.resourcesPath, "quickjs", "qjs") }
         : {}),
@@ -782,6 +788,15 @@ handle("device-name", (_event, name) => {
   const saved = saveDeviceName(join(dataDir, "couch.sqlite"), name);
   if (core && !core.stopping) core.child.postMessage({ type: "renamed" } satisfies AppMessage);
   return saved;
+});
+handle("error-reporting", (_event, enabled) => {
+  if (enabled === undefined) return errorReporting;
+  if (typeof enabled !== "boolean") throw new Error("Choose whether to send error reports.");
+  write(reportingPath, JSON.stringify(enabled));
+  errorReporting = enabled;
+  setDesktopReporting(enabled);
+  core?.child.postMessage({ type: "errorReporting", enabled } satisfies AppMessage);
+  return enabled;
 });
 // One sharing choice for this computer, whichever Couch it joins.
 const sharingPath = join(dataDir, "device-sharing.json");

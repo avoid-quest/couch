@@ -5,6 +5,8 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { sentryDefines, uploadSourceMaps } from "./scripts/sentry.ts";
 import { frontendPaths } from "./src/shared/page-paths.ts";
 import { version } from "./package.json" with { type: "json" };
 
@@ -38,6 +40,15 @@ export default defineConfig(({ command }) => ({
       generatedRouteTree: "./routeTree.gen.ts",
     }),
     react(),
+    command === "build" &&
+      uploadSourceMaps &&
+      sentryVitePlugin({
+        org: process.env.SENTRY_ORG,
+        project: "couch-client",
+        release: { create: false, finalize: false, inject: false },
+        sourcemaps: { delete: true },
+        telemetry: false,
+      }),
     tailwindcss(),
     {
       name: "couch-font-preload",
@@ -80,6 +91,7 @@ export default defineConfig(({ command }) => ({
         ],
       },
       workbox: {
+        sourcemap: false,
         navigateFallback: "/index.html",
         navigateFallbackAllowlist: [...new Set(frontendPaths)].map(
           (path) => new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?.*)?$`),
@@ -90,6 +102,7 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   define: {
+    ...sentryDefines("client", command === "serve" ? "development" : "production"),
     COUCH_BUILD_INFO: JSON.stringify(
       command === "serve"
         ? JSON.stringify({ version, revision: null, dataFormat: 1, packaged: false })

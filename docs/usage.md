@@ -114,3 +114,21 @@ bun run dev       # browser-only loop: Core under node --watch, Vite on port 142
 and port. The installed app also uses 4100, so give a source run its own port
 while it runs. `bun run package` builds installers into `.artifacts/app`; see
 [checks and releases](ci.md).
+
+## Optional error reporting
+
+**Settings → This device → General → Send error reports** starts off. The desktop
+preference covers the app, its window and the Core it runs. A browser keeps its
+own preference per Couch origin. Turning it off stops new reports.
+
+Sentry receives exception messages, stack frames, the Couch release, runtime
+and OS versions, and generic startup logs. Sampled traces include route names,
+timings and performance details such as memory, processor count or connection
+speed. Couch redacts recognizable credentials and paths from error messages.
+Free-text errors can still contain private details, including a media hostname.
+
+Request bodies, cookies, request headers and URL query values are excluded
+from reports. Session Replay, screenshots, native crash dumps and breadcrumbs
+are off. The three projects use Sentry’s German region. Sentry sees the
+sending IP and can see the browser origin when it receives a report. IP storage
+is disabled and a project rule removes IP-derived city, region and country.

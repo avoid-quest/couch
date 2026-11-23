@@ -28,6 +28,7 @@ export type CouchApp = {
   deviceName?(name?: string): Promise<string | null>;
   /** Reads, or saves, what this computer shares with every Couch it joins. Older apps lack it. */
   deviceSharing?(sharing?: DeviceSharing): Promise<DeviceSharing>;
+  errorReporting?(enabled?: boolean): Promise<boolean>;
   /** Capture starts only in this app's own window. Older apps lack these methods. */
   captureSources?(): Promise<CaptureSource[]>;
   /** Whether display capture can include system audio. Older apps lack it. */

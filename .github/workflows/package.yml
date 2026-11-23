@@ -77,6 +77,11 @@ jobs:
         run: command -v cmake >/dev/null || brew install cmake
       - run: bun run package ${{ matrix.targets }}
         env:
+          SENTRY_ORG: avoidquest
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          COUCH_SENTRY_DESKTOP_DSN: ${{ vars.COUCH_SENTRY_DESKTOP_DSN }}
+          COUCH_SENTRY_CORE_DSN: ${{ vars.COUCH_SENTRY_CORE_DSN }}
+          COUCH_SENTRY_CLIENT_DSN: ${{ vars.COUCH_SENTRY_CLIENT_DSN }}
           CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
       - name: Verify Mac signatures
