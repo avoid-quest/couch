@@ -38,6 +38,7 @@ import {
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
+import { CouchPlayer } from "@/components/CouchPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
 import { TvAppearancePreview } from "./TvAppearancePreview";
@@ -460,15 +461,18 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 }
 
 export function AppShell() {
+  const { state, run } = useSessionGate();
   const shell = useShellValue();
   // Mount Sonner's listener before the bridge replays a pending audio-unlock notice.
   return (
     <ShellErrorBoundary>
       <DetailFocusRestoration />
       <ShellContext.Provider value={shell}>
-        <ShellChrome>
-          <Outlet />
-        </ShellChrome>
+        <CouchPlayer state={shell.section === "Remote" ? null : state} run={run}>
+          <ShellChrome>
+            <Outlet />
+          </ShellChrome>
+        </CouchPlayer>
       </ShellContext.Provider>
       <MediaSessionBridge />
     </ShellErrorBoundary>

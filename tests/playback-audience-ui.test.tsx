@@ -2,6 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Action, PlaybackControls } from "../src/shared/protocol";
+import type { useCouchHotkeys } from "../src/client/useCouchHotkeys";
 import type { ClientSessionState } from "../src/client/session/session";
 
 // Exercise the product components and their emitted commands. Only browser/hook
@@ -56,20 +57,28 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
 mock.module("../src/client/sections/shell/shell-context", () => ({
   useShell: () => ({
-    section: "Now",
+    section: "Home",
     current: state.queue.find((entry) => entry.id === state.currentEntryId),
   }),
 }));
+let bindings: Parameters<typeof useCouchHotkeys>[0] = [];
 mock.module("../src/client/useCouchHotkeys", () => ({
-  useShortcutFocus: () => "background",
-  useCouchHotkeys: () => {},
+  useCouchHotkeys: (shortcuts: typeof bindings) => {
+    bindings = shortcuts;
+  },
+}));
+const play = mock(() => {}),
+  pause = mock(() => {}),
+  seek = mock((_at: number) => {});
+mock.module("../src/client/components/CouchPlayer", () => ({
+  useCouchPlayer: () => ({
+    state: { paused: state.player.status === "paused", currentTime: 20, play, pause, seek },
+  }),
 }));
 const { PlaybackTransport, PlaybackVolume, LiveParticipation } =
   await import("../src/client/components/PlaybackTransport");
-const videojs = await import("@videojs/react");
-mock.module("@videojs/react", () => ({ ...videojs, useHotkey: () => {} }));
-const { Hotkey, PlayButton } = videojs;
-const { PlaybackHotkeys } = await import("../src/client/sections/shell/KeyboardShortcuts");
+const { PlayButton } = await import("@videojs/react");
+const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 
@@ -189,15 +198,21 @@ test("Play/Pause can pause a started programme while it buffers", async () => {
     };
     sent.length = 0;
     // Its press is CouchMedia's (couch-media.test.ts); here the slot must be enabled.
-    const play = elements(PlaybackTransport({ state, connected: true, run })).find(
+    const button = elements(PlaybackTransport({ state, connected: true, run })).find(
       (element) => element.type === PlayButton,
     )!;
-    expect(play.props.disabled).toBe(false);
-    const bindings = elements(read(() => PlaybackHotkeys({})));
-    for (const key of ["k", "Space"])
-      expect(
-        bindings.find((item) => item.type === Hotkey && item.props.keys === key)?.props.action,
-      ).toBe("togglePaused");
+    expect(button.props.disabled).toBe(false);
+    read(() =>
+      KeyboardShortcuts({ open: false, onOpenChange: () => {}, openerRef: { current: null } }),
+    );
+    for (const key of ["K", "Space"]) {
+      const shortcut = bindings.find((binding) => binding.hotkey === key)!;
+      expect(shortcut.enabled).toBe(true);
+      const transport = status === "paused" ? play : pause;
+      transport.mockClear();
+      shortcut.action();
+      expect(transport).toHaveBeenCalledTimes(1);
+    }
   }
 });
 
@@ -210,10 +225,15 @@ test("player seek keys remain available during buffering and wait during initial
       queue: [{ id: "entry", title: "Film", source: "web:https://example.com/movie" }],
       player: { ...fixture().player, status: "loading", buffering },
     };
-    const bindings = elements(read(() => PlaybackHotkeys({})));
-    expect(bindings.some(({ type, props }) => type === Hotkey && props.action === "seekStep")).toBe(
-      buffering,
+    read(() =>
+      KeyboardShortcuts({ open: false, onOpenChange: () => {}, openerRef: { current: null } }),
     );
+    const forward = bindings.find((binding) => binding.hotkey === "L")!;
+    expect(forward.enabled).toBe(buffering);
+    if (buffering) {
+      forward.action();
+      expect(seek).toHaveBeenCalledWith(30);
+    }
   }
 });
 

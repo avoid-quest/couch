@@ -37,6 +37,16 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const live = current?.endless || isRadio(current);
   const available = connected && !!player && player.status !== "unavailable";
   const currentIndex = state?.queue.findIndex((entry) => entry.id === state.currentEntryId) ?? -1;
+  // A stall mid-watch (a seek, too) reports "loading" with buffering: the item has started, as in Core's session.
+  const transportReady =
+    available &&
+    !!player?.playbackId &&
+    (["playing", "paused"].includes(player.status) ||
+      (player.status === "loading" && player.buffering === true));
+  // Captures keep programme controls without seeking; paused external live media can still resume.
+  const pausable =
+    controls.programme &&
+    (!live || !!current?.liveSourceId || !!player?.seekable || player?.status === "paused");
   return {
     available,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
@@ -50,12 +60,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
       !!player &&
       ["loading", "playing", "paused", "ended", "error"].includes(player.status),
     audioReady: !state?.systemAudio || state.systemAudio.volume !== null,
-    // A stall mid-watch (a seek, too) reports "loading" with buffering: the item has started, as in Core's session.
-    transportReady:
-      available &&
-      !!player?.playbackId &&
-      (["playing", "paused"].includes(player.status) ||
-        (player.status === "loading" && player.buffering === true)),
+    transportReady,
     nextReady:
       controls.programme &&
       controls.queue &&
@@ -63,10 +68,10 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
       !!player?.playbackId &&
       ["loading", "playing", "paused", "ended", "error"].includes(player.status),
     seekable: controls.seek && !!player?.seekable,
-    // Captures keep programme controls without seeking; paused external live media can still resume.
-    pausable:
-      controls.programme &&
-      (!live || !!current?.liveSourceId || !!player?.seekable || player?.status === "paused"),
+    pausable,
+    canTogglePaused:
+      !!current &&
+      (player?.status === "ended" ? available && controls.programme : transportReady && pausable),
     programme: controls.programme,
     hasNext:
       currentIndex >= 0 &&

@@ -21,7 +21,7 @@ import { livePlayback, playbackControls } from "@/session/playback-controls";
 import type { ClientSessionState } from "@/session/session";
 import { muted } from "./PlaybackTransport";
 
-const { Player } = createPlayer({
+const { Player, usePlayer: useCouchPlayer } = createPlayer({
   features: [
     playbackFeature,
     playbackRateFeature,
@@ -33,6 +33,8 @@ const { Player } = createPlayer({
     liveFeature,
   ],
 });
+
+export { useCouchPlayer };
 
 type Props = {
   state: ClientSessionState | null;
@@ -64,13 +66,13 @@ function AttachCouchMedia({ state, run }: Props) {
   useLayoutEffect(() => media.follow(local), [media, local]);
   // Live shows no timeline or Play button (PlaybackTransport), so nothing reads Video.js's state there. Attached, its
   // time feature reads the time every animation frame while it plays: a frame each, on the thread Live is heard from.
-  const live = livePlayback(state);
+  const attachTransport = !!state && !livePlayback(state);
   useLayoutEffect(() => media.update(source, run));
   useLayoutEffect(() => {
-    if (live) return;
+    if (!attachTransport) return;
     attach?.(media);
     return () => attach?.(null);
-  }, [attach, media, live]);
+  }, [attach, media, attachTransport]);
   return null;
 }
 

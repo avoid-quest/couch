@@ -41,13 +41,13 @@ import { QueuePanel, UpNextButton } from "./QueuePanel";
 import {
   Container,
   Gesture,
+  Hotkey,
   SeekIndicator,
-  selectPlayback,
   useDoubleTapGesture,
-  usePlayer,
   useTapGesture,
 } from "@videojs/react";
-import { PlaybackHotkeys } from "@/sections/shell/KeyboardShortcuts";
+import { useCouchPlayer } from "@/components/CouchPlayer";
+import { useKeyHold } from "@tanstack/react-hotkeys";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { startHold } from "@/hold";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
@@ -260,9 +260,11 @@ export function PlayerPage({
     if (queueOpen && !restoreDetailFocus(location.state.detailFocus)) queueClose.current?.focus();
   }, [queueOpen]);
   const {
+    audioReady,
     transportReady,
     pausable,
     playing: underway,
+    canTogglePaused,
     seekable,
   } = playbackCapabilities(state, connected);
   // Unattended playback starts on the picture so automatic focus cannot pin the bands open.
@@ -465,6 +467,9 @@ export function PlayerPage({
   const osd = !!current && !artworkStage;
   // iPhone Safari fills the window with the Player but has no document fullscreen.
   const gesturesEnabled = !tvPresentation && !queueOpen && !panel;
+  const playerKeys = !tvPresentation && !livePlayback(state);
+  const seekKeys = playerKeys && transportReady && seekable;
+  const volumeKeys = playerKeys && available && audioReady;
   const touchGestures = gesturesEnabled && osd && (fullscreen.fullscreen || !fullscreen.supported);
   const dismissQueue = queueOpen && (osd || queueBeside);
   const shownAtTouch = useRef(shown);
@@ -491,51 +496,52 @@ export function PlayerPage({
     !radio;
   const playbackId = player?.playbackId;
   const canHold = speed && underway && !!playbackId;
-  const transport = usePlayer(selectPlayback);
+  const transport = useCouchPlayer();
   const press = useRef<{ touch?: { x: number; y: number }; end: (tap?: boolean) => void } | null>(
     null,
   );
-  const [holding, setHolding] = useState(false);
+  const spaceDown = useKeyHold("Space");
+  const [holdState, setHoldState] = useState<"pending" | "fast" | null>(null);
   function beginHold(touch?: { x: number; y: number }) {
     if (!canHold || press.current) return;
+    // Returning focus to a control cancels the press.
+    surface()?.focus({ preventScroll: true });
+    setHoldState("pending");
     const timer = startHold(() => {
-      setHolding(true);
+      setHoldState("fast");
       void run({ type: "holdSpeed", playbackId, held: true });
     });
     press.current = {
       touch,
       end(tap) {
         press.current = null;
+        setHoldState(null);
         if (timer.release()) {
-          if (tap) transport?.pause();
+          if (tap) transport.state.pause();
         } else {
-          setHolding(false);
           void run({ type: "holdSpeed", playbackId, held: false });
         }
       },
     };
   }
   useCouchHotkeys([
+    {
+      hotkey: "Space",
+      enabled: playerKeys && canTogglePaused,
+      backgroundOnly: true,
+      action: () => {
+        if (canHold) beginHold();
+        else if (transport.state.paused) void transport.state.play();
+        else transport.state.pause();
+      },
+    },
     { hotkey: "F", enabled: canFullscreen, action: fullscreen.toggle },
     { hotkey: "I", enabled: artworkStage && !!current, action: toggleInfo },
   ]);
   useEffect(() => {
-    if (!canHold) return;
-    const cancel = () => press.current?.end();
-    const keyup = (event: KeyboardEvent) => {
-      if (event.key === " " && !press.current?.touch) press.current?.end(true);
-    };
-    const controller = new AbortController();
-    const { signal } = controller;
-    window.addEventListener("keyup", keyup, { signal });
-    window.addEventListener("blur", cancel, { signal });
-    window.addEventListener("pagehide", cancel, { signal });
-    document.addEventListener("visibilitychange", cancel, { signal });
-    return () => {
-      controller.abort();
-      cancel();
-    };
-  }, [canHold, playbackId, touchGestures]);
+    if (holdState && !spaceDown && !press.current?.touch) press.current?.end(document.hasFocus());
+  }, [spaceDown, holdState]);
+  useEffect(() => () => press.current?.end(), [canHold, playbackId, touchGestures]);
   // An explicitly opened queue remains available after playback stops.
   if (!current && !queueOpen && !playerTarget) return null;
 
@@ -784,7 +790,12 @@ export function PlayerPage({
         }}
         onBlur={() => press.current?.end()}
       >
-        <PlaybackHotkeys speed={speed} holdSpace={canHold ? beginHold : undefined} />
+        <Hotkey keys="ArrowLeft" action="seekStep" value={-5} disabled={!seekKeys} />
+        <Hotkey keys="ArrowRight" action="seekStep" value={5} disabled={!seekKeys} />
+        <Hotkey keys="ArrowUp" action="volumeStep" disabled={!volumeKeys} />
+        <Hotkey keys="ArrowDown" action="volumeStep" disabled={!volumeKeys} />
+        <Hotkey keys="<" action="speedDown" disabled={!speed} />
+        <Hotkey keys=">" action="speedUp" disabled={!speed} />
         {!dismissQueue && !audioOnly && active && transportReady && pausable && (
           <Gesture type="tap" pointer="mouse" action="togglePaused" />
         )}
@@ -803,7 +814,7 @@ export function PlayerPage({
             </SeekIndicator.Root>
           </>
         )}
-        {holding && player?.speed === 2 && (
+        {holdState === "fast" && player?.speed === 2 && (
           <span role="status" className={cn(feedback, "top-1/4 left-1/2 -translate-x-1/2")}>
             2×
           </span>
