@@ -1,6 +1,7 @@
 import { redact } from "../../packaging/tv/redact.js";
 import type { ErrorEvent } from "@sentry/react";
 import { version } from "../../package.json";
+import { frontendPaths } from "./page-paths";
 
 declare const COUCH_SENTRY_DSN: string;
 declare const COUCH_SENTRY_ENVIRONMENT: string;
@@ -9,9 +10,40 @@ export const sentryDsn = typeof COUCH_SENTRY_DSN === "undefined" ? "" : COUCH_SE
 const environment =
   typeof COUCH_SENTRY_ENVIRONMENT === "undefined" ? "development" : COUCH_SENTRY_ENVIRONMENT;
 
-// Timings need the route. A Couch URL can also carry a private LAN name or pairing fragment.
+// Trace fixed Core endpoints. An unknown /api/ path can itself be a media title or credential.
+export const tracedApiPaths = new Set([
+  "/api/appearance",
+  "/api/artwork",
+  "/api/autoplay",
+  "/api/bluetooth",
+  "/api/build",
+  "/api/connection",
+  "/api/devices",
+  "/api/display",
+  "/api/for-later",
+  "/api/health",
+  "/api/hidden",
+  "/api/playback-preview",
+  "/api/playlists",
+  "/api/profiles",
+  "/api/settings",
+  "/api/sound",
+  "/api/subtitles",
+  "/api/updates",
+  "/api/ws",
+]);
+
 function spanRoute(value: string) {
-  return value.replace(/^https?:\/\/[^/?#]*/i, "").split(/[?#]/, 1)[0] || "/";
+  return value.replace(/(^|\s)((?:https?:\/\/|\/).*)/i, (_match, prefix: string, url: string) => {
+    const path =
+      url
+        .replace(/^https?:\/\/[^/?#]*/i, "")
+        .split(/[?#]/, 1)[0]
+        ?.replace(/\/$/, "") || "/";
+    return (
+      prefix + (frontendPaths.includes(path) || tracedApiPaths.has(path) ? path : "[Filtered]")
+    );
+  });
 }
 
 export const sentryOptions = {
@@ -40,8 +72,7 @@ export const sentryOptions = {
         key === "user_agent.original"
       )
         delete span.attributes[key];
-      else if (typeof value === "string" && /^(?:https?:\/\/|\/)/.test(value))
-        span.attributes[key] = spanRoute(value);
+      else if (typeof value === "string") span.attributes[key] = spanRoute(value);
     }
     return span;
   },

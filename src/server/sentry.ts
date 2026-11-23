@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import { sentryDsn, sentryOptions, setReportingEnabled } from "../shared/sentry";
+import { sentryDsn, sentryOptions, setReportingEnabled, tracedApiPaths } from "../shared/sentry";
 
 export function setCoreReporting(enabled: boolean) {
   setReportingEnabled(Sentry.getClient(), enabled, startCoreMonitoring);
@@ -22,8 +22,7 @@ function startCoreMonitoring() {
       Sentry.httpIntegration({
         sessions: false,
         ignoreOutgoingRequests: () => true,
-        // Deeper API paths can contain pairing codes and private media identifiers.
-        ignoreIncomingRequests: (path) => !/^\/api\/[a-z-]+$/.test(path),
+        ignoreIncomingRequests: (path) => !tracedApiPaths.has(path),
       }),
     ],
   });

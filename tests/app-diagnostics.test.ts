@@ -22,6 +22,23 @@ test("Sentry spans keep route timings without the device address or pairing link
   expect(span.attributes).toEqual({ "url.full": "/pair/tv", "http.response.status_code": 200 });
 });
 
+test("Sentry timings discard private path segments and keep recognized Couch routes", () => {
+  const span = sentryOptions.beforeSendSpan({
+    name: "GET /api/synthetic-private-title",
+    attributes: {
+      "url.full": "https://media.example/films/private.m3u8?signature=secret",
+      "url.path": "/pair/tv/123456",
+      "sentry.segment.name": "GET /api/health",
+    },
+  });
+  expect(span.name).toBe("GET [Filtered]");
+  expect(span.attributes).toEqual({
+    "url.full": "[Filtered]",
+    "url.path": "[Filtered]",
+    "sentry.segment.name": "GET /api/health",
+  });
+});
+
 test("app evidence keeps only hosts for complete URL tokens, including embedded separators", () => {
   for (const separator of ["", "\n", "\u2028"]) {
     for (const quote of ["", "'"]) {
