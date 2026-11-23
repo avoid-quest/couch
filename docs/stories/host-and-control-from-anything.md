@@ -14,8 +14,12 @@ Couch app can control it, and the same app can join another Couch instead.
    General → Connection** → **Another Couch** → **Connect**; **This computer**
    hosts again.
 4. On a computer: **?** lists the **Keyboard shortcuts**; media keys and the
-   system's media controls work too.
-5. Closing the window keeps Couch hosting; **Quit Couch** stops it.
+   system's media controls work too. In the player, press **Space** to play or
+   pause, hold it for **2×**, or use **<** and **>** to change Speed.
+5. Watching fullscreen on a phone (in the Player on iPhone), tap the picture
+   for controls, double-tap the left or right side to go back or forward ten
+   seconds, or hold for **2×**. Release to return to the speed you chose.
+6. Closing the window keeps Couch hosting; **Quit Couch** stops it.
 
 ## Done when
 

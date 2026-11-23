@@ -74,6 +74,7 @@ export function playbackActionAllowed(action: Action, controls: PlaybackControls
       return true; // Hub authorizes the requested device/channels.
     case "seek":
       return controls.seek;
+    case "holdSpeed":
     case "speed":
       return controls.speed;
     case "audioDelay":

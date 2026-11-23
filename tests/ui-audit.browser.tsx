@@ -356,7 +356,6 @@ export async function mountUiAudit(onRender: ProfilerOnRenderCallback = () => {}
     },
     queue: async (_title: string, work: () => Promise<unknown>) => work(),
     setError: () => {},
-    seekBy: async () => true,
     offerUndo: () => {},
     unpair: () => {},
     setCredentials: () => {},

@@ -42,9 +42,6 @@ mock.module("../src/client/session/session-context", () => ({
     state,
     connected: true,
     run,
-    seekBy: (seconds: number) => {
-      throw new Error(`unexpected seek ${seconds}`);
-    },
     credentials: { origin: "http://couch", token: "test" },
   }),
   useOptionalSessionGate: () => ({ state, connected: true, run }),
@@ -58,18 +55,21 @@ mock.module("@tanstack/react-query", () => ({
 }));
 mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
 mock.module("../src/client/sections/shell/shell-context", () => ({
-  useShell: () => ({ section: "Now", changeSection() {}, openPlayer() {}, focusSearch() {} }),
+  useShell: () => ({
+    section: "Now",
+    current: state.queue.find((entry) => entry.id === state.currentEntryId),
+  }),
 }));
-let shortcuts: Parameters<typeof import("../src/client/useCouchHotkeys").useCouchHotkeys>[0] = [];
 mock.module("../src/client/useCouchHotkeys", () => ({
-  useCouchHotkeys: (next: typeof shortcuts) => {
-    shortcuts = next;
-  },
+  useShortcutFocus: () => "background",
+  useCouchHotkeys: () => {},
 }));
 const { PlaybackTransport, PlaybackVolume, LiveParticipation } =
   await import("../src/client/components/PlaybackTransport");
-const { PlayButton } = await import("@videojs/react");
-const { KeyboardShortcuts } = await import("../src/client/sections/shell/KeyboardShortcuts");
+const videojs = await import("@videojs/react");
+mock.module("@videojs/react", () => ({ ...videojs, useHotkey: () => {} }));
+const { Hotkey, PlayButton } = videojs;
+const { PlaybackHotkeys } = await import("../src/client/sections/shell/KeyboardShortcuts");
 const { useMediaSession } = await import("../src/client/session/media-session");
 const { useLiveSourceHits } = await import("../src/client/sections/find/useLiveSourceHits");
 
@@ -193,17 +193,27 @@ test("Play/Pause can pause a started programme while it buffers", async () => {
       (element) => element.type === PlayButton,
     )!;
     expect(play.props.disabled).toBe(false);
-    read(() => KeyboardShortcuts({ open: false, onOpenChange() {}, openerRef: { current: null } }));
-    for (const key of ["K", "Space"]) {
-      const shortcut = shortcuts.find((item) => item.hotkey === key)!;
-      expect(shortcut.enabled).toBe(true);
-      shortcut.action();
-      expect(sent.at(-1)).toEqual({
-        type: "pause",
-        playbackId: "load-generation",
-        paused: status !== "paused",
-      });
-    }
+    const bindings = elements(read(() => PlaybackHotkeys({})));
+    for (const key of ["k", "Space"])
+      expect(
+        bindings.find((item) => item.type === Hotkey && item.props.keys === key)?.props.action,
+      ).toBe("togglePaused");
+  }
+});
+
+test("player seek keys remain available during buffering and wait during initial loading", () => {
+  for (const buffering of [true, false]) {
+    state = {
+      ...fixture(),
+      controls: undefined,
+      playbacks: [],
+      queue: [{ id: "entry", title: "Film", source: "web:https://example.com/movie" }],
+      player: { ...fixture().player, status: "loading", buffering },
+    };
+    const bindings = elements(read(() => PlaybackHotkeys({})));
+    expect(bindings.some(({ type, props }) => type === Hotkey && props.action === "seekStep")).toBe(
+      buffering,
+    );
   }
 });
 

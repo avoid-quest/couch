@@ -1,9 +1,9 @@
 import { livePlayback } from "@/session/playback-controls";
 import { deviceId } from "@/session/device-id";
-import { useCouchHotkeys } from "@/useCouchHotkeys";
-import { useContext, type RefObject } from "react";
+import { Hotkey, useHotkey, type HotkeyProps } from "@videojs/react";
+import { useCouchHotkeys, useShortcutFocus } from "@/useCouchHotkeys";
+import type { RefObject } from "react";
 import { useSessionGate } from "@/session/session-context";
-import { PlaybackClockContext } from "@/session/playback-clock";
 import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import {
   Dialog,
@@ -17,6 +17,8 @@ import { useShell } from "./shell-context";
 
 const help = [
   ["K / Space", "Play or pause"],
+  ["Hold Space", "Play at 2× while held in the player"],
+  ["< / >", "Slower / faster in the player"],
   ["J / L", "Back / forward 10 seconds"],
   ["← / →", "Back / forward 5 seconds in the player"],
   ["↑ / ↓", "Raise / lower volume in the player"],
@@ -34,6 +36,59 @@ const help = [
   ["?", "Keyboard shortcuts"],
 ];
 
+/** Shared by the picture and the now-playing bar. Video.js resolves each action against their CouchMedia. */
+export function PlaybackHotkeys({
+  speed = false,
+  holdSpace,
+}: { speed?: boolean; holdSpace?: () => void } = {}) {
+  const { state, connected, tvPresentation } = useSessionGate();
+  const { section, current } = useShell();
+  const focus = useShortcutFocus();
+  useHotkey({
+    keys: "Space",
+    target: "document",
+    repeatable: false,
+    disabled: !holdSpace || focus !== "background",
+    onActivate: () => holdSpace?.(),
+  });
+  if (tvPresentation || section === "Remote" || livePlayback(state) || focus === "blocked")
+    return null;
+  const caps = playbackCapabilities(state, connected);
+  const player = state?.player;
+  const letters = section !== "Search" || focus === "control";
+  const inPlayer = section === "Now" && focus === "background";
+  const pause =
+    !!current &&
+    (player?.status === "ended"
+      ? caps.available && caps.programme
+      : caps.transportReady && caps.pausable);
+  const seek = caps.transportReady && caps.seekable;
+  const sound = caps.available && caps.audioReady;
+  const captions =
+    caps.programme &&
+    caps.transportReady &&
+    !!player?.tracks?.some((track) => track.kind === "subtitle");
+  const bindings: [string, HotkeyProps["action"], boolean, number?][] = [
+    ["k", "togglePaused", letters && pause],
+    ["Space", "togglePaused", focus === "background" && pause && !holdSpace],
+    ["j", "seekStep", letters && seek],
+    ["l", "seekStep", letters && seek],
+    ["0-9", "seekToPercent", letters && seek],
+    ["m", "toggleMuted", letters && sound],
+    ["c", "toggleSubtitles", letters && captions],
+    ["ArrowLeft", "seekStep", inPlayer && seek, -5],
+    ["ArrowRight", "seekStep", inPlayer && seek, 5],
+    ["ArrowUp", "volumeStep", inPlayer && sound],
+    ["ArrowDown", "volumeStep", inPlayer && sound],
+    ["<", "speedDown", inPlayer && speed],
+    [">", "speedUp", inPlayer && speed],
+  ];
+  return bindings.map(
+    ([keys, action, enabled, value]) =>
+      enabled && <Hotkey key={keys} target="document" keys={keys} action={action} value={value} />,
+  );
+}
+
 export function KeyboardShortcuts({
   open,
   onOpenChange,
@@ -44,36 +99,12 @@ export function KeyboardShortcuts({
   openerRef: RefObject<HTMLElement | null>;
 }) {
   const shell = useShell();
-  const { state, connected, run, seekBy } = useSessionGate();
-  // Only its length: the anchor, not the position that ticks every second while it plays.
-  const clock = useContext(PlaybackClockContext);
+  const { state, connected, run } = useSessionGate();
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
-  const {
-    available,
-    playing,
-    transportReady,
-    seekable,
-    pausable,
-    audioReady,
-    nextReady,
-    hasNext,
-    programme,
-  } = playbackCapabilities(state, connected);
-  const canPause =
-    !!current && (player?.status === "ended" ? available && programme : transportReady && pausable);
-  const pause = () => {
-    if (player?.status === "ended" && current)
-      void run({ type: "play", entryId: current.id, fromStart: true });
-    else if (player?.playbackId)
-      void run({
-        type: "pause",
-        playbackId: player.playbackId,
-        paused: playing,
-      });
-  };
-  const canSeek = transportReady && seekable;
-  const subtitles = player?.tracks?.filter((track) => track.kind === "subtitle") ?? [];
+  const { available, audioReady, nextReady, hasNext } = playbackCapabilities(state, connected);
+  // Live has device-local sound and no Video.js transport. Idle devices also keep their mute key.
+  const deviceSound = livePlayback(state) || !current;
   const own = livePlayback(state)
     ? state?.devices?.find((device) => device.id === deviceId())
     : undefined;
@@ -86,63 +117,22 @@ export function KeyboardShortcuts({
       volume: Math.max(0, Math.min(100, (own?.volume ?? player?.volume ?? 0) + delta)),
     });
   useCouchHotkeys([
-    { hotkey: "K", action: pause, enabled: canPause },
-    { hotkey: "Space", action: pause, enabled: canPause, backgroundOnly: true },
-    { hotkey: "J", action: () => seekBy(-10), enabled: canSeek },
-    { hotkey: "L", action: () => seekBy(10), enabled: canSeek },
-    {
-      hotkey: "ArrowLeft",
-      action: () => seekBy(-5),
-      enabled: canSeek && shell.section === "Now",
-      backgroundOnly: true,
-    },
-    {
-      hotkey: "ArrowRight",
-      action: () => seekBy(5),
-      enabled: canSeek && shell.section === "Now",
-      backgroundOnly: true,
-    },
-    {
-      hotkey: "ArrowUp",
-      action: () => volume(5),
-      enabled: canVolume && shell.section === "Now",
-      backgroundOnly: true,
-    },
-    {
-      hotkey: "ArrowDown",
-      action: () => volume(-5),
-      enabled: canVolume && shell.section === "Now",
-      backgroundOnly: true,
-    },
-    ...(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map((hotkey, digit) => ({
-      hotkey,
-      enabled: canSeek && clock.playbackId === player?.playbackId && !!clock.duration,
-      action: () => {
-        if (player?.playbackId && clock.duration)
-          void run({
-            type: "seek",
-            playbackId: player.playbackId,
-            position: (clock.duration * digit) / 10,
-          });
-      },
-    })),
     {
       hotkey: "M",
-      enabled: canVolume,
+      enabled: deviceSound && canVolume,
       action: () => void run({ type: "mute", ...volumeTarget, muted: !muted(state) }),
     },
     {
-      hotkey: "C",
-      enabled: programme && transportReady && subtitles.length > 0,
-      action: () => {
-        if (player?.playbackId)
-          void run({
-            type: "track",
-            playbackId: player.playbackId,
-            kind: "subtitle",
-            index: subtitles.some((track) => track.selected) ? -1 : subtitles[0]!.index,
-          });
-      },
+      hotkey: "ArrowUp",
+      enabled: deviceSound && canVolume && shell.section === "Now",
+      backgroundOnly: true,
+      action: () => volume(5),
+    },
+    {
+      hotkey: "ArrowDown",
+      enabled: deviceSound && canVolume && shell.section === "Now",
+      backgroundOnly: true,
+      action: () => volume(-5),
     },
     {
       hotkey: "Shift+N",

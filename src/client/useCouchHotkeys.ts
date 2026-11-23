@@ -1,4 +1,5 @@
 import { useHotkeys, type RegisterableHotkey } from "@tanstack/react-hotkeys";
+import { useSyncExternalStore } from "react";
 
 type Shortcut = {
   hotkey: RegisterableHotkey;
@@ -15,6 +16,32 @@ const controls =
 /** Whether a key pressed on `target` is the shortcuts' to take: nothing focused, or a focus target rather than a control. */
 const isBackground = (target: Element | null | undefined) => !target?.closest(controls);
 
+function shortcutFocus(target = document.activeElement) {
+  if (
+    target?.closest(
+      'input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]',
+    ) ||
+    [...document.querySelectorAll(overlays)].some(
+      (element) => !element.closest('[hidden], [data-state="closed"]'),
+    )
+  )
+    return "blocked";
+  if (!isBackground(target)) return "control";
+  return window.getSelection()?.isCollapsed === false ? "selection" : "background";
+}
+
+// Video.js takes a disabled flag for document hotkeys. React to focus entering or leaving a control or portal.
+const subscribeFocus = (update: () => void) => {
+  const changed = () => queueMicrotask(update);
+  const events = ["focusin", "focusout", "selectionchange", "toggle"];
+  for (const name of events) document.addEventListener(name, changed);
+  return () => {
+    for (const name of events) document.removeEventListener(name, changed);
+  };
+};
+export const useShortcutFocus = () =>
+  useSyncExternalStore(subscribeFocus, shortcutFocus, () => "blocked" as const);
+
 // Radix portals and focused controls keep ownership of their keyboard input.
 export function useCouchHotkeys(shortcuts: Shortcut[]) {
   useHotkeys(
@@ -22,31 +49,15 @@ export function useCouchHotkeys(shortcuts: Shortcut[]) {
       hotkey,
       options: { enabled: enabled ?? true },
       callback: (event) => {
-        const target = event.target instanceof HTMLElement ? event.target : document.activeElement;
         if (event.defaultPrevented || event.isComposing || event.repeat) return;
-        if (
-          target?.closest(
-            '[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]',
-          )
-        )
-          return;
-        if (
-          [...document.querySelectorAll(overlays)].some(
-            (element) => !element.closest('[hidden], [data-state="closed"]'),
-          )
-        )
-          return;
-        if (
-          backgroundOnly &&
-          (!isBackground(target) || window.getSelection()?.isCollapsed === false)
-        )
-          return;
-        // On the search results, typing goes on with the query (HeaderSearch), so letters and digits are not shortcuts there.
-        if (
-          location.pathname === "/search" &&
-          /^[a-z0-9]$/i.test(event.key) &&
-          isBackground(target)
-        )
+        // A layout can type "<" on the physical comma key. Settings is the comma character.
+        if (hotkey === "," && event.key !== ",") return;
+        const focus = shortcutFocus(
+          event.target instanceof HTMLElement ? event.target : document.activeElement,
+        );
+        if (focus === "blocked" || (backgroundOnly && focus !== "background")) return;
+        // Typing on Search continues the query.
+        if (location.pathname === "/search" && /^[a-z0-9]$/i.test(event.key) && focus !== "control")
           return;
         event.preventDefault();
         action();

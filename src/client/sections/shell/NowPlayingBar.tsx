@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
+import { Container } from "@videojs/react";
+import { PlaybackHotkeys } from "./KeyboardShortcuts";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { playsOn } from "@/session/device-id";
 import { focusPageControl } from "@/navigation";
@@ -192,8 +194,13 @@ export function NowPlayingBar({
   // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
   // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
   return (
-    <div className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
-      <CouchPlayer state={state} run={run}>
+    <CouchPlayer state={state} run={run}>
+      <Container
+        aria-label="Playback"
+        tabIndex={-1}
+        className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5"
+      >
+        <PlaybackHotkeys />
         <footer
           data-now-playing
           onFocusCapture={() => {
@@ -353,7 +360,7 @@ export function NowPlayingBar({
             </Button>
           </div>
         </footer>
-      </CouchPlayer>
-    </div>
+      </Container>
+    </CouchPlayer>
   );
 }

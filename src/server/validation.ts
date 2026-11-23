@@ -270,6 +270,8 @@ function validAction(value: unknown): value is Action {
         value.index >= (value.kind === "subtitle" ? -1 : 0) &&
         value.index <= 1024
       );
+    case "holdSpeed":
+      return id(value.playbackId) && typeof value.held === "boolean";
     case "speed":
       return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
     case "audioDelay":

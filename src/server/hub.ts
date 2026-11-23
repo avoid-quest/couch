@@ -188,6 +188,7 @@ type SocketData = {
   window: number;
   count: number;
   sendspin?: string;
+  speedHold?: { playbackId: string; release: () => void };
   signaling?: {
     window: number;
     count: number;
@@ -4977,6 +4978,11 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        try {
+          socket.data.speedHold?.release();
+        } catch {
+          // Session already reported the loss of its renderer.
+        }
         releaseRemote(socket);
         // The Device is a TV while its newest tab is; with none left it stays what it last was.
         const next = newest(deviceOf(socket));
@@ -5202,7 +5208,8 @@ export async function createHub(options: HubOptions) {
           const remoteTarget =
             guardedTarget ??
             (remoteControllers.has(deviceId) && !explicitPlayOn ? selected(deviceId) : undefined);
-          if (guardedTarget) {
+          const releasing = action.type === "holdSpeed" && !action.held;
+          if (guardedTarget && !releasing) {
             if (selected(deviceId) !== guardedTarget)
               throw new Error("The controlled TV changed. Select it again before using Remote.");
             requireControl(guardedTarget, deviceId);
@@ -5238,7 +5245,14 @@ export async function createHub(options: HubOptions) {
             playedBy,
             explicitPlayOn ? undefined : remoteTarget,
           );
-          if (enqueued) {
+          if (releasing) {
+            // Even after switching TVs or losing control, this connection can release its own press.
+            if (socket.data.speedHold?.playbackId === action.playbackId) {
+              const { release } = socket.data.speedHold;
+              delete socket.data.speedHold;
+              release();
+            }
+          } else if (enqueued) {
             await enqueued;
             if (closed) return;
             playback = lookedAt(deviceId);
@@ -5750,7 +5764,14 @@ export async function createHub(options: HubOptions) {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find((entry) => entry.id === action.entryId)?.title;
             }
-            await playback.session.command(action, permitted, playedBy);
+            if (action.type === "holdSpeed") {
+              if (socket.data.speedHold?.playbackId !== action.playbackId) {
+                const previous = socket.data.speedHold;
+                delete socket.data.speedHold;
+                previous?.release();
+                socket.data.speedHold = playback.session.holdSpeed(action.playbackId);
+              }
+            } else await playback.session.command(action, permitted, playedBy);
             if (action.type === "stop") restoreControllers(playback);
             if (action.type === "undoStop") {
               const device = controlDevice(playback, deviceId);
