@@ -4,7 +4,7 @@ import { useCouchPlayer } from "@/components/CouchPlayer";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import type { RefObject } from "react";
 import { useSessionGate } from "@/session/session-context";
-import { playbackCapabilities } from "@/components/PlaybackTransport";
+import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import {
   Dialog,
   DialogContent,
@@ -102,7 +102,7 @@ export function KeyboardShortcuts({
       action: () =>
         live
           ? void run({ type: "mute", deviceId: deviceId(), muted: !own?.muted })
-          : store.state.setMuted(!(store.state.muted || store.state.volume === 0)),
+          : void run({ type: "mute", muted: !muted(state) }),
     },
     {
       hotkey: "C",
