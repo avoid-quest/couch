@@ -813,7 +813,7 @@ export function PlayerPage({
           }
           if (audioOnly || !active || !playbackId || !transportReady || !pausable) return;
           // A double-click's second click undoes its first, so the double-click only toggles fullscreen.
-          clicked.current = event.detail % 2 ? playing : !clicked.current;
+          clicked.current = event.detail % 2 ? underway : !clicked.current;
           void run({ type: "pause", playbackId, paused: clicked.current });
         }}
         onDoubleClick={() => {

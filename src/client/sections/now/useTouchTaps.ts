@@ -30,9 +30,15 @@ export function useTouchTaps(tap: () => void, doubleTap?: (side: TapSide) => voi
       state.down = undefined;
       state.second = false;
     };
+    // A second press that turns out not to be a tap leaves the first tap standing.
+    const abandon = () => {
+      const second = state.second;
+      reset();
+      if (second) latest.current.tap();
+    };
     return {
       down(event: PointerEvent) {
-        if (!event.isPrimary) return reset();
+        if (!event.isPrimary) return abandon();
         state.down = { x: event.clientX, y: event.clientY, at: Date.now() };
         state.second = state.pending !== undefined;
         clearTimeout(state.pending);
@@ -40,13 +46,15 @@ export function useTouchTaps(tap: () => void, doubleTap?: (side: TapSide) => voi
       },
       move(event: PointerEvent) {
         const down = state.down;
-        if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > TAP_SLOP) reset();
+        if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > TAP_SLOP)
+          abandon();
       },
-      cancel: reset,
+      cancel: abandon,
       up(event: PointerEvent<HTMLElement>) {
-        const { down, second } = state;
+        const { down } = state;
+        if (!down || Date.now() - down.at > TAP_MS) return abandon();
+        const { second } = state;
         reset();
-        if (!down || Date.now() - down.at > TAP_MS) return;
         const { tap, doubleTap } = latest.current;
         if (!doubleTap) return tap();
         if (second) {
