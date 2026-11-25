@@ -789,9 +789,15 @@ handle("device-name", (_event, name) => {
   if (core && !core.stopping) core.child.postMessage({ type: "renamed" } satisfies AppMessage);
   return saved;
 });
-handle("error-reporting", (_event, enabled) => {
+handle("error-reporting", (event, enabled) => {
   if (enabled === undefined) return errorReporting;
   if (typeof enabled !== "boolean") throw new Error("Choose whether to send error reports.");
+  // Another Couch's page may turn reports off but never consents for this computer.
+  if (
+    enabled &&
+    (choice.mode === "remote" || new URL(event.senderFrame!.url).origin !== localOrigin)
+  )
+    throw new Error("To turn on error reports, choose This computer under Connection.");
   write(reportingPath, JSON.stringify(enabled));
   errorReporting = enabled;
   setDesktopReporting(enabled);
