@@ -118,8 +118,10 @@ while it runs. `bun run package` builds installers into `.artifacts/app`; see
 ## Optional error reporting
 
 **Settings → This device → General → Send error reports** starts off. The desktop
-preference covers the app, its window and the Core it runs. A browser keeps its
-own preference per Couch origin. Turning it off stops new reports.
+preference covers the app, its window and the Core it runs. Only this computer's
+own Couch page can turn it on; another Couch shown in the app can only turn it
+off. A browser keeps its own preference per Couch origin. Turning it off stops
+new reports.
 
 Sentry receives exception messages, stack frames, the Couch release, runtime
 and OS versions, and generic startup logs. Sampled traces include route names,

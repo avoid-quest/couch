@@ -17,8 +17,9 @@ how big text is, which language and quality films play in.
 - Each device: its own **Name**.
 - In **This device → General**, I can turn on **Send error reports** after reading
   what Sentry receives. It starts off. In the app my choice covers this Couch
-  app and its local Core. In a browser it applies to this Couch in this browser.
-  I can turn it off in the same place.
+  app and its local Core, and I turn it on while the app shows **This
+  computer**. In a browser it applies to this Couch in this browser. I can turn
+  it off in the same place.
 
 ## Done when
 
