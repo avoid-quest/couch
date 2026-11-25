@@ -22,6 +22,8 @@ export function useTouchTaps(tap: () => void, doubleTap?: (side: TapSide) => voi
     // The press came while a tap waited: its release is the double-tap.
     second?: boolean;
     pending?: ReturnType<typeof setTimeout>;
+    // When the waiting tap's finger lifted. A busy page can run its timer late.
+    lastUp?: number;
   }>({});
   useEffect(() => () => clearTimeout(taps.current.pending), []);
   return useMemo(() => {
@@ -39,10 +41,13 @@ export function useTouchTaps(tap: () => void, doubleTap?: (side: TapSide) => voi
     return {
       down(event: PointerEvent) {
         if (!event.isPrimary) return abandon();
-        state.down = { x: event.clientX, y: event.clientY, at: Date.now() };
-        state.second = state.pending !== undefined;
+        const at = Date.now();
+        state.down = { x: event.clientX, y: event.clientY, at };
+        const waiting = state.pending !== undefined;
+        state.second = waiting && at - (state.lastUp ?? 0) <= DOUBLE_TAP_MS;
         clearTimeout(state.pending);
         state.pending = undefined;
+        if (waiting && !state.second) latest.current.tap();
       },
       move(event: PointerEvent) {
         const down = state.down;
@@ -56,11 +61,16 @@ export function useTouchTaps(tap: () => void, doubleTap?: (side: TapSide) => voi
         const { second } = state;
         reset();
         const { tap, doubleTap } = latest.current;
-        if (!doubleTap) return tap();
+        if (!doubleTap) {
+          // Seeking ended while the first tap waited: both are taps.
+          if (second) tap();
+          return tap();
+        }
         if (second) {
           const { left, width } = event.currentTarget.getBoundingClientRect();
           return doubleTap(event.clientX < left + width / 2 ? "left" : "right");
         }
+        state.lastUp = Date.now();
         state.pending = setTimeout(() => {
           state.pending = undefined;
           latest.current.tap();
