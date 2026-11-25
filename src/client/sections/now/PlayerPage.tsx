@@ -38,15 +38,9 @@ import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
 import { useBottomBar } from "@/sections/shell/NowPlayingBar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
-import {
-  Container,
-  Gesture,
-  Hotkey,
-  SeekIndicator,
-  useDoubleTapGesture,
-  useTapGesture,
-} from "@videojs/react";
+import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
 import { useCouchPlayer } from "@/components/CouchPlayer";
+import { useTouchTaps, type TapSide } from "./useTouchTaps";
 import { useKeyHold } from "@tanstack/react-hotkeys";
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { startHold } from "@/hold";
@@ -473,19 +467,33 @@ export function PlayerPage({
   const touchGestures = gesturesEnabled && osd && (fullscreen.fullscreen || !fullscreen.supported);
   const dismissQueue = queueOpen && (osd || queueBeside);
   const shownAtTouch = useRef(shown);
-  useTapGesture(
+  // The last press's pointer: a tap shows or hides the controls, a click plays or pauses.
+  const pointer = useRef<string | null>(null);
+  // What the picture's last click asked for, so a double-click's second click can undo it.
+  const clicked = useRef(false);
+  const transport = useCouchPlayer();
+  const [seekShown, setSeekShown] = useState<{ side: TapSide; seconds: number } | null>(null);
+  const seekShownTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(seekShownTimer.current), []);
+  const seekByTap = (side: TapSide) => {
+    const step = side === "left" ? -DEFAULT_SEEK_STEP : DEFAULT_SEEK_STEP;
+    void transport.state.seek(transport.state.currentTime + step);
+    setSeekShown((last) => ({
+      side,
+      seconds: (last?.side === side ? last.seconds : 0) + DEFAULT_SEEK_STEP,
+    }));
+    clearTimeout(seekShownTimer.current);
+    // As long as Video.js's own indicators stay.
+    seekShownTimer.current = setTimeout(() => setSeekShown(null), 800);
+  };
+  const touchTaps = useTouchTaps(
     () => {
       if (dismissQueue) closeQueue();
       else if (shownAtTouch.current && autoHide) hide();
       else wake();
     },
-    { pointer: "touch" },
+    touchGestures && transportReady && seekable ? seekByTap : undefined,
   );
-  useTapGesture(closeQueue, { pointer: "mouse", disabled: !dismissQueue });
-  useDoubleTapGesture(fullscreen.toggle, {
-    pointer: "mouse",
-    disabled: !canFullscreen || dismissQueue,
-  });
 
   const speed =
     gesturesEnabled &&
@@ -496,7 +504,6 @@ export function PlayerPage({
     !radio;
   const playbackId = player?.playbackId;
   const canHold = speed && underway && !!playbackId;
-  const transport = useCouchPlayer();
   const press = useRef<{ touch?: { x: number; y: number }; end: (tap?: boolean) => void } | null>(
     null,
   );
@@ -767,20 +774,29 @@ export function PlayerPage({
           touchGestures && "touch-manipulation select-none [-webkit-touch-callout:none]",
         )}
         onPointerDown={(event) => {
+          pointer.current = event.pointerType;
           if (event.pointerType !== "touch") return;
           shownAtTouch.current = shown;
+          touchTaps.down(event);
           if (!event.isPrimary) press.current?.end();
           else if (touchGestures) beginHold({ x: event.clientX, y: event.clientY });
         }}
         onPointerMove={(event) => {
+          if (event.pointerType !== "touch") return;
+          touchTaps.move(event);
           const origin = press.current?.touch;
           // As on row menus, allow a resting finger to move slightly.
-          if (
-            origin &&
-            event.pointerType === "touch" &&
-            Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10
-          )
+          if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10)
             press.current?.end();
+        }}
+        onPointerUp={(event) => {
+          if (event.pointerType !== "touch") return;
+          if (press.current?.touch) press.current.end();
+          touchTaps.up(event);
+        }}
+        onPointerCancel={() => {
+          touchTaps.cancel();
+          if (press.current?.touch) press.current.end();
         }}
         onLostPointerCapture={() => {
           if (press.current?.touch) press.current.end();
@@ -789,6 +805,21 @@ export function PlayerPage({
           if (press.current?.touch) event.preventDefault();
         }}
         onBlur={() => press.current?.end()}
+        onClick={(event) => {
+          if (pointer.current === "touch") return;
+          if (dismissQueue) {
+            closeQueue();
+            return;
+          }
+          if (audioOnly || !active || !playbackId || !transportReady || !pausable) return;
+          // A double-click's second click undoes its first, so the double-click only toggles fullscreen.
+          clicked.current = event.detail % 2 ? underway : !clicked.current;
+          void run({ type: "pause", playbackId, paused: clicked.current });
+        }}
+        onDoubleClick={() => {
+          if (pointer.current !== "touch" && canFullscreen && !dismissQueue)
+            void fullscreen.toggle();
+        }}
       >
         <Hotkey keys="ArrowLeft" action="seekStep" value={-5} disabled={!seekKeys} />
         <Hotkey keys="ArrowRight" action="seekStep" value={5} disabled={!seekKeys} />
@@ -796,23 +827,17 @@ export function PlayerPage({
         <Hotkey keys="ArrowDown" action="volumeStep" disabled={!volumeKeys} />
         <Hotkey keys="<" action="speedDown" disabled={!speed} />
         <Hotkey keys=">" action="speedUp" disabled={!speed} />
-        {!dismissQueue && !audioOnly && active && transportReady && pausable && (
-          <Gesture type="tap" pointer="mouse" action="togglePaused" />
-        )}
-        {touchGestures && transportReady && seekable && (
-          <>
-            <Gesture type="doubletap" region="left" pointer="touch" action="seekStep" />
-            <Gesture type="doubletap" region="right" pointer="touch" action="seekStep" />
-            <SeekIndicator.Root
-              aria-hidden="true"
-              className={cn(
-                feedback,
-                "group top-1/2 -translate-1/2 data-[direction=backward]:left-1/4 data-[direction=forward]:left-3/4",
-              )}
-            >
-              <SeekIndicator.Value className="group-data-[direction=backward]:before:content-['−'] group-data-[direction=forward]:before:content-['+']" />
-            </SeekIndicator.Root>
-          </>
+        {seekShown && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              feedback,
+              "top-1/2 -translate-1/2",
+              seekShown.side === "left" ? "left-1/4" : "left-3/4",
+            )}
+          >
+            {`${seekShown.side === "left" ? "−" : "+"}${seekShown.seconds}s`}
+          </span>
         )}
         {holdState === "fast" && player?.speed === 2 && (
           <span role="status" className={cn(feedback, "top-1/4 left-1/2 -translate-x-1/2")}>
