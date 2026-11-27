@@ -20,7 +20,7 @@ export const artAspect = {
 
 // The catalogues' films and series come as posters; their episodes are frames from the episode.
 const catalogues = new Set(["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"]);
-const music = new Set(["Bandcamp", "SoundCloud", "Mixcloud", "Radio archives"]);
+const music = new Set(["Bandcamp", "SoundCloud", "Mixcloud", "Radio archives", "Spotify"]);
 
 /** `source` is where the item comes from as people know it (sourceLabel, a provider's name, "Radio"). */
 export function artShape(source: string | undefined, kind: ArtKind = "media"): ArtShape {

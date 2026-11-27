@@ -40,6 +40,8 @@ export type ProviderItem = {
   collection?: MediaCollection;
   duration?: number;
   live?: boolean;
+  /** The same recording's pages on other sources (a radio episode's Mixcloud and SoundCloud uploads), so search shows it once. */
+  copies?: string[];
 };
 
 export type ProviderPage = {
