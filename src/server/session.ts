@@ -106,7 +106,7 @@ export function createSession(
   const removedEntries = new Map<
     string,
     {
-      entry: QueueEntry;
+      entries: QueueEntry[];
       index: number;
       queueIds: string[];
       currentEntryId: string | null;
@@ -1305,7 +1305,7 @@ export function createSession(
     endSource(sourceId: string) {
       let changed = false;
       for (const [token, removed] of removedEntries)
-        if (removed.entry.liveSourceId === sourceId) {
+        if (removed.entries.some((entry) => entry.liveSourceId === sourceId)) {
           clearTimeout(removed.timer);
           removedEntries.delete(token);
           if (state.queueRemoval?.token === token) {
@@ -1515,7 +1515,7 @@ export function createSession(
           const timer = setTimeout(() => removedEntries.delete(token), 6_000);
           timer.unref?.();
           removedEntries.set(token, {
-            entry,
+            entries: [entry],
             index,
             queueIds: state.queue.map((entry) => entry.id),
             currentEntryId: state.currentEntryId === action.entryId ? null : state.currentEntryId,
@@ -1527,6 +1527,26 @@ export function createSession(
           else broadcast();
           break;
         }
+        case "clearUpNext": {
+          const index = queueCursorIndex(state) + 1;
+          const entries = state.queue.slice(index);
+          if (!entries.length) break;
+          saveQueue(state.queue.slice(0, index));
+          const token = crypto.randomUUID();
+          const timer = setTimeout(() => removedEntries.delete(token), 6_000);
+          timer.unref?.();
+          removedEntries.set(token, {
+            entries,
+            index,
+            queueIds: state.queue.map((entry) => entry.id),
+            currentEntryId: state.currentEntryId,
+            expiresAt: Date.now() + 6_000,
+            timer,
+          });
+          state.queueRemoval = { entryId: entries[0]!.id, token };
+          broadcast();
+          break;
+        }
         case "restoreRemoved": {
           const removed = removedEntries.get(action.token);
           if (!removed || Date.now() >= removed.expiresAt)
@@ -1535,11 +1555,11 @@ export function createSession(
             state.currentEntryId !== removed.currentEntryId ||
             state.queue.length !== removed.queueIds.length ||
             state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) ||
-            state.queue.length >= 500
+            state.queue.length + removed.entries.length > 500
           )
             throw new Error("Up next or playback changed. Try again.");
           const queue = [...state.queue];
-          queue.splice(removed.index, 0, removed.entry);
+          queue.splice(removed.index, 0, ...removed.entries);
           saveQueue(queue);
           clearTimeout(removed.timer);
           removedEntries.delete(action.token);

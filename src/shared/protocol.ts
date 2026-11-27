@@ -324,6 +324,8 @@ export type Action =
       deviceId?: string;
     }
   | { type: "remove"; entryId: string }
+  // Takes every waiting entry out of Up next at once; restoreRemoved puts them back.
+  | { type: "clearUpNext" }
   | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }

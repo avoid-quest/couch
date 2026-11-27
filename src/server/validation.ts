@@ -12,7 +12,7 @@ import type {
   QueueEntry,
 } from "../shared/protocol";
 import type { MediaCollection } from "../shared/media";
-import { maxCollectionIndex, providerForUrl } from "../shared/providers";
+import { maxCollectionIndex, providerForUrl, providerNames } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
 import { isCompressorPatch } from "../shared/compressor";
 import { safePlaybackError } from "./playback-log";
@@ -32,17 +32,7 @@ const liveMetadata = (value: unknown) =>
       text.length <= 200 &&
       !/[\u0000-\u001f\u007f]/.test(text),
   );
-const providerIds = new Set([
-  "youtube",
-  "twitch",
-  "raiplay",
-  "bandcamp",
-  "soundcloud",
-  "streamingcommunity",
-  "movies123",
-  "animesaturn",
-  "animeunity",
-]);
+const providerIds = new Set(Object.keys(providerNames));
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) =>
   value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
@@ -209,6 +199,8 @@ function validAction(value: unknown): value is Action {
       return id(value.entryId);
     case "restoreRemoved":
       return id(value.token);
+    case "clearUpNext":
+      return true;
     case "play":
       return (
         id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean")

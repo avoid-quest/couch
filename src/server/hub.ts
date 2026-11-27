@@ -89,7 +89,7 @@ import { createRepacks } from "./ts-repack";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
-import { upcomingQueue } from "../shared/queue";
+import { queueCursorIndex, upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
 import { createTvPairing } from "./tv-pairing";
 import type { DeviceIdentity } from "../shared/devices";
@@ -5760,6 +5760,11 @@ export async function createHub(options: HubOptions) {
             requireAction(playback, action, deviceId);
             if (action.type === "play" || (action.type === "undoStop" && !mixOf(playback).length))
               present(playback, playedBy);
+            if (action.type === "clearUpNext") {
+              const state = stateOf(playback);
+              for (const entry of state.queue.slice(queueCursorIndex(state) + 1))
+                inspections.get(entry.id)?.abort();
+            }
             if (action.type === "remove") {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find((entry) => entry.id === action.entryId)?.title;
@@ -5798,15 +5803,17 @@ export async function createHub(options: HubOptions) {
                   ? "stopped playback"
                   : action.type === "remove"
                     ? `removed ${removed || "an item"}`
-                    : action.type === "enqueue"
-                      ? `${added} ${action.entry.title}`
-                      : action.type === "enqueueProvider" || action.type === "enqueueWeb"
-                        ? `${added} ${action.title || "media"}`
-                        : action.type === "enqueueRadio"
-                          ? `${added} ${titleOf(action.entryId) || "media"}`
-                          : action.type === "play"
-                            ? `played ${titleOf(action.entryId) || "media"}`
-                            : null;
+                    : action.type === "clearUpNext"
+                      ? "cleared Up next"
+                      : action.type === "enqueue"
+                        ? `${added} ${action.entry.title}`
+                        : action.type === "enqueueProvider" || action.type === "enqueueWeb"
+                          ? `${added} ${action.title || "media"}`
+                          : action.type === "enqueueRadio"
+                            ? `${added} ${titleOf(action.entryId) || "media"}`
+                            : action.type === "play"
+                              ? `played ${titleOf(action.entryId) || "media"}`
+                              : null;
             if (label) playback.session.notice(playedBy, `${playedBy.name} ${label}`);
           }
         } catch (error) {
