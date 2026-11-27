@@ -64,6 +64,8 @@ const asar = path.join(resources, "app.asar"), next = path.join(resources, "app.
 const deadline = Date.now() + 60000;
 const alive = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
 const swap = () => {
+  // A failed rollback leaves the only copy as app.asar.old; never delete that one.
+  if (!fs.existsSync(asar) && fs.existsSync(old)) fs.renameSync(old, asar);
   fs.rmSync(old, { force: true });
   fs.renameSync(asar, old);
   try { fs.renameSync(next, asar); } catch (error) { fs.renameSync(old, asar); throw error; }

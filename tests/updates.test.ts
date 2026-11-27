@@ -241,7 +241,7 @@ test("the swap waits for Couch to exit, replaces app.asar and starts Couch again
   );
   await Bun.sleep(200);
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
-  await swap.exited;
+  expect(await swap.exited).toBe(0);
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("new app");
   expect(existsSync(join(temporary, "app.next"))).toBe(false);
   expect(existsSync(join(temporary, "app.asar.old"))).toBe(false);
