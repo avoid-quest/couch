@@ -69,7 +69,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   // The version whose app.asar waits in resources/app.next.
   let appOnly: string | null = null;
   if (windows && app.isPackaged && appUpdateLeftOver()) {
-    logAppError("update", "The last update couldn't replace Couch's files.");
+    logAppError("update", "The last update didn't install.");
     try {
       discardAppUpdate();
     } catch (error) {
