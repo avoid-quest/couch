@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Ellipsis } from "lucide-react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { CommandItem } from "@/components/ui/command";
@@ -8,6 +8,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { usePlayOn } from "@/components/PlayOn";
 import { metaLine } from "@/media-caption";
 import { cn } from "@/lib/utils";
+import { startHold } from "@/hold";
 import { canReturn, searchRelevance } from "@/search";
 import type { SearchScope } from "@/search-palette";
 import { useSessionGate } from "@/session/session-context";
@@ -183,8 +184,59 @@ function MenuRows({
 }
 
 /**
+ * A row's menu by right-click or a long press, as every item's (RowMenu's useItemMenu); the click a long press ends in
+ * doesn't also press the row. Android's own contextmenu during a long press opens it only once.
+ */
+function useRowHold(onMenu: () => void) {
+  const press = useRef<{ release: () => boolean; x: number; y: number } | null>(null);
+  const held = useRef(false);
+  const cancel = () => {
+    press.current?.release();
+    press.current = null;
+  };
+  return {
+    className: "select-none [-webkit-touch-callout:none]",
+    onContextMenu: (event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      const opened = held.current;
+      if (press.current) held.current = true;
+      cancel();
+      if (!opened) onMenu();
+    },
+    onPointerDown: (event: PointerEvent) => {
+      held.current = false;
+      if (event.pointerType !== "touch") return;
+      press.current = {
+        ...startHold(() => {
+          held.current = true;
+          onMenu();
+        }),
+        x: event.clientX,
+        y: event.clientY,
+      };
+    },
+    onPointerMove: (event: PointerEvent) => {
+      if (
+        press.current &&
+        Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 10
+      )
+        cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onClickCapture: (event: { preventDefault: () => void; stopPropagation: () => void }) => {
+      if (!held.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      held.current = false;
+    },
+  };
+}
+
+/**
  * A source's hit as a palette row: its artwork, its title over one meta line. Enter does its main verb (Play, or Open
- * for a film, series or list); its menu (→, or "…" on a touch screen) opens under it. The top row is a size larger.
+ * for a film, series or list); its menu (→, "…" on a touch screen, right-click or a long press) opens under it. The top
+ * row is a size larger.
  */
 export function HitRow({
   hit,
@@ -199,13 +251,16 @@ export function HitRow({
   onMenu: () => void;
   onRun: (run: () => void) => void;
 }) {
+  const { className, ...hold } = useRowHold(onMenu);
+  const menuable = rowMenu(hit).length > 0;
   return (
     <>
       <CommandItem
         value={`hit:${hit.id}`}
         disabled={hit.primary.disabled}
         onSelect={() => onRun(hit.primary.run)}
-        className={cn("gap-3", large && "py-2")}
+        {...(menuable ? hold : {})}
+        className={cn("gap-3", large && "py-2", menuable && className)}
       >
         <Art hit={hit} className={large ? "h-14" : "h-10"} />
         <span className="grid min-w-0 flex-1">
@@ -216,7 +271,7 @@ export function HitRow({
             {large ? metaLine(hitMeta(hit), hit.source) : hitMeta(hit)}
           </span>
         </span>
-        {rowMenu(hit).length > 0 && <MoreButton label={hit.title} onPress={onMenu} />}
+        {menuable && <MoreButton label={hit.title} onPress={onMenu} />}
       </CommandItem>
       {menu && (
         <MenuRows hit={hit} onRun={onRun} indent={large ? "pl-[4.75rem]" : "pl-[3.875rem]"} />
