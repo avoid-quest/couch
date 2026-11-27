@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   bandcampFanUrl,
   linkTarget,
+  publicProviderMediaUrl,
   soundCloudListUrl,
   spotifyLink,
 } from "../src/shared/providers";
@@ -77,4 +78,11 @@ test("list links normalize to their canonical public page", () => {
     id: "37i9dQZF1DXcBWIGoYBM5M",
   });
   expect(spotifyLink("https://open.spotify.com:444/track/4uLU6hMCjMI75M1A2tKUQC")).toBeUndefined();
+  // A shared track link and the album's copy of the same track are one playable page.
+  expect(
+    publicProviderMediaUrl("https://open.spotify.com/intl-it/track/4uLU6hMCjMI75M1A2tKUQC?si=x"),
+  ).toBe("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC");
+  expect(
+    publicProviderMediaUrl("https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy"),
+  ).toBeUndefined();
 });

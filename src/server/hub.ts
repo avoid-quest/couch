@@ -46,6 +46,7 @@ import type {
 import type { WatchingProfile } from "../shared/viewing";
 import {
   providerForUrl,
+  spotifyLink,
   type ProviderId,
   type ProviderPage,
   type VideoQuality,
@@ -3891,7 +3892,10 @@ export async function createHub(options: HubOptions) {
       authorize();
       return true;
     };
-    const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
+    const web = (link: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
+      // A shared Spotify track link carries a locale and tracking (`/intl-it/track/…?si=`); the queue keeps its page.
+      const spotify = spotifyLink(link.url);
+      const item = spotify?.kind === "track" ? { ...link, url: spotify.url } : link;
       const title = item.title?.trim();
       // Until the page's own title resolves, the link itself names it ("youtube.com/watch?v=…"), not just its host.
       const url = new URL(item.url);

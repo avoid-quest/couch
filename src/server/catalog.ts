@@ -255,6 +255,7 @@ export function createCatalog({ radio, viewing }: Services) {
               "animeunity",
               "mixcloud",
               "archives",
+              "spotify",
             ].includes(provider)
           )
             throw new RequestError("Invalid provider.");

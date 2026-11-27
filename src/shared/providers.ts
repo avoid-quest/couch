@@ -178,6 +178,10 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && publicQuery)
         return `https://www.youtube.com/watch?v=${id}`;
     }
+    if (provider === "spotify") {
+      const link = spotifyLink(value);
+      return link?.kind === "track" ? link.url : undefined;
+    }
     if (url.search) return;
     if (
       provider === "soundcloud" &&

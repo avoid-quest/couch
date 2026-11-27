@@ -5,19 +5,17 @@ import {
   type ProviderPage,
 } from "../../shared/providers";
 import { publicFetch } from "../public-network";
-import { ProviderError, providerItemId, readProviderText, withProviderItem } from "./http";
+import {
+  label,
+  object,
+  ProviderError,
+  providerItemId,
+  readProviderText,
+  withProviderItem,
+} from "./http";
 import { browseYouTube } from "./youtube";
 
 type Metadata = Record<string, unknown>;
-const object = (value: unknown): value is Metadata =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const label = (value: unknown, limit = 200) =>
-  typeof value === "string"
-    ? value
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, limit) || undefined
-    : undefined;
 const changed = () =>
   new ProviderError("Spotify changed its player page. Couch can't read this link yet.");
 // Spotify plays only in its own DRM player; each track plays from its closest YouTube upload.
