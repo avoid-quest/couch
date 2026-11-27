@@ -1076,7 +1076,11 @@ function PastedLink({
   }
   const navigation = useDetailNavigation();
   const disabled = !props.connected || pending;
-  const limit = listLimit(list.count);
+  const limits = [
+    listLimit(list.count) && `Play all keeps the ${listLimit(list.count)}`,
+    listLimit(list.count, list.queued) &&
+      `Queue all adds the ${listLimit(list.count, list.queued)}`,
+  ].filter(Boolean);
   return (
     <section className="max-w-3xl space-y-4" aria-label="Pasted link">
       <SettingsSection>
@@ -1147,9 +1151,9 @@ function PastedLink({
           </Button>
         )}
       </div>
-      {limit && (
+      {limits.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          Up next holds 500 items, so the {limit} of this list are added.
+          Up next holds 500 items: {limits.join(", ")}.
         </p>
       )}
     </section>

@@ -779,7 +779,6 @@ function Typed({
   if (link) {
     const where = text.replace(/^https?:\/\//i, "");
     const shape = target?.shape ?? "atom";
-    const limit = listLimit(list.count);
     // The first row reads as the link itself; the verbs after it are plain rows.
     const lead = "min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight";
     const open = target && (
@@ -807,8 +806,10 @@ function Typed({
             {shape === "playlist" ? (list.title ?? where) : where}
           </span>
         )}
-        {value !== "next" && limit && (
-          <span className="ml-auto shrink-0 font-normal text-muted-foreground">{limit}</span>
+        {shape === "playlist" && listLimit(list.count, value === "play" ? 0 : list.queued) && (
+          <span className="ml-auto shrink-0 font-normal text-muted-foreground">
+            {listLimit(list.count, value === "play" ? 0 : list.queued)}
+          </span>
         )}
       </CommandItem>
     );

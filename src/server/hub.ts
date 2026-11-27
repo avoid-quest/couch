@@ -4087,7 +4087,17 @@ export async function createHub(options: HubOptions) {
             playedBy,
             continuation: { title: prepared.title, entries: entries.slice(1) },
           });
-        } else session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
+        } else {
+          // A list longer than Up next's room queues what fits; a full Up next still refuses it.
+          const room = 500 - stateOf(playback).queue.length;
+          session.loadQueue(
+            room > 0 ? prepared.entries.slice(0, room) : prepared.entries,
+            "append",
+            authorize,
+            playedBy,
+            action.placement,
+          );
+        }
       }
     })();
   };

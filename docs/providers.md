@@ -114,6 +114,6 @@ unavailable with **Try again**. There is no Spotify search.
 ## Queue limit
 
 Up next holds 500 entries. A pasted or opened list (a YouTube playlist, a Bandcamp
-album, a SoundCloud set or profile, a Spotify list) longer than that queues its first
-500 and says so. Whole-series queueing stops at 500 episodes; longer series
+album, a SoundCloud set or profile, a Spotify list) longer than that plays its first
+500, or queues as many as Up next has room for, and says so. Whole-series queueing stops at 500 episodes; longer series
 return an error, and their episodes stay playable one by one.

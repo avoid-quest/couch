@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { providerPageQuery } from "@/api/providers";
 import type { ApiCredentials } from "@/api/client";
 import { createId } from "@/session/session";
+import { useOptionalSessionGate } from "@/session/session-context";
 import type { Action, VideoQuality } from "../shared/protocol";
 import type { LinkTarget } from "../shared/providers";
 
@@ -29,14 +30,19 @@ export function usePastedList(
     (page && !page.nextCursor
       ? page.items.filter((item) => item.kind === "media").length
       : undefined);
-  return { title: page?.title, count };
+  // Queue all can add only what Up next has room for.
+  const queued = useOptionalSessionGate()?.state?.queue.length ?? 0;
+  return { title: page?.title, count, queued };
 }
 
 /** "Play all (12)"; over the queue limit, "Play all (4,626)" with the note that the first 500 go. */
 export const listLabel = (verb: "Play all" | "Queue all", count?: number) =>
   count === undefined ? verb : `${verb} (${count.toLocaleString()})`;
-export const listLimit = (count?: number) =>
-  count !== undefined && count > queueLimit ? `first ${queueLimit}` : undefined;
+/** Play all keeps up to 500 to follow; Queue all and Play next add what Up next (`queued` long) has room for. */
+export function listLimit(count?: number, queued = 0) {
+  const room = Math.max(0, Math.min(queueLimit, queueLimit - queued));
+  return count !== undefined && count > room ? `first ${room}` : undefined;
+}
 
 /** A pasted link's verb: a list loads and queues whole (Play all plays its first and keeps the rest to follow). */
 export function linkAction(
@@ -44,7 +50,7 @@ export function linkAction(
   target: LinkTarget | undefined,
   verb: LinkVerb,
   quality: VideoQuality,
-  list: { title?: string; count?: number } = {},
+  list: { title?: string; count?: number; queued?: number } = {},
   deviceId?: string,
 ): Action {
   const how = {
@@ -54,7 +60,7 @@ export function linkAction(
   };
   if (target?.shape !== "playlist")
     return { type: "enqueueWeb", entryId: createId(), url, quality, ...how };
-  const limit = listLimit(list.count);
+  const limit = listLimit(list.count, verb === "play" ? 0 : list.queued);
   const title = list.title && (limit ? `the ${limit} of ${list.title}` : list.title);
   return {
     type: "enqueueProvider",
