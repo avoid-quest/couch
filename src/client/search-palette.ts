@@ -60,9 +60,27 @@ function matchScopes(text: string): Scope[] {
 /** What Tab completes the field's text to: the best scope, when the text is all one scope's name. */
 export const completeScope = (text: string): Scope | undefined => matchScopes(text)[0];
 
-/** The chip row under the field: every kind, then the sources that can answer the chosen one. */
+// The chip row's lead: the kinds and platforms people reach for most, so a wide palette shows both before More.
+const chipLead = [
+  "Music",
+  "Radio",
+  "Radio archives",
+  "Spotify",
+  "SoundCloud",
+  "Bandcamp",
+  "Mixcloud",
+  "YouTube",
+  "Films & series",
+];
+const chipRank = (scope: Scope) => {
+  const at = chipLead.indexOf(scope.label);
+  return at < 0 ? chipLead.length : at;
+};
+/** The chip row under the field: the lead kinds and platforms, then the other kinds and sources that can answer. */
 export const chipScopes = (current: SearchScope) =>
-  scopes.filter((scope) => scope.kind || canReturn(scope.source, current.kind));
+  scopes
+    .filter((scope) => scope.kind || canReturn(scope.source, current.kind))
+    .sort((a, b) => chipRank(a) - chipRank(b));
 
 export const isChosen = (current: SearchScope, scope: Scope) =>
   scope.kind ? current.kind === scope.kind : current.source === scope.source;
