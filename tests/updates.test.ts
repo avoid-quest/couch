@@ -64,7 +64,7 @@ mock.module("electron", () => ({
   app,
   autoUpdater: nativeEvents,
   shell: { openPath: async () => shellError },
-  net: { fetch: (url: string) => globalThis.fetch(url) },
+  session: { fromPartition: () => ({ fetch: (url: string) => globalThis.fetch(url) }) },
   Notification: class {
     show() {}
   },

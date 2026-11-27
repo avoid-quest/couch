@@ -1,4 +1,4 @@
-import { net } from "electron";
+import { session } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, rmSync, writeFileSync } from "node:fs";
@@ -11,6 +11,10 @@ import { appUpdateName, type AppManifest } from "../src/shared/updates";
 // resources/app.asar, so when a release changes nothing else, Couch replaces
 // only that file, with the exe Windows already runs (docs/ci.md).
 const releases = "https://github.com/avoid-quest/couch/releases/download";
+// Chromium follows the system proxy, as electron-updater's downloads do. Like theirs, the
+// session is separate: Couch's default one trusts the certificates pinned for paired Couches.
+const release = (file: string) =>
+  session.fromPartition("couch-updates", { cache: false }).fetch(`${releases}/${file}`);
 const next = () => join(process.resourcesPath, "app.next");
 
 const sha256 = async (path: string) => {
@@ -21,8 +25,7 @@ const sha256 = async (path: string) => {
 
 // The release's manifest when this installation can take its app.asar alone, else null.
 export async function findAppUpdate(version: string): Promise<AppManifest | null> {
-  // Electron's net follows the system proxy, as electron-updater's downloads do.
-  const response = await net.fetch(`${releases}/v${version}/${appUpdateName(version)}.json`);
+  const response = await release(`v${version}/${appUpdateName(version)}.json`);
   // Releases published before app-only updates have no manifest.
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Couldn't read the update manifest (${response.status}).`);
@@ -38,7 +41,7 @@ export async function findAppUpdate(version: string): Promise<AppManifest | null
 
 // About 9 MB, so it is read whole and checked before it can replace anything.
 export async function downloadAppUpdate({ version, asar }: AppManifest) {
-  const response = await net.fetch(`${releases}/v${version}/${appUpdateName(version)}.asar`);
+  const response = await release(`v${version}/${appUpdateName(version)}.asar`);
   if (!response.ok) throw new Error(`Couldn't download the update (${response.status}).`);
   const data = Buffer.from(await response.arrayBuffer());
   if (data.length !== asar.size || createHash("sha256").update(data).digest("hex") !== asar.sha256)
