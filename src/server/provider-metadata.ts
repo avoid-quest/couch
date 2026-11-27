@@ -7,6 +7,7 @@ import { streamingCommunityList, streamingCommunityWatchContext } from "./stream
 import { movies123Title } from "./providers/movies123";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
+import { browseSpotify } from "./providers/spotify";
 
 export type ProviderMetadata = Pick<
   QueueEntry,
@@ -62,6 +63,7 @@ export async function resolveProviderMetadata(
           ? animeUnityTitle
           : undefined;
   if (title) return providerMetadata((await title(url, signal, fetchPage)).item);
+  if (provider === "spotify") return providerMetadata((await browseSpotify({ url }, signal)).item);
   if (providerForUrl(url) !== "streamingcommunity") return {};
   const context = /\/titles\/\d+-[\w-]+$/.test(new URL(url).pathname)
     ? { titleUrl: url, seasonUrl: undefined, episodeId: undefined }
@@ -109,7 +111,7 @@ export function createProviderMetadata({
     if (
       shutdown.signal.aborted ||
       pending.size >= 100 ||
-      !["streamingcommunity", "movies123", "animesaturn", "animeunity"].includes(
+      !["streamingcommunity", "movies123", "animesaturn", "animeunity", "spotify"].includes(
         providerForUrl(url) ?? "",
       )
     )
