@@ -1,3 +1,5 @@
+import { fold, searchWords } from "./search-text";
+
 export interface RadioStation {
   id: string;
   name: string;
@@ -160,18 +162,20 @@ export function radioMatches(
   query: string,
   show?: RadioProgrammeDetails | null,
 ) {
-  return [
-    station.name,
-    station.groupTitle,
-    ...(station.tags ?? []),
-    show?.title,
-    show?.artist,
-    ...radioShowLabels(show),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query.trim().toLowerCase());
+  const text = fold(
+    [
+      station.name,
+      station.groupTitle,
+      ...(station.tags ?? []),
+      show?.title,
+      show?.artist,
+      ...radioShowLabels(show),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  // Every word somewhere, in any order: "ale dj" finds DJ Alé's show.
+  return searchWords(query).every((word) => text.includes(word));
 }
 
 export interface AvoidRadioCatalog {

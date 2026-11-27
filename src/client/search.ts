@@ -1,19 +1,41 @@
+import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
+/**
+ * Every source's hits as one ranked list: the strongest title match first (`searchRelevance`'s strength), then the
+ * sources taking turns in `sources`' order, then each source's own order.
+ */
 export function mergeSearchHits(
   sources: readonly string[],
   hits: Record<string, SearchHit[]>,
   query: string,
 ) {
-  const normalize = (value: string) =>
-    value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
-  const exact = (hit: SearchHit) => !!query.trim() && normalize(hit.title) === normalize(query);
+  const { strength } = searchRelevance(query);
   return sources
     .flatMap((source, rank) =>
-      (hits[source] ?? []).map((hit, index) => ({ hit, order: index * sources.length + rank })),
+      (hits[source] ?? []).map((hit, index) => ({
+        hit,
+        strength: strength(hit.title),
+        order: index * sources.length + rank,
+      })),
     )
-    .sort((a, b) => Number(exact(b.hit)) - Number(exact(a.hit)) || a.order - b.order)
+    .sort((a, b) => b.strength - a.strength || a.order - b.order)
     .map(({ hit }) => hit);
+}
+/**
+ * The ranked hits with the ones already shown up to and including `held` (the focused hit) kept where they were, so
+ * what arrives later only lands below it and nothing moves under the focus.
+ */
+export function keepShown<T extends { id: string }>(
+  shown: readonly string[],
+  ranked: readonly T[],
+  held: string | null,
+): T[] {
+  const through = held ? shown.indexOf(held) + 1 : 0;
+  const byId = new Map(ranked.map((hit) => [hit.id, hit]));
+  const kept = shown.slice(0, through).flatMap((id) => byId.get(id) ?? []);
+  const keptIds = new Set(kept.map((hit) => hit.id));
+  return [...kept, ...ranked.filter((hit) => !keptIds.has(hit.id))];
 }
 
 const searchSources = [
@@ -94,18 +116,18 @@ export const isLink = (value: string) => {
   }
 };
 
-const normalizeWords = (value: string) =>
-  value
-    .normalize("NFC")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
 export function searchRelevance(query: string) {
-  const words = normalizeWords(query);
+  const words = searchWords(query);
   const mentions = (text: string, word: string) =>
-    normalizeWords(text).some((part) => part.startsWith(word));
+    searchWords(text).some((part) => part.startsWith(word));
+  /** How well a title answers the query: 3 when it is the query, 2 when every word starts one of its words, 1 when some word does. */
+  const strength = (title: string) => {
+    if (!words.length) return 0;
+    const parts = searchWords(title);
+    if (parts.join(" ") === words.join(" ")) return 3;
+    const found = words.filter((word) => parts.some((part) => part.startsWith(word))).length;
+    return found === words.length ? 2 : found ? 1 : 0;
+  };
   return {
     close: (hit: Pick<SearchHit, "title" | "meta" | "radio">) =>
       !words.length ||
@@ -122,7 +144,7 @@ export function searchRelevance(query: string) {
           word,
         ),
       ),
-    strong: (hit: Pick<SearchHit, "title">) =>
-      words.length > 0 && words.every((word) => mentions(hit.title, word)),
+    strong: (hit: Pick<SearchHit, "title">) => strength(hit.title) >= 2,
+    strength,
   };
 }

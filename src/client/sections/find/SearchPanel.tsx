@@ -6,6 +6,7 @@ import { ContentLink } from "@/components/ContentLink";
 import {
   canReturn,
   isLink,
+  keepShown,
   mergeSearchHits,
   searchLocation,
   searchRelevance,
@@ -198,6 +199,10 @@ export function SearchPanel(props: Props) {
   );
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
+  const filter = searchState.source;
+  // Only the sources that can return the kind are asked, waited on, or report a problem.
+  const inScope = (source: string) =>
+    (filter === "All" || filter === source) && canReturn(source, kind);
   const providers = url
     ? []
     : (
@@ -212,12 +217,12 @@ export function SearchPanel(props: Props) {
           "animesaturn",
           "animeunity",
         ] as ProviderId[]
-      ).filter((provider) => kind !== "audio" || canReturn(providerNames[provider], kind));
+      ).filter((provider) => inScope(providerNames[provider]));
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
-  const { close, strong } = searchRelevance(query);
-  const merged = useMemo(
+  const { close, strength } = searchRelevance(query);
+  const ranked = useMemo(
     () =>
       mergeSearchHits(
         sourceOrder,
@@ -228,6 +233,17 @@ export function SearchPanel(props: Props) {
       ),
     [summaries, query],
   );
+  // Hits up to the focused one keep the places they were shown in; later answers rank in below it.
+  const focusedHit = useRef<string | null>(null);
+  const shownOrder = useRef({ key: resultsKey, ids: [] as string[] });
+  const merged = keepShown(
+    shownOrder.current.key === resultsKey ? shownOrder.current.ids : [],
+    ranked,
+    focusedHit.current,
+  );
+  useLayoutEffect(() => {
+    shownOrder.current = { key: resultsKey, ids: merged.map((hit) => hit.id) };
+  });
   // The kind and source are the header field's scope, chosen before or after the results. The filters come from what
   // was found, so no choice made here can come up empty: a kind is offered once it has a hit, and inside a kind, a
   // source once it has a hit of it. A scope chosen in the field shows too, and says so when it holds nothing.
@@ -242,24 +258,24 @@ export function SearchPanel(props: Props) {
     const n = found.filter((hit) => inKind(hit, option.value)).length;
     return n || (option.value === kind && found.length) ? [{ ...option, count: n }] : [];
   });
-  const filter = searchState.source;
   const foundSources = sourceOrder
     .map((source) => ({
       value: source,
       count: found.filter((hit) => hit.source === source && inKind(hit)).length,
     }))
     .filter((source) => source.count || (source.value === filter && found.length));
-  // Only the sources that can return the kind are waited on, or report a problem.
-  const inScope = (source: string) =>
-    (filter === "All" || filter === source) && canReturn(source, kind);
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
   const scoped = merged.filter((hit) => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
   const loose = scoped.filter((hit) => !close(hit));
-  // The closest match leads: the first strong hit of the first kind that has one, as Home's hero leads its shelves. The first match
-  // holds still for the query and kind, so nothing moves under the focus while browsing.
+  // The closest match leads: of the strongest title matches (every word at least), the first of the first kind that has
+  // one, as Home's hero leads its shelves. The first match holds still for the query and kind, so nothing moves under the
+  // focus while browsing.
+  const best = Math.max(2, ...relevant.map((hit) => strength(hit.title)));
   const candidate = groups
-    .map((group) => relevant.find((hit) => groupOf(hit) === group.id && strong(hit)))
+    .map((group) =>
+      relevant.find((hit) => groupOf(hit) === group.id && strength(hit.title) === best),
+    )
     .find(Boolean);
   const holdKey = `${resultsKey}:${kind ?? "all"}`;
   const [held, setHeld] = useState<Record<string, string>>({});
@@ -279,7 +295,6 @@ export function SearchPanel(props: Props) {
       hits: relevant.filter((hit) => hit !== top && groupOf(hit) === group.id),
     }))
     .filter((group) => group.hits.length);
-  const focusedHit = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
     const row =
@@ -506,7 +521,7 @@ export function SearchPanel(props: Props) {
           key={`${provider}:${query}`}
           {...props}
           onResults={reportResults}
-          active={props.active && inScope(providerNames[provider])}
+          active={props.active}
           provider={provider}
           query={query}
           quality={quality}
@@ -514,17 +529,18 @@ export function SearchPanel(props: Props) {
         />
       ))}
       {!url &&
-        kind !== "audio" &&
-        radioSources.map((source) => (
-          <SearchRadioResults
-            key={`${source}:${query}`}
-            {...props}
-            onResults={reportResults}
-            active={props.active && inScope(source)}
-            query={query}
-            source={source}
-          />
-        ))}
+        radioSources
+          .filter(inScope)
+          .map((source) => (
+            <SearchRadioResults
+              key={`${source}:${query}`}
+              {...props}
+              onResults={reportResults}
+              active={props.active}
+              query={query}
+              source={source}
+            />
+          ))}
       {url && (
         <PastedLink
           key={url}
