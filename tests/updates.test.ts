@@ -227,20 +227,27 @@ test("the swap waits for Couch to exit, replaces app.asar and starts Couch again
   const { swapScript } = await import("../app/app-update");
   writeFileSync(join(temporary, "app.asar"), "old app");
   writeFileSync(join(temporary, "app.next"), "new app");
+  // The stand-in Couch records whether it starts as Node; a shell script stands in only off Windows.
+  const posix = process.platform !== "win32";
   const started = join(temporary, "started");
   const relaunch = join(temporary, "relaunch.sh");
-  writeFileSync(relaunch, `#!/bin/sh\necho yes > "${started}"\n`, { mode: 0o755 });
-  const couch = Bun.spawn(["sleep", "0.5"]);
-  const swap = Bun.spawn([electron, "-e", swapScript, String(couch.pid), temporary, relaunch], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+  writeFileSync(relaunch, `#!/bin/sh\necho "node=$ELECTRON_RUN_AS_NODE" > "${started}"\n`, {
+    mode: 0o755,
   });
+  const couch = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 500)"]);
+  const swap = Bun.spawn(
+    [electron, "-e", swapScript, String(couch.pid), temporary, posix ? relaunch : ""],
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+  );
   await Bun.sleep(200);
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
   await swap.exited;
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("new app");
   expect(existsSync(join(temporary, "app.next"))).toBe(false);
   expect(existsSync(join(temporary, "app.asar.old"))).toBe(false);
+  if (!posix) return;
   while (!existsSync(started)) await Bun.sleep(20);
+  expect(readFileSync(started, "utf8").trim()).toBe("node=");
 });
 
 // Exercise electron-updater's actual NSIS launch and quit logic on any host.

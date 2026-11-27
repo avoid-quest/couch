@@ -74,7 +74,9 @@ const attempt = () => {
     if (alive()) return setTimeout(attempt, 250);
     try { swap(); } catch { return setTimeout(attempt, 250); }
   }
-  if (relaunch) spawn(relaunch, [], { detached: true, stdio: "ignore" }).unref();
+  // Couch itself must start as Electron, not as Node like this script.
+  const { ELECTRON_RUN_AS_NODE, ...env } = process.env;
+  if (relaunch) spawn(relaunch, [], { detached: true, stdio: "ignore", env }).unref();
 };
 attempt();
 `;
