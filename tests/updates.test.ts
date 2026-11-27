@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { NsisUpdater } from "electron-updater/out/NsisUpdater";
 
@@ -24,6 +25,7 @@ let armed: boolean[];
 let temporary: string;
 let starts: string[][];
 let installs: number;
+let swaps: string[][];
 const autoUpdater = Object.assign(new EventEmitter(), {
   logger: null as {
     info(message: unknown): void;
@@ -72,6 +74,10 @@ mock.module("electron-updater", () => ({
   },
 }));
 mock.module("node:child_process", () => ({
+  spawn(command: string, args: string[]) {
+    swaps.push([command, ...args.slice(2)]);
+    return { unref() {} };
+  },
   execFile(
     command: string,
     args: string[],
@@ -102,6 +108,7 @@ beforeEach(() => {
   armed = [];
   starts = [];
   installs = 0;
+  swaps = [];
   available = null;
   disabled = false;
   checkError = null;
@@ -116,10 +123,124 @@ beforeEach(() => {
   autoUpdater.autoInstallOnAppQuit = true;
 });
 afterEach(() => {
+  globalThis.fetch = realFetch;
   Object.defineProperty(process, "platform", platform);
   if (resourcesPath) Object.defineProperty(process, "resourcesPath", resourcesPath);
   else delete (process as Partial<NodeJS.Process>).resourcesPath;
   rmSync(temporary, { recursive: true, force: true });
+});
+
+const realFetch = globalThis.fetch;
+const sha256 = (data: string) => createHash("sha256").update(data).digest("hex");
+// A Windows release whose manifest lists `files`, serving `asar` as its app.asar.
+const appRelease = (files: Record<string, string>, asar = "new app") => {
+  Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+  Object.defineProperty(process, "resourcesPath", { configurable: true, value: temporary });
+  const requests: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    requests.push(url);
+    if (url.endsWith(".app.json"))
+      return Response.json({
+        version: "0.3.1",
+        asar: { sha256: sha256("new app"), size: 7 },
+        files,
+      });
+    return new Response(asar);
+  }) as typeof fetch;
+  return requests;
+};
+
+test("Windows replaces only app.asar when a release changes nothing else", async () => {
+  const requests = appRelease({});
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  expect(requests).toEqual([
+    "https://github.com/avoid-quest/couch/releases/download/v0.3.1/Couch-0.3.1-x64.app.json",
+    "https://github.com/avoid-quest/couch/releases/download/v0.3.1/Couch-0.3.1-x64.app.asar",
+  ]);
+  expect(downloads).toEqual([]);
+  expect(readFileSync(join(temporary, "app.next"), "utf8")).toBe("new app");
+  expect(updates.state()).toMatchObject({ status: "ready", available: "0.3.1", progress: null });
+  let quits = 0;
+  app.once("before-quit", () => quits++);
+  await updates.action({ op: "install", version: "0.3.1" });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(installs).toBe(0);
+  expect(swaps).toEqual([[process.execPath, String(process.pid), temporary, process.execPath]]);
+  app.emit("quit", {}, 0);
+  expect(swaps.length).toBe(1);
+});
+
+test("Windows uses the installer when a release changes other files", async () => {
+  appRelease({ "resources/live-relay/couch-relay.exe": sha256("new relay") });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  expect(downloads).toEqual(["0.3.1"]);
+  expect(existsSync(join(temporary, "app.next"))).toBe(false);
+});
+
+test("a damaged app.asar download is discarded", async () => {
+  appRelease({}, "tampered");
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  expect(updates.state()).toMatchObject({ status: "error", available: null });
+  expect(existsSync(join(temporary, "app.next"))).toBe(false);
+});
+
+test("a pending app.asar installs when Couch quits, without starting it again", async () => {
+  appRelease({});
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  app.emit("quit", {}, 0);
+  expect(swaps).toEqual([[process.execPath, String(process.pid), temporary, ""]]);
+});
+
+test("an installer Windows blocks stops counting as ready and isn't downloaded again", async () => {
+  const requests = appRelease({ "resources/live-relay/couch-relay.exe": sha256("new relay") });
+  const { updates, quits } = await windows(async () => {
+    throw Object.assign(new Error("spawn UNKNOWN"), { code: "UNKNOWN" });
+  });
+  expect(updates.state().status).toBe("ready");
+  await updates.action({ op: "install", version: "0.3.1" });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(quits()).toBe(0);
+  expect(updates.state()).toMatchObject({ status: "error", available: null });
+  expect(updates.state().error).toContain("Windows blocked the update");
+  const checked = requests.length;
+  await updates.check();
+  expect(requests.length).toBe(checked);
+  expect(updates.state()).toMatchObject({ status: "error", available: null });
+});
+
+// The script runs in Couch's exe as Node: Electron's own binary runs it here the same way.
+const electronPackage = require.resolve("electron/package.json");
+const electron = join(
+  dirname(electronPackage),
+  "dist",
+  readFileSync(join(dirname(electronPackage), "path.txt"), "utf8"),
+);
+test("the swap waits for Couch to exit, replaces app.asar and starts Couch again", async () => {
+  const { swapScript } = await import("../app/app-update");
+  writeFileSync(join(temporary, "app.asar"), "old app");
+  writeFileSync(join(temporary, "app.next"), "new app");
+  const started = join(temporary, "started");
+  const relaunch = join(temporary, "relaunch.sh");
+  writeFileSync(relaunch, `#!/bin/sh\necho yes > "${started}"\n`, { mode: 0o755 });
+  const couch = Bun.spawn(["sleep", "0.5"]);
+  const swap = Bun.spawn([electron, "-e", swapScript, String(couch.pid), temporary, relaunch], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+  });
+  await Bun.sleep(200);
+  expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
+  await swap.exited;
+  expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("new app");
+  expect(existsSync(join(temporary, "app.next"))).toBe(false);
+  expect(existsSync(join(temporary, "app.asar.old"))).toBe(false);
+  while (!existsSync(started)) await Bun.sleep(20);
 });
 
 // Exercise electron-updater's actual NSIS launch and quit logic on any host.

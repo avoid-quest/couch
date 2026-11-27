@@ -100,7 +100,7 @@ jobs:
         run: |
           shopt -s nullglob
           files=()
-          for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml}; do
+          for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml,asar,json}; do
             [[ $file == *builder-debug.yml ]] || files+=("$file")
           done
           gh release upload "${{ inputs.release }}" "${files[@]}" -R "$GITHUB_REPOSITORY" --clobber
@@ -116,6 +116,8 @@ jobs:
             .artifacts/app/*.exe
             .artifacts/app/*.blockmap
             .artifacts/app/*.yml
+            .artifacts/app/*.app.asar
+            .artifacts/app/*.app.json
             !.artifacts/app/builder-debug.yml
           if-no-files-found: error
           retention-days: 14

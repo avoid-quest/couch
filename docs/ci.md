@@ -93,6 +93,14 @@ each on its channel (`preview-*.yml` or `latest-*.yml`), checks at start and eve
 4 hours, and installs on quit ([app/update.ts](../app/update.ts)). The TV installs
 through a root unit ([native TV](native-tv.md)).
 
+Windows' Smart App Control refuses to start an unsigned installer that Couch
+downloads, so each Windows release also publishes `Couch-<version>-x64.app.asar`
+and `.app.json`, the SHA-256 of every other installed file except the exe
+(`scripts/package.ts`). An installation whose files all match downloads only
+`app.asar` and, once Couch quits, swaps it in using its own exe as Node
+([app/app-update.ts](../app/app-update.ts)). A release that changes Electron or a
+bundled helper needs the installer, which people download and open themselves.
+
 ## Platforms and signing
 
 - Linux: AppImage and deb (x64). Windows: nsis (x64). Both unsigned.

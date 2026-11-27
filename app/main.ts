@@ -720,8 +720,11 @@ function createWindow() {
   });
   const contents = window.webContents;
   renderer?.watch(contents);
+  // Only a document load resets playback: did-start-loading also fires on in-app page changes.
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
-    if (mainFrame && !inPlace) capture.clear();
+    if (!mainFrame || inPlace) return;
+    capture.clear();
+    updatePlayback = "loading";
   });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
@@ -729,9 +732,6 @@ function createWindow() {
     if (details.level === "error" && details.frame === contents.mainFrame) {
       logAppError("renderer", `host=${diagnosticHost(contents.mainFrame.url)}: ${details.message}`);
     }
-  });
-  contents.on("did-start-loading", () => {
-    updatePlayback = "loading";
   });
   // A page that dies, usually out of memory on a long session, loads again, at most 3 times a minute.
   let gone: number[] = [];
