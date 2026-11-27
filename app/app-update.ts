@@ -1,3 +1,4 @@
+import { net } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,8 @@ const sha256 = async (path: string) => {
 
 // The release's manifest when this installation can take its app.asar alone, else null.
 export async function findAppUpdate(version: string): Promise<AppManifest | null> {
-  const response = await fetch(`${releases}/v${version}/${appUpdateName(version)}.json`);
+  // Electron's net follows the system proxy, as electron-updater's downloads do.
+  const response = await net.fetch(`${releases}/v${version}/${appUpdateName(version)}.json`);
   // Releases published before app-only updates have no manifest.
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Couldn't read the update manifest (${response.status}).`);
@@ -43,12 +45,13 @@ export async function findAppUpdate(version: string): Promise<AppManifest | null
 
 // About 9 MB, so it is read whole and checked before it can replace anything.
 export async function downloadAppUpdate({ version, asar }: AppManifest) {
-  const response = await fetch(`${releases}/v${version}/${appUpdateName(version)}.asar`);
+  const response = await net.fetch(`${releases}/v${version}/${appUpdateName(version)}.asar`);
   if (!response.ok) throw new Error(`Couldn't download the update (${response.status}).`);
   const data = Buffer.from(await response.arrayBuffer());
   if (data.length !== asar.size || createHash("sha256").update(data).digest("hex") !== asar.sha256)
     throw new Error("The downloaded update is damaged.");
-  writeFileSync(next(), data);
+  // On disk before Restart's rename can make it the only copy.
+  writeFileSync(next(), data, { flush: true });
 }
 
 export const appUpdateLeftOver = () => existsSync(next());
@@ -65,7 +68,8 @@ const asar = path.join(resources, "app.asar"), next = path.join(resources, "app.
 const alive = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
 let deadline;
 const attempt = () => {
-  if (alive()) return setTimeout(attempt, 250);
+  // Once Couch has exited, its pid may belong to another process.
+  if (!deadline && alive()) return setTimeout(attempt, 250);
   deadline ??= Date.now() + 60000;
   try { fs.renameSync(next, asar); } catch { if (Date.now() < deadline) return setTimeout(attempt, 250); }
   // Couch itself must start as Electron, not as Node like this script.

@@ -64,6 +64,7 @@ mock.module("electron", () => ({
   app,
   autoUpdater: nativeEvents,
   shell: { openPath: async () => shellError },
+  net: { fetch: (url: string) => globalThis.fetch(url) },
   Notification: class {
     show() {}
   },
@@ -121,6 +122,8 @@ beforeEach(() => {
   windowsUpdater = undefined;
   shellError = "";
   app.isPackaged = false;
+  // The Package job runs these on Windows too; only the app-only tests act as Windows.
+  Object.defineProperty(process, "platform", { configurable: true, value: "linux" });
   app.removeAllListeners();
   autoUpdater.removeAllListeners();
   autoUpdater.on("error", () => {}); // electron-updater's own logging listener.
@@ -203,16 +206,25 @@ test("a pending app.asar installs when Couch quits, without starting it again", 
   expect(swaps).toEqual([[process.execPath, String(process.pid), temporary, ""]]);
 });
 
-test("an installer Windows blocks stops counting as ready and isn't downloaded again", async () => {
+// Smart App Control fails the launch with UNKNOWN; a cancelled UAC prompt fails it with
+// EACCES. Either way elevate.exe then exits 1, with no code of its own.
+test.each([
+  ["UNKNOWN", "error"],
+  ["EACCES", "ready"],
+])("a Windows %s launch that elevation can't rescue leaves the update %s", async (code, status) => {
   const requests = appRelease({ "resources/live-relay/couch-relay.exe": sha256("new relay") });
-  const { updates, quits } = await windows(async () => {
-    throw Object.assign(new Error("spawn UNKNOWN"), { code: "UNKNOWN" });
+  const { updates, quits } = await windows(async (command) => {
+    if (command === join(temporary, "elevate.exe"))
+      throw new Error("Windows elevation helper failed to start the installer (1).");
+    throw Object.assign(new Error(`spawn ${code}`), { code });
   });
   expect(updates.state().status).toBe("ready");
   await updates.action({ op: "install", version: "0.3.1" });
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(quits()).toBe(0);
-  expect(updates.state()).toMatchObject({ status: "error", available: null });
+  expect(updates.state().status).toBe(status);
+  if (status === "ready") return;
+  expect(updates.state()).toMatchObject({ available: null });
   expect(updates.state().error).toContain("Windows blocked the update");
   // Reopening Couch doesn't offer that release again.
   app.removeAllListeners();
@@ -236,7 +248,7 @@ test("the swap waits for Couch to exit, replaces app.asar and starts Couch again
   writeFileSync(join(temporary, "app.asar"), "old app");
   writeFileSync(join(temporary, "app.next"), "new app");
   // The stand-in Couch records whether it starts as Node; a shell script stands in only off Windows.
-  const posix = process.platform !== "win32";
+  const posix = platform.value !== "win32";
   const started = join(temporary, "started");
   const relaunch = join(temporary, "relaunch.sh");
   writeFileSync(relaunch, `#!/bin/sh\necho "node=$ELECTRON_RUN_AS_NODE" > "${started}"\n`, {

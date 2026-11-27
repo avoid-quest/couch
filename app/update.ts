@@ -70,7 +70,11 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   let appOnly: string | null = null;
   if (windows && app.isPackaged && appUpdateLeftOver()) {
     logAppError("update", "The last update couldn't replace Couch's files.");
-    discardAppUpdate();
+    try {
+      discardAppUpdate();
+    } catch (error) {
+      logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+    }
   }
   let state: UpdateState = {
     version: app.getVersion(),
@@ -138,8 +142,9 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
   autoUpdater.on("update-downloaded", ({ version }) => ready(version));
   // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
-  // the launch fails with UNKNOWN, then so does the elevation helper. Only someone at this
-  // computer can install that release, so it stops counting as ready, across restarts too.
+  // the launch fails with UNKNOWN, which the patched updater keeps through its elevation
+  // retry. Only someone at this computer can install that release, so it stops counting
+  // as ready, across restarts too.
   const blockedError =
     "Windows blocked the update. Download Couch from couch.avoid.quest/download and install it.";
   const blockedPath = join(dirname(channelPath), "update-blocked");
@@ -149,11 +154,14 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   } catch {}
   autoUpdater.on("error", (error: Error & { code?: string }) => {
     if (state.status !== "installing") return;
-    const refused = error.code === "UNKNOWN" || error.message.includes("elevation helper");
-    if (!windows || !refused)
+    if (!windows || error.code !== "UNKNOWN")
       return set({ status: "ready", error: "Couldn't install the update. Try again later." });
     blocked = state.available!;
-    writeFileSync(blockedPath, blocked);
+    try {
+      writeFileSync(blockedPath, blocked);
+    } catch (error) {
+      logAppError("update", `Couldn't remember the blocked update: ${(error as Error).message}`);
+    }
     autoUpdater.autoInstallOnAppQuit = false;
     set({ status: "error", available: null, error: blockedError });
   });
@@ -200,7 +208,10 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     if (!interrupt && (await playing?.())) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
     if (appOnly === version) {
-      await swap(true);
+      await swap(true).catch((error) => {
+        logAppError("update", `Couldn't start the update: ${error.message}`);
+        throw new Error("Couldn't install the update. Try again later.");
+      });
       return app.quit();
     }
     if (!tv) return autoUpdater.quitAndInstall(true, true);
