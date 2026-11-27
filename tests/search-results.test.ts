@@ -98,3 +98,20 @@ test("a station matches every word of the query in any order, accents folded", (
   expect(radioMatches(station, "dj spel", show)).toBe(false);
   expect(radioMatches(station, "dj ale")).toBe(false);
 });
+
+test("a hit by the searched artist or from the searched album counts as close", () => {
+  const { close } = searchRelevance("devi tensione");
+  expect(
+    close({
+      title: "Verme",
+      creator: { title: "Devi Tensione", url: "https://open.spotify.com/artist/x" },
+    }),
+  ).toBe(true);
+  expect(
+    close({
+      title: "Tendo #1",
+      context: { title: "Devi Tensione Live", url: "https://example.com/a" },
+    }),
+  ).toBe(true);
+  expect(close({ title: "Verme" })).toBe(false);
+});

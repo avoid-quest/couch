@@ -150,13 +150,15 @@ export function searchRelevance(query: string) {
     return found === words.length ? 2 : found ? 1 : 0;
   };
   return {
-    close: (hit: Pick<SearchHit, "title" | "meta" | "radio">) =>
+    close: (hit: Pick<SearchHit, "title" | "meta" | "radio" | "creator" | "context">) =>
       !words.length ||
       words.some((word) =>
         mentions(
           [
             hit.title,
             hit.meta,
+            hit.creator?.title,
+            hit.context?.title,
             hit.radio?.host,
             hit.radio?.group,
             ...(hit.radio?.tags ?? []),
