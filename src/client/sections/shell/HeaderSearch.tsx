@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type RefObject,
 } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
@@ -51,6 +52,16 @@ import { linkTarget, providerForUrl, providerNames } from "../../../shared/provi
 import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
 import type { RadioStation } from "../../../shared/radio";
 import { readSearchRecents, rememberSearch } from "./search-recents";
+import { Skeleton } from "@/components/ui/skeleton";
+import { HitRow, PaletteFoot, TopHero, rowMenu, usePaletteHits } from "./PaletteResults";
+import type { SearchHit } from "@/sections/find/SearchOnlineResults";
+
+/** What a typed palette's rows answer to besides Enter: Shift+Enter queues, → opens a row's menu and ← closes it. */
+type RowKeys = {
+  queue: (value: string) => boolean;
+  menu: (value: string, open: boolean) => boolean;
+  hint: (value: string) => { enter: string; queue?: string; menu: boolean } | undefined;
+};
 
 const none = "none";
 const kindScopes = scopes.filter((scope) => scope.kind);
@@ -89,6 +100,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   // The palette's selected row: a pasted link's Play, else the query; none while the field is empty (Enter then submits).
   const [selected, setSelected] = useState(none);
+  // Whether the keys or the pointer moved the selection since the last edit; until they do, the top row takes it.
+  const moved = useRef(false);
+  const rowKeys = useRef<RowKeys | null>(null);
   // A pasted list opens on Play all, a page (a channel, a series) on Open, anything else on Play.
   const first = (next: string) =>
     !next.trim()
@@ -99,6 +113,7 @@ export function HeaderSearch({ className }: { className?: string }) {
           : "link:play"
         : "query";
   const type = (next: string) => {
+    moved.current = false;
     setDraft((current) => ({ ...current, value: next }));
     setSelected(first(next));
     setOpen(true);
@@ -239,6 +254,26 @@ export function HeaderSearch({ className }: { className?: string }) {
     setSelected(next.getAttribute("data-value")!);
     return true;
   };
+  // The TV's hero holds its verbs on one line: Left and Right move along it, Down leaves it, and Up from the row under it
+  // comes back to its first verb rather than its last.
+  const hero = (key: string) => {
+    const items = [
+      ...(list.current?.querySelectorAll<HTMLElement>('[cmdk-item]:not([aria-disabled="true"])') ??
+        []),
+    ];
+    const values = items.map((item) => item.getAttribute("data-value")!);
+    const at = values.indexOf(selected);
+    const verbs = values.filter((item) => item.startsWith("top:"));
+    let next: string | undefined;
+    if (selected.startsWith("top:") && (key === "ArrowLeft" || key === "ArrowRight"))
+      next = verbs[verbs.indexOf(selected) + (key === "ArrowLeft" ? -1 : 1)] ?? selected;
+    else if (selected.startsWith("top:") && key === "ArrowDown")
+      next = values.slice(at + 1).find((item) => !item.startsWith("top:"));
+    else if (key === "ArrowUp" && values[at - 1]?.startsWith("top:")) next = verbs[0];
+    if (!next) return false;
+    setSelected(next);
+    return true;
+  };
   // A link plays as itself, outside any scope.
   const labels = link ? [] : scopeLabels(scope);
   const tokens = useId();
@@ -368,6 +403,22 @@ export function HeaderSearch({ className }: { className?: string }) {
               // The keys take the palette's selection back from the pointer (index.css: cmdk).
               list.current?.removeAttribute("data-pointer");
               const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+              if (event.key.startsWith("Arrow")) moved.current = true;
+              const rows = open && text && !link ? rowKeys.current : null;
+              const atEnd = event.currentTarget.selectionStart === value.length;
+              if (
+                rows &&
+                ((event.key === "Enter" && event.shiftKey && rows.queue(selected)) ||
+                  (plain && event.key === "ArrowRight" && atEnd && rows.menu(selected, true)) ||
+                  (plain &&
+                    (event.key === "ArrowLeft" || event.key === "Escape") &&
+                    rows.menu(selected, false)) ||
+                  (plain && event.key.startsWith("Arrow") && hero(event.key)))
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
               // cmdk consumes modified Up/Down too; keep text selection and caret shortcuts native.
               if (!plain && event.key.startsWith("Arrow")) {
                 event.stopPropagation();
@@ -469,8 +520,10 @@ export function HeaderSearch({ className }: { className?: string }) {
             label="Suggestions"
             onPointerDown={(event) => event.preventDefault()}
             onPointerMove={(event) => {
-              if (event.pointerType === "mouse" && !isTvPresentation())
+              if (event.pointerType === "mouse" && !isTvPresentation()) {
+                moved.current = true;
                 event.currentTarget.setAttribute("data-pointer", "");
+              }
             }}
             className="absolute inset-x-0 top-full z-30 mt-2 max-h-[min(40rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-lg bg-popover p-2 **:[[cmdk-item]]:min-h-10 **:[[cmdk-item]]:text-body **:[[cmdk-group-heading]]:text-meta touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
           >
@@ -482,6 +535,14 @@ export function HeaderSearch({ className }: { className?: string }) {
                 labels={labels}
                 recents={recents}
                 connected={connected}
+                selected={selected}
+                moved={moved.current}
+                rowKeys={rowKeys}
+                onTop={(next) => {
+                  if (!moved.current) setSelected(next);
+                }}
+                onSelectRow={setSelected}
+                onRun={(run) => leave(run)}
                 onSearch={() => search(text, "enter")}
                 onScope={(next) => choose(next)}
                 onRecent={pick}
@@ -736,7 +797,12 @@ function Empty({
   );
 }
 
-/** While typing: Search for the query first, then the scopes it names and what the client holds that matches, never a source's search. */
+/**
+ * While typing: the closest match from the fast sources as the top row (a hero on the TV), then what the client holds
+ * that matches (the scopes the text names, recent searches, saved and played titles, stations), then the fast sources'
+ * hits a section each as they answer, and See all results last. Nothing moves once shown: the top row keeps its place,
+ * and a source that answers later comes in below the others.
+ */
 function Typed({
   text,
   link,
@@ -744,6 +810,12 @@ function Typed({
   labels,
   recents,
   connected,
+  selected,
+  moved,
+  rowKeys,
+  onTop,
+  onSelectRow,
+  onRun,
   onSearch,
   onScope,
   onRecent,
@@ -757,6 +829,13 @@ function Typed({
   labels: string[];
   recents: string[];
   connected: boolean;
+  selected: string;
+  /** Whether the keys or the pointer moved the selection since the last edit. */
+  moved: boolean;
+  rowKeys: RefObject<RowKeys | null>;
+  onTop: (value: string) => void;
+  onSelectRow: (value: string) => void;
+  onRun: (run: () => void) => void;
   onSearch: () => void;
   onScope: (scope: Scope) => void;
   onRecent: (query: string) => void;
@@ -764,6 +843,53 @@ function Typed({
   onPlayStation: (station: RadioStation) => void;
   onLink: (verb: LinkVerb, list: { title?: string; count?: number }) => void;
 }) {
+  const remote = usePaletteHits(link ? "" : text, scope, moved);
+  const tv = isTvPresentation();
+  const { top } = remote;
+  const topValue = top && (tv ? "top:main" : `hit:${top.id}`);
+  // The first match is selected as it arrives, so Enter is always safe; once the keys or the pointer move, it stays.
+  useLayoutEffect(() => {
+    if (topValue) onTop(topValue);
+  }, [topValue]);
+  // The row whose menu is open, for this query.
+  const [menu, setMenu] = useState<{ query: string; id: string } | null>(null);
+  const opened = menu?.query === remote.query ? menu.id : null;
+  const rowOf = (value: string): SearchHit | undefined =>
+    value.startsWith("top:")
+      ? top
+      : remote.hits.find((hit) => value === `hit:${hit.id}` || value.startsWith(`menu:${hit.id}:`));
+  const queueOf = (hit?: SearchHit) =>
+    hit?.actions.find(
+      (action) => action.label.startsWith("Queue") && action.run && !action.disabled,
+    );
+  rowKeys.current = {
+    // Shift+Enter on a result only ever queues; where there is nothing to queue it does nothing.
+    queue: (value) => {
+      const hit = rowOf(value);
+      const queue = queueOf(hit);
+      if (queue) onRun(queue.run!);
+      return !!hit;
+    },
+    menu: (value, open) => {
+      const hit = rowOf(value);
+      if (!hit || !rowMenu(hit).length || open === (opened === hit.id)) return false;
+      setMenu(open ? { query: remote.query, id: hit.id } : null);
+      if (!open) onSelectRow(hit === top && tv ? "top:more" : `hit:${hit.id}`);
+      return true;
+    },
+    hint: (value) => {
+      if (value === "query") return { enter: "See all", menu: false };
+      const hit = rowOf(value);
+      if (!hit || value.startsWith("menu:")) return;
+      return {
+        enter: hit.primary.label,
+        queue: queueOf(hit)?.label,
+        menu: rowMenu(hit).length > 0,
+      };
+    },
+  };
+  const toggle = (hit: SearchHit) => () =>
+    setMenu(opened === hit.id ? null : { query: remote.query, id: hit.id });
   const held = useHeld();
   const { credentials } = useSessionGate();
   const target = link ? linkTarget(text) : undefined;
@@ -837,23 +963,24 @@ function Typed({
   }
   return (
     <>
-      <CommandGroup>
-        {/* A verb, not a second field: "Search “ra” in Music". On the TV the typed query reads from the sofa here, larger than
-          the header's field holds it. */}
-        <CommandItem
-          value="query"
-          onSelect={onSearch}
-          className="min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight"
-        >
-          <Search aria-hidden="true" className="text-muted-foreground tv:size-6" />
-          <span className="min-w-0 truncate">Search “{text.trim()}”</span>
-          {labels.length > 0 && (
-            <span className="max-w-1/2 shrink-0 truncate font-normal text-muted-foreground">
-              in {labels.join(", ")}
-            </span>
-          )}
-        </CommandItem>
-      </CommandGroup>
+      {top &&
+        (tv ? (
+          <TopHero hit={top} menu={opened === top.id} onMenu={toggle(top)} onRun={onRun} />
+        ) : (
+          <CommandGroup>
+            <HitRow hit={top} large menu={opened === top.id} onMenu={toggle(top)} onRun={onRun} />
+          </CommandGroup>
+        ))}
+      {/* The top row's place is kept while the sources answer, so nothing under it moves when it comes. */}
+      {!top && remote.asking.length > 0 && (
+        <div aria-hidden="true" className="flex items-center gap-3 px-2.5 py-2 tv:px-2 tv:pb-4">
+          <Skeleton className="size-14 tv:size-48" />
+          <div className="grid gap-2">
+            <Skeleton className="h-4 w-48 tv:h-8 tv:w-96" />
+            <Skeleton className="h-3 w-32 tv:h-5 tv:w-64" />
+          </div>
+        </div>
+      )}
       {found.scopes.length > 0 && (
         <CommandGroup heading="Search in">
           <ScopeRows items={found.scopes} scope={scope} onScope={onScope} hint={found.scopes[0]} />
@@ -910,6 +1037,36 @@ function Typed({
           ))}
         </CommandGroup>
       )}
+      {remote.sections.map((section) => (
+        <CommandGroup key={section.source} heading={section.source}>
+          {section.hits.map((hit) => (
+            <HitRow
+              key={hit.id}
+              hit={hit}
+              menu={opened === hit.id}
+              onMenu={toggle(hit)}
+              onRun={onRun}
+            />
+          ))}
+        </CommandGroup>
+      ))}
+      <CommandGroup>
+        <CommandItem value="query" onSelect={onSearch}>
+          <Search aria-hidden="true" className="text-muted-foreground" />
+          <span className="min-w-0 truncate">See all results for “{text.trim()}”</span>
+          {labels.length > 0 && (
+            <span className="max-w-1/2 shrink-0 truncate text-muted-foreground">
+              in {labels.join(", ")}
+            </span>
+          )}
+        </CommandItem>
+      </CommandGroup>
+      <PaletteFoot
+        asking={remote.asking}
+        failed={remote.failed}
+        keys={rowKeys.current.hint(selected)}
+      />
+      {remote.sources}
     </>
   );
 }

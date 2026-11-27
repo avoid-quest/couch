@@ -35,8 +35,9 @@ branch. Phones keep a bottom tab bar for thumb reach.
 - **Room** (`.room`, `artwork-light.ts`): behind a Stage and the player's Now
   playing, the room is painted with two colours read from the artwork (via
   `/api/artwork`), set dark enough that ink keeps 7:1, with a static grain.
-  Artwork colour is the only colour besides danger's red. Video keeps black bars
-  and no artwork light.
+  Search's results and a pasted list's page stand in the room too, lit by the
+  top or focused item, neutral without artwork. Artwork colour is the only
+  colour besides danger's red. Video keeps black bars and no artwork light.
 - **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
   page, its backdrop blurred and tinted with the artwork's tone. Besides the
   player's Up next panel, it's the one backdrop filter on a page.
@@ -92,7 +93,7 @@ plays. New motion is `motion-safe:`; reduced motion stills everything.
 In `src/client/components`:
 
 - `PageHeader`, `ContentBreadcrumb`, `SettingsRow` / `SettingsSection`
-- `Stage`, `DetailHeader`, `SaveToggle`, `Description`, `Onboarding`
+- `Stage`, `DetailHeader`, `Description`, `Onboarding`
 - `Shelf`, `MediaTile`, `MediaRow` / `MediaList`, `MediaArtwork` (`artShape`:
   2:3 posters, 16:9 videos, square music and stations, round channels),
   `mediaCaption`, `metaLine`

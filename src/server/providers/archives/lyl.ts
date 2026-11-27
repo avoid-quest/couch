@@ -68,6 +68,7 @@ function item(value: unknown, parent?: { title: string; url: string }) {
     show: showLink(value.show) ?? parent,
     thumbnail: image(value.image),
     duration: clock(value.duration),
+    copies: [recording(value.mixcloud), recording(value.soundcloud)],
   });
 }
 
