@@ -294,8 +294,15 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     writeFileSync(channelPath, channel);
     // Squirrel.Mac still installs an update it staged; the next check corrects the channel.
     autoUpdater.autoInstallOnAppQuit = false;
-    if (appOnly) discardAppUpdate();
+    // The new channel is saved, so the old channel's update must not install even if its file stays.
+    const staged = appOnly;
     appOnly = null;
+    if (staged)
+      try {
+        discardAppUpdate();
+      } catch (error) {
+        logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+      }
     follow(channel);
     set({ channel, status: "checking", available: null, progress: null, error: null });
     void check();

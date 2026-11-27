@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { version } from "../package.json";
-import { appUpdateName, type AppManifest } from "../app/app-update";
+import { appUpdateName, type AppManifest } from "../src/shared/updates";
 
 // Packages the app with electron-builder, passing the arguments through
 // (`bun run package --mac zip --arm64`). The version decides the channel: a

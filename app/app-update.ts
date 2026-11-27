@@ -4,20 +4,13 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { appUpdateName, type AppManifest } from "../src/shared/updates";
 
 // Windows' Smart App Control refuses to start a downloaded installer whose
 // publisher it can't confirm, and Couch's are unsigned. Windows doesn't vet
 // resources/app.asar, so when a release changes nothing else, Couch replaces
 // only that file, with the exe Windows already runs (docs/ci.md).
-export type AppManifest = {
-  version: string;
-  asar: { sha256: string; size: number };
-  // Every other installed file's SHA-256, except the exe, whose only change is its version label.
-  files: Record<string, string>;
-};
-
 const releases = "https://github.com/avoid-quest/couch/releases/download";
-export const appUpdateName = (version: string) => `Couch-${version}-x64.app`;
 const next = () => join(process.resourcesPath, "app.next");
 
 const sha256 = async (path: string) => {
@@ -81,7 +74,8 @@ attempt();
 
 // Replaces app.asar after Couch quits, and starts Couch again when relaunch is set.
 // Resolves once the helper runs, so Couch quits only when someone will finish the update.
-export function swapAppOnExit(relaunch: boolean) {
+// Async so that a launch error Node throws at once rejects like a later one.
+export async function swapAppOnExit(relaunch: boolean) {
   const helper = spawn(
     process.execPath,
     [
