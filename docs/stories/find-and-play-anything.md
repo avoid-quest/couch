@@ -27,8 +27,8 @@ press.
    Radio Alhara) play like any episode; a show opens its episodes, newest first.
 6. On the player and a station's page, the DJ, show and style names search for
    more of the same.
-7. A **Spotify** link plays each song from YouTube, matched by title, artist and
-   length; Up next says where it plays from.
+7. A **Spotify** link or search result plays each song from YouTube, matched by
+   title, artist and length; Up next says where it plays from.
 8. **Up next** → **Clear Up next** empties it, with **Undo**.
 
 ## Done when

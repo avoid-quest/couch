@@ -156,7 +156,34 @@ order Spotify lists them in the embed (up to ten). Each track keeps its canonica
 `open.spotify.com/track/<id>` link in Up next and Saved, and its meta line says it
 plays from YouTube: at play time Couch searches YouTube for "artists title" and
 plays the first video within 10 seconds of Spotify's length, else the item is
-unavailable with **Try again**. There is no Spotify search.
+unavailable with **Try again**.
+
+Search asks what open.spotify.com asks for a logged-out visitor, reimplemented in
+`src/server/providers/spotify-token.ts` and `spotify.ts`:
+
+- The anonymous token: `GET /api/server-time`, then `GET /api/token?reason=init&
+  productType=web-player&totp=&totpServer=&totpVer=`, where `totp` and `totpServer`
+  are RFC 6238 codes (SHA-1, 6 digits, 30 s) for Core's clock and Spotify's. The key
+  is the web player's secret with each character's code XOR `i % 33 + 9`, written
+  in decimal, as UTF-8. Core keeps the token until a minute before
+  `accessTokenExpirationTimestampMs`; a refused token asks again with the next
+  secret, once.
+- The search: `POST api-partner.spotify.com/pathfinder/v2/query` with the token, the
+  persisted query `searchDesktop` and its sha256 hash, and the first page's sizes.
+  Results keep Spotify's order: the top result, songs, artists, albums, playlists
+  (10 of each). A song is one track; an album, artist or playlist plays whole
+  through its embed page.
+- A failed token or search reports "Spotify search is unavailable." for Spotify
+  alone.
+
+When Spotify rotates its secrets, `/api/token` answers 400 (or names
+`totpVerExpired`) and search fails. Open `open.spotify.com`, find the
+`web-player.<hash>.js` bundle it loads, and copy its array of
+`{secret, version}` (next to `/api/server-time`) into `webPlayerSecrets`, newest
+first; projects such as `xyloflake/spot-secrets-go` publish the same pairs as
+byte arrays. When search alone fails with a token, the `searchDesktop` hash changed:
+it is in the search route's bundle (`xpui-routes-search.<hash>.js`) as
+`"searchDesktop","query","<hash>"`.
 
 ## Queue limit
 

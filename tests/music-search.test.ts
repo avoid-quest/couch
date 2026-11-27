@@ -5,9 +5,11 @@ import {
   createSoundCloudListLoader,
 } from "../src/server/providers/soundcloud";
 import { createSpotifyCatalog } from "../src/server/providers/spotify";
+import { webPlayerSecrets, webPlayerTotp } from "../src/server/providers/spotify-token";
 import { createBandcampFans } from "../src/server/providers/bandcamp-fans";
 import { ExtractionError } from "../src/server/yt-dlp";
 import spotifyArtist from "./fixtures/spotify-artist.json";
+import spotifySearch from "./fixtures/spotify-search.json";
 
 const album = {
   type: "a",
@@ -427,6 +429,111 @@ test("A Spotify track plays the first YouTube hit within 10 seconds of its lengt
   await expect(catalog([90]).match(spotifyAlbum)).rejects.toMatchObject({
     status: 400,
   });
+});
+
+test("Spotify's anonymous token carries the web player's TOTP for a known time", () => {
+  const secret = webPlayerSecrets.find(({ version }) => version === 61)!.secret;
+  // Computed independently from the bytes open-source projects publish for version 61.
+  expect(webPlayerTotp(secret, 1795820159)).toBe("856868");
+  expect(webPlayerTotp(secret, 59)).toBe("332823");
+});
+
+/** open.spotify.com's anonymous token and search, as the web player asks them. */
+function spotifyWeb(rejected: number[] = []) {
+  const calls: { url: URL; init?: RequestInit }[] = [];
+  const request = (async (input: string, init?: RequestInit) => {
+    const url = new URL(input);
+    calls.push({ url, init });
+    if (url.href === "https://open.spotify.com/api/server-time")
+      return Response.json({ serverTime: 1795820159 });
+    if (url.origin === "https://open.spotify.com" && url.pathname === "/api/token")
+      return rejected.includes(Number(url.searchParams.get("totpVer")))
+        ? Response.json({ error: { code: 400, message: "Invalid TOTP" } }, { status: 400 })
+        : Response.json({
+            accessToken: `token-${url.searchParams.get("totpVer")}-abcdefghijklmnop`,
+            accessTokenExpirationTimestampMs: Date.now() + 3_600_000,
+            isAnonymous: true,
+          });
+    if (url.href === "https://api-partner.spotify.com/pathfinder/v2/query")
+      return Response.json(spotifySearch);
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+  return { calls, request };
+}
+
+test("Spotify search reads the web player's results with its anonymous token, top result first", async () => {
+  const web = spotifyWeb();
+  const catalog = createSpotifyCatalog(web.request);
+  const page = await catalog.browse({ query: "devi tensione" });
+  const token = web.calls.find(({ url }) => url.pathname === "/api/token")!.url.searchParams;
+  const secret = webPlayerSecrets[0]!.secret;
+  expect(Object.fromEntries(token)).toMatchObject({
+    reason: "init",
+    productType: "web-player",
+    totpServer: webPlayerTotp(secret, 1795820159),
+    totpVer: String(webPlayerSecrets[0]!.version),
+  });
+  const query = web.calls.at(-1)!;
+  expect(query.init?.method).toBe("POST");
+  expect(new Headers(query.init?.headers).get("Authorization")).toBe(
+    `Bearer token-${webPlayerSecrets[0]!.version}-abcdefghijklmnop`,
+  );
+  expect(JSON.parse(String(query.init?.body))).toMatchObject({
+    operationName: "searchDesktop",
+    variables: { searchTerm: "devi tensione" },
+  });
+  // The top result (the artist) once, then songs, artists, albums and playlists; the podcast doesn't play.
+  expect(page.items.map(({ kind, title }) => `${kind} ${title}`)).toEqual([
+    "collection Devi Tensione",
+    "media Verme",
+    "media 666",
+    "media Tendo #3",
+    "media Ho paura del buio",
+    "media Rapanui (Devi Tensione Rework)",
+    "collection Shiva",
+    "collection Non sapevo amore",
+    "collection Tanto tempo",
+    "collection depressione serio ♾️💔",
+    "collection Devi Tensione Radio",
+  ]);
+  expect(page.items[0]).toMatchObject({
+    url: "https://open.spotify.com/artist/2enCZC6FjkZDdEW7rKBfw0",
+    subtitle: "Artist",
+    thumbnail: "https://i.scdn.co/image/ab6761610000e5eb14c7a7c6efd54b897a5b9deb",
+  });
+  expect(page.items[4]).toMatchObject({
+    url: "https://open.spotify.com/track/5fFeYjZDOzqTBZVlHHmlpX",
+    subtitle: "Devi Tensione, plays from YouTube",
+    duration: 109.968,
+  });
+  expect(page.items[7]).toMatchObject({
+    url: "https://open.spotify.com/album/0ATwA8q1jPJ9IaP9i1ipXp",
+    subtitle: "Devi Tensione",
+  });
+  expect(page.items[9]!.thumbnail).toStartWith("https://mosaic.scdn.co/640/");
+  // A second search keeps the token until it expires.
+  await catalog.browse({ query: "tanto tempo" });
+  expect(web.calls.filter(({ url }) => url.pathname === "/api/token")).toHaveLength(1);
+});
+
+test("Spotify search tries the next secret once, then only Spotify reports it unavailable", async () => {
+  const [newest, next] = webPlayerSecrets;
+  const retried = spotifyWeb([newest!.version]);
+  expect(
+    (await createSpotifyCatalog(retried.request).browse({ query: "x" })).items,
+  ).not.toBeEmpty();
+  expect(
+    retried.calls
+      .filter(({ url }) => url.pathname === "/api/token")
+      .map(({ url }) => url.searchParams.get("totpVer")),
+  ).toEqual([String(newest!.version), String(next!.version)]);
+
+  const refused = spotifyWeb(webPlayerSecrets.map(({ version }) => version));
+  await expect(createSpotifyCatalog(refused.request).browse({ query: "x" })).rejects.toMatchObject({
+    message: "Spotify search is unavailable.",
+    status: 502,
+  });
+  expect(refused.calls.filter(({ url }) => url.pathname === "/api/token")).toHaveLength(2);
 });
 
 test("A Bandcamp fan's page lists its items, pages with its token, and Play all queues every page's tracks", async () => {

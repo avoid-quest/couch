@@ -10,14 +10,17 @@ import {
   object,
   ProviderError,
   providerItemId,
+  providerJson,
   readProviderText,
   withProviderItem,
 } from "./http";
+import { createSpotifyToken } from "./spotify-token";
 import { browseYouTube } from "./youtube";
 
 type Metadata = Record<string, unknown>;
 const changed = () =>
   new ProviderError("Spotify changed its player page. Couch can't read this link yet.");
+const unavailable = () => new ProviderError("Spotify search is unavailable.");
 // Spotify plays only in its own DRM player; each track plays from its closest YouTube upload.
 const from = "plays from YouTube";
 // A match is the same recording when its length is within this of Spotify's (live and radio edits differ by more).
@@ -66,24 +69,30 @@ async function embed(
 }
 
 function artwork(entity: Metadata): string | undefined {
-  const images = [
+  return largestImage([
     ...(object(entity.coverArt) && Array.isArray(entity.coverArt.sources)
       ? entity.coverArt.sources
       : []),
     ...(object(entity.visualIdentity) && Array.isArray(entity.visualIdentity.image)
       ? entity.visualIdentity.image
       : []),
-  ]
+  ]);
+}
+
+/** The widest of a list of Spotify images on Spotify's own image hosts. */
+function largestImage(sources: unknown[]): string | undefined {
+  return sources
     .filter(object)
-    .toSorted((a, b) => Number(b.maxWidth ?? b.width ?? 0) - Number(a.maxWidth ?? a.width ?? 0));
-  return images
+    .toSorted((a, b) => Number(b.maxWidth ?? b.width ?? 0) - Number(a.maxWidth ?? a.width ?? 0))
     .map((image) => image.url)
     .find(
       (url): url is string =>
         typeof url === "string" &&
-        /^https:\/\/(?:i\.scdn\.co|image-cdn-[a-z]+\.spotifycdn\.com)\/image\/[a-f0-9]{20,64}$/.test(
+        (/^https:\/\/(?:i\.scdn\.co|image-cdn-[a-z]+\.spotifycdn\.com)\/image\/[a-f0-9]{20,64}$/.test(
           url,
-        ),
+        ) ||
+          // A playlist's cover can be a mosaic of four album covers.
+          /^https:\/\/mosaic\.scdn\.co\/\d{2,4}\/[a-f0-9]{40,256}$/.test(url)),
     );
 }
 
@@ -127,16 +136,142 @@ function track(
   };
 }
 
+// The web player's own search: its persisted GraphQL query `searchDesktop` (the hash is in its search route's bundle),
+// asked with its first-page sizes (10 of each kind, 5 top results) and without pre-releases, which can't play yet.
+const searchHash = "eef7cc54888d91bdd6802623477873caa3948ae173a0c34fd86827b267e94c03";
+const searchVariables = {
+  offset: 0,
+  limit: 10,
+  numberOfTopResults: 5,
+  includeAudiobooks: false,
+  includeArtistHasConcertsField: false,
+  includePreReleases: false,
+  includeAlbumPreReleases: false,
+  includeAuthors: false,
+  includeEpisodeContentRatingsV2: false,
+};
+const list = (value: unknown, key = "items"): unknown[] =>
+  object(value) && Array.isArray(value[key]) ? value[key] : [];
+const names = (value: unknown) =>
+  label(
+    list(value)
+      .map((artist) => (object(artist) && object(artist.profile) ? label(artist.profile.name) : ""))
+      .filter(Boolean)
+      .join(", "),
+  );
+
+/** A search result (`{ item: { data } }` in top results, `{ data }` elsewhere) as a track, or an album, artist or playlist to play whole. */
+function searchHit(value: unknown): ProviderItem | null {
+  const wrapper = object(value) && object(value.item) ? value.item : value;
+  const data = object(wrapper) ? wrapper.data : undefined;
+  if (!object(data) || typeof data.uri !== "string") return null;
+  const match = /^spotify:(track|album|artist|playlist):([A-Za-z0-9]{22})$/.exec(data.uri);
+  if (!match) return null;
+  const kind = match[1]!;
+  const playable = !object(data.playability) || data.playability.playable !== false;
+  if (kind === "track")
+    return track(
+      {
+        uri: data.uri,
+        title: data.name,
+        subtitle: names(data.artists),
+        duration: object(data.duration) ? data.duration.totalMilliseconds : undefined,
+        isPlayable: playable,
+      },
+      undefined,
+      largestImage(object(data.albumOfTrack) ? list(data.albumOfTrack.coverArt, "sources") : []),
+    );
+  const title = label(kind === "artist" && object(data.profile) ? data.profile.name : data.name);
+  if (!title || !playable) return null;
+  const subtitle =
+    kind === "artist"
+      ? "Artist"
+      : kind === "album"
+        ? names(data.artists)
+        : object(data.ownerV2)
+          ? label(object(data.ownerV2.data) ? data.ownerV2.data.name : undefined)
+          : undefined;
+  const thumbnail = largestImage(
+    kind === "artist"
+      ? object(data.visuals)
+        ? list(data.visuals.avatarImage, "sources")
+        : []
+      : kind === "album"
+        ? list(data.coverArt, "sources")
+        : list(list(data.images)[0], "sources"),
+  );
+  const url = `https://open.spotify.com/${kind}/${match[2]}`;
+  return {
+    id: providerItemId("spotify", url),
+    provider: "spotify",
+    kind: "collection",
+    title,
+    url,
+    ...(subtitle ? { subtitle } : {}),
+    ...(thumbnail ? { thumbnail } : {}),
+  };
+}
+
 export function createSpotifyCatalog(
   request: typeof fetch = publicFetch,
   searchYouTube: typeof browseYouTube = browseYouTube,
 ) {
+  const token = createSpotifyToken(request);
+
+  /** What open.spotify.com's search shows a logged-out visitor, in its order: the top result, songs, artists, albums, playlists. */
+  async function search(query: string, signal?: AbortSignal): Promise<ProviderPage> {
+    let value: unknown;
+    try {
+      value = await providerJson(
+        "https://api-partner.spotify.com/pathfinder/v2/query",
+        {
+          method: "POST",
+          credentials: "omit",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0",
+            Authorization: `Bearer ${await token.token()}`,
+          },
+          body: JSON.stringify({
+            variables: { searchTerm: query, ...searchVariables },
+            operationName: "searchDesktop",
+            extensions: { persistedQuery: { version: 1, sha256Hash: searchHash } },
+          }),
+          ...(signal ? { signal } : {}),
+        },
+        request,
+      );
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      token.drop();
+      throw unavailable();
+    }
+    const results =
+      object(value) && object(value.data) && object(value.data.searchV2)
+        ? value.data.searchV2
+        : undefined;
+    if (!results) throw unavailable();
+    const items = [
+      ...list(results.topResultsV2, "itemsV2").slice(0, 1),
+      ...list(results.tracksV2),
+      ...list(results.artists),
+      ...list(results.albumsV2),
+      ...list(results.playlists),
+    ]
+      .map(searchHit)
+      .filter((item): item is ProviderItem => item !== null)
+      .filter((item, index, all) => all.findIndex((other) => other.url === item.url) === index);
+    return { title: "Spotify", items };
+  }
+
   async function browse(browse: BrowseRequest, signal?: AbortSignal): Promise<ProviderPage> {
     signal?.throwIfAborted();
     if (!browse.url) {
-      if (browse.query?.trim() || browse.cursor)
+      if (browse.cursor)
         throw new ProviderError("Paste a Spotify track, album, playlist or artist link.", 400);
-      return { title: "Spotify", items: [] };
+      const query = browse.query?.trim();
+      return query ? search(query, signal) : { title: "Spotify", items: [] };
     }
     const link = spotifyLink(browse.url);
     if (!link || browse.cursor)

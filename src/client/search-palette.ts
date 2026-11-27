@@ -28,6 +28,7 @@ export const scopes: Scope[] = [
   { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
   { source: "SoundCloud", label: "SoundCloud", words: ["sc"] },
   { source: "Mixcloud", label: "Mixcloud", words: ["mc"] },
+  { source: "Spotify", label: "Spotify", words: ["sp"] },
   { source: "Radio archives", label: "Radio archives", words: ["archives", "lyl", "nts"] },
   { source: "Twitch", label: "Twitch", words: [] },
   { source: "RaiPlay", label: "RaiPlay", words: ["rai"] },
