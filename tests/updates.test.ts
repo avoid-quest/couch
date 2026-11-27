@@ -12,9 +12,11 @@ const resourcesPath = Object.getOwnPropertyDescriptor(process, "resourcesPath");
 const nativeEvents = new EventEmitter();
 let windowsUpdater: NsisUpdater | undefined;
 let shellError: string;
+let appQuits: number;
 const app = Object.assign(new EventEmitter(), {
   isPackaged: false,
   getVersion: () => "0.3.0",
+  quit: () => appQuits++,
 });
 let available: string | null;
 let disabled: boolean;
@@ -76,7 +78,9 @@ mock.module("electron-updater", () => ({
 mock.module("node:child_process", () => ({
   spawn(command: string, args: string[]) {
     swaps.push([command, ...args.slice(2)]);
-    return { unref() {} };
+    const helper = Object.assign(new EventEmitter(), { unref() {} });
+    setImmediate(() => helper.emit("spawn"));
+    return helper;
   },
   execFile(
     command: string,
@@ -108,6 +112,7 @@ beforeEach(() => {
   armed = [];
   starts = [];
   installs = 0;
+  appQuits = 0;
   swaps = [];
   available = null;
   disabled = false;
@@ -162,12 +167,11 @@ test("Windows replaces only app.asar when a release changes nothing else", async
   expect(downloads).toEqual([]);
   expect(readFileSync(join(temporary, "app.next"), "utf8")).toBe("new app");
   expect(updates.state()).toMatchObject({ status: "ready", available: "0.3.1", progress: null });
-  let quits = 0;
-  app.once("before-quit", () => quits++);
   await updates.action({ op: "install", version: "0.3.1" });
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(installs).toBe(0);
   expect(swaps).toEqual([[process.execPath, String(process.pid), temporary, process.execPath]]);
+  expect(appQuits).toBe(1);
   app.emit("quit", {}, 0);
   expect(swaps.length).toBe(1);
 });
@@ -210,10 +214,14 @@ test("an installer Windows blocks stops counting as ready and isn't downloaded a
   expect(quits()).toBe(0);
   expect(updates.state()).toMatchObject({ status: "error", available: null });
   expect(updates.state().error).toContain("Windows blocked the update");
+  // Reopening Couch doesn't offer that release again.
+  app.removeAllListeners();
+  windowsUpdater!.removeAllListeners();
   const checked = requests.length;
-  await updates.check();
+  const reopened = start();
+  await reopened.check();
   expect(requests.length).toBe(checked);
-  expect(updates.state()).toMatchObject({ status: "error", available: null });
+  expect(reopened.state()).toMatchObject({ status: "error", available: null });
 });
 
 // The script runs in Couch's exe as Node: Electron's own binary runs it here the same way.

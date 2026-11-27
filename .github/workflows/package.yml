@@ -57,7 +57,9 @@ jobs:
           bun-version: latest
       - uses: actions/setup-go@v7
         with:
-          go-version: stable
+          # The relay's bytes depend on Go's version; Windows takes app-only
+          # updates only while they match (app/app-update.ts), so bump it deliberately.
+          go-version: "1.27.4"
           cache-dependency-path: native/live-relay/go.sum
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
@@ -100,7 +102,7 @@ jobs:
         run: |
           shopt -s nullglob
           files=()
-          for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml,asar,json}; do
+          for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml,app.asar,app.json}; do
             [[ $file == *builder-debug.yml ]] || files+=("$file")
           done
           gh release upload "${{ inputs.release }}" "${files[@]}" -R "$GITHUB_REPOSITORY" --clobber

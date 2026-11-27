@@ -34,15 +34,16 @@ process.exit(code);
 async function appUpdate() {
   const unpacked = ".artifacts/app/win-unpacked";
   const exe = `${preview ? "Couch Preview" : "Couch"}.exe`;
-  const asar = join("resources", "app.asar");
+  const asar = "resources/app.asar";
   const hash = async (file: string) =>
     createHash("sha256")
       .update(await readFile(join(unpacked, file)))
       .digest("hex");
   const files: AppManifest["files"] = {};
-  for (const file of await readdir(unpacked, { recursive: true })) {
+  for (const entry of await readdir(unpacked, { recursive: true })) {
+    const file = entry.split(sep).join("/");
     if (file === exe || file === asar || !(await stat(join(unpacked, file))).isFile()) continue;
-    files[file.split(sep).join("/")] = await hash(file);
+    files[file] = await hash(file);
   }
   const manifest: AppManifest = {
     version,

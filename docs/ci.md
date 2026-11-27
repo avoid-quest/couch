@@ -99,7 +99,9 @@ and `.app.json`, the SHA-256 of every other installed file except the exe
 (`scripts/package.ts`). An installation whose files all match downloads only
 `app.asar` and, once Couch quits, swaps it in using its own exe as Node
 ([app/app-update.ts](../app/app-update.ts)). A release that changes Electron or a
-bundled helper needs the installer, which people download and open themselves.
+bundled helper needs the installer; where Smart App Control blocks it, Couch asks
+people to download and open it themselves. Package pins Go so the relay only
+changes when Go is bumped on purpose.
 The exe isn't compared, so a change only to its icon or Electron fuses reaches an
 installation at its next full install.
 

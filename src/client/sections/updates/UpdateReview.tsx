@@ -273,12 +273,13 @@ export function UpdateReview({ targets }: { targets: UpdateCenterTarget[] }) {
               <Button
                 disabled={disabled}
                 // A batch the prompt interrupted continues with the apps that haven't updated yet.
-                onClick={() =>
-                  void update(
-                    confirmation.filter((id) => ready.some((target) => target.id === id)),
-                    true,
-                  )
-                }
+                onClick={() => {
+                  const remaining = confirmation.filter((id) =>
+                    ready.some((target) => target.id === id),
+                  );
+                  if (remaining.length) void update(remaining, true);
+                  else setConfirmation(null);
+                }}
               >
                 Stop playback and update
               </Button>

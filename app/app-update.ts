@@ -54,28 +54,20 @@ export async function downloadAppUpdate({ version, asar }: AppManifest) {
 export const appUpdateLeftOver = () => existsSync(next());
 export const discardAppUpdate = () => rmSync(next(), { force: true });
 
-// Runs in Couch's own exe as Node once this process exits: Core and its
-// helpers may hold app.asar a little longer, so it retries for a minute.
+// Runs in Couch's own exe as Node once this process exits. One rename replaces
+// app.asar (MOVEFILE_REPLACE_EXISTING on Windows), so it is never missing; Core
+// and its helpers may hold it a little longer, so it retries for a minute.
 export const swapScript = `
 process.noAsar = true;
 const fs = require("fs"), path = require("path"), { spawn } = require("child_process");
 const [pid, resources, relaunch] = process.argv.slice(1);
-const asar = path.join(resources, "app.asar"), next = path.join(resources, "app.next"), old = asar + ".old";
-const deadline = Date.now() + 60000;
+const asar = path.join(resources, "app.asar"), next = path.join(resources, "app.next");
 const alive = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
-const swap = () => {
-  // A failed rollback leaves the only copy as app.asar.old; never delete that one.
-  if (!fs.existsSync(asar) && fs.existsSync(old)) fs.renameSync(old, asar);
-  fs.rmSync(old, { force: true });
-  fs.renameSync(asar, old);
-  try { fs.renameSync(next, asar); } catch (error) { fs.renameSync(old, asar); throw error; }
-  fs.rmSync(old, { force: true });
-};
+let deadline;
 const attempt = () => {
-  if (Date.now() < deadline) {
-    if (alive()) return setTimeout(attempt, 250);
-    try { swap(); } catch { return setTimeout(attempt, 250); }
-  }
+  if (alive()) return setTimeout(attempt, 250);
+  deadline ??= Date.now() + 60000;
+  try { fs.renameSync(next, asar); } catch { if (Date.now() < deadline) return setTimeout(attempt, 250); }
   // Couch itself must start as Electron, not as Node like this script.
   const { ELECTRON_RUN_AS_NODE, ...env } = process.env;
   if (relaunch) spawn(relaunch, [], { detached: true, stdio: "ignore", env }).unref();
@@ -84,8 +76,9 @@ attempt();
 `;
 
 // Replaces app.asar after Couch quits, and starts Couch again when relaunch is set.
+// Resolves once the helper runs, so Couch quits only when someone will finish the update.
 export function swapAppOnExit(relaunch: boolean) {
-  spawn(
+  const helper = spawn(
     process.execPath,
     [
       "-e",
@@ -100,5 +93,10 @@ export function swapAppOnExit(relaunch: boolean) {
       stdio: "ignore",
       windowsHide: true,
     },
-  ).unref();
+  );
+  helper.unref();
+  return new Promise<void>((resolve, reject) => {
+    helper.once("spawn", resolve);
+    helper.once("error", reject);
+  });
 }

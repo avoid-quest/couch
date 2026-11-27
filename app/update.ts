@@ -2,6 +2,7 @@ import { app, Notification } from "electron";
 import updater from "electron-updater";
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   isUpdateChannel,
@@ -67,8 +68,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   const windows = process.platform === "win32" && !tv;
   // The version whose app.asar waits in resources/app.next.
   let appOnly: string | null = null;
-  const leftOver = windows && app.isPackaged && appUpdateLeftOver();
-  if (leftOver) {
+  if (windows && app.isPackaged && appUpdateLeftOver()) {
     logAppError("update", "The last update couldn't replace Couch's files.");
     discardAppUpdate();
   }
@@ -79,7 +79,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     available: null,
     progress: null,
     checkedAt: null,
-    error: leftOver ? "The last update didn't install. Check again." : null,
+    error: null,
   };
   const set = (next: Partial<UpdateState>) => {
     state = { ...state, ...next };
@@ -137,29 +137,39 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   };
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
   autoUpdater.on("update-downloaded", ({ version }) => ready(version));
-  // Smart App Control refuses unsigned installers that Couch starts, not ones people open.
-  // Only someone at this computer can install that release, so it stops counting as ready.
+  // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
+  // the launch fails with UNKNOWN, then so does the elevation helper. Only someone at this
+  // computer can install that release, so it stops counting as ready, across restarts too.
   const blockedError =
     "Windows blocked the update. Download Couch from couch.avoid.quest/download and install it.";
+  const blockedPath = join(dirname(channelPath), "update-blocked");
   let blocked: string | null = null;
-  autoUpdater.on("error", () => {
+  try {
+    blocked = readFileSync(blockedPath, "utf8").trim();
+  } catch {}
+  autoUpdater.on("error", (error: Error & { code?: string }) => {
     if (state.status !== "installing") return;
-    if (!windows)
+    const refused = error.code === "UNKNOWN" || error.message.includes("elevation helper");
+    if (!windows || !refused)
       return set({ status: "ready", error: "Couldn't install the update. Try again later." });
-    blocked = state.available;
+    blocked = state.available!;
+    writeFileSync(blockedPath, blocked);
     autoUpdater.autoInstallOnAppQuit = false;
     set({ status: "error", available: null, error: blockedError });
   });
   // An app-only update also installs when Couch quits.
-  let swapping = false;
-  const swap = (relaunch: boolean) => {
-    if (swapping) return;
-    swapping = true;
-    swapAppOnExit(relaunch);
-  };
+  let swapping: Promise<void> | null = null;
+  const swap = (relaunch: boolean) =>
+    (swapping ??= swapAppOnExit(relaunch).catch((error) => {
+      swapping = null;
+      throw error;
+    }));
   if (windows)
     app.on("quit", (_event, code) => {
-      if (appOnly && code === 0) swap(false);
+      if (appOnly && code === 0)
+        swap(false).catch((error) =>
+          logAppError("update", `Couldn't start the update: ${error.message}`),
+        );
     });
 
   async function install(expected: string, delay: number, interrupt = false) {
@@ -190,7 +200,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     if (!interrupt && (await playing?.())) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
     if (appOnly === version) {
-      swap(true);
+      await swap(true);
       return app.quit();
     }
     if (!tv) return autoUpdater.quitAndInstall(true, true);
