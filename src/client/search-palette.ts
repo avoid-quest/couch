@@ -16,20 +16,21 @@ export const kindLabels: Record<SearchKind, string> = {
   videos: "Videos",
   audio: "Audio",
 };
-// The kinds in the results' order, then the sources; each answers to its name and the short forms people type.
-export const scopes: Scope[] = [
+// The kinds in the results' order, then the sources in the chip row's order; each answers to its name and the short
+// forms people type.
+const scopes: Scope[] = [
   { kind: "films", label: kindLabels.films, words: ["film", "movies", "movie", "series", "shows"] },
   { kind: "radio", label: kindLabels.radio, words: ["stations", "station", "fm"] },
   { kind: "live", label: kindLabels.live, words: ["streams", "stream"] },
   { kind: "music", label: kindLabels.music, words: ["songs", "albums", "album"] },
   { kind: "audio", label: kindLabels.audio, words: [] },
   { kind: "videos", label: kindLabels.videos, words: ["video"] },
-  { source: "YouTube", label: "YouTube", words: ["yt"] },
-  { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
-  { source: "SoundCloud", label: "SoundCloud", words: ["sc"] },
-  { source: "Mixcloud", label: "Mixcloud", words: ["mc"] },
-  { source: "Spotify", label: "Spotify", words: ["sp"] },
   { source: "Radio archives", label: "Radio archives", words: ["archives", "lyl", "nts"] },
+  { source: "Mixcloud", label: "Mixcloud", words: ["mc"] },
+  { source: "SoundCloud", label: "SoundCloud", words: ["sc"] },
+  { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
+  { source: "Spotify", label: "Spotify", words: ["sp"] },
+  { source: "YouTube", label: "YouTube", words: ["yt"] },
   { source: "Twitch", label: "Twitch", words: [] },
   { source: "RaiPlay", label: "RaiPlay", words: ["rai"] },
   { source: "StreamingCommunity", label: "StreamingCommunity", words: [] },
@@ -58,6 +59,10 @@ function matchScopes(text: string): Scope[] {
 }
 /** What Tab completes the field's text to: the best scope, when the text is all one scope's name. */
 export const completeScope = (text: string): Scope | undefined => matchScopes(text)[0];
+
+/** The chip row under the field: every kind, then the sources that can answer the chosen one. */
+export const chipScopes = (current: SearchScope) =>
+  scopes.filter((scope) => scope.kind || canReturn(scope.source, current.kind));
 
 export const isChosen = (current: SearchScope, scope: Scope) =>
   scope.kind ? current.kind === scope.kind : current.source === scope.source;
@@ -96,7 +101,7 @@ export const hasScope = (current: SearchScope) => !!current.kind || current.sour
 type Titled = { title: string; source?: string; context?: string };
 type Station = { name: string };
 /**
- * The field's suggestions while typing, from what the client already holds: scopes, recent searches, saved and played
+ * The field's suggestions while typing, from what the client already holds: recent searches, saved and played
  * titles, and stations. Never a source's search. A scope narrows them: stations only for radio, titles never for it,
  * and a source only its own titles.
  */
@@ -128,7 +133,6 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
     return true;
   };
   return {
-    scopes: matchScopes(text).slice(0, 3),
     recents: held.recents
       .filter((query) => fold(query.trim()) !== typed && strong({ title: query }))
       .slice(0, limit),

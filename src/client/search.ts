@@ -1,41 +1,56 @@
 import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
-/**
- * Every source's hits as one ranked list: the strongest title match first (`searchRelevance`'s strength), then the
- * sources taking turns in `sources`' order, then each source's own order.
- */
-export function mergeSearchHits(
-  sources: readonly string[],
-  hits: Record<string, SearchHit[]>,
-  query: string,
-) {
-  const { strength } = searchRelevance(query);
-  return sources
-    .flatMap((source, rank) =>
-      (hits[source] ?? []).map((hit, index) => ({
-        hit,
-        strength: strength(hit.title),
-        order: index * sources.length + rank,
-      })),
-    )
-    .sort((a, b) => b.strength - a.strength || a.order - b.order)
-    .map(({ hit }) => hit);
+// A page's address as copies name it: host without www, path decoded, no query or trailing slash.
+function pageKey(url?: string) {
+  if (!url) return;
+  try {
+    const page = new URL(url);
+    const path = decodeURIComponent(page.pathname).replace(/\/$/, "");
+    return `${page.hostname.replace(/^www\./, "")}${path}`.toLowerCase();
+  } catch {
+    return;
+  }
+}
+type Copyable = Pick<SearchHit, "source" | "title" | "url" | "duration" | "copies" | "also">;
+const names = (from: Copyable, page?: string) =>
+  !!page && !!from.copies?.some((copy) => pageKey(copy) === page);
+// Another source's hit is the same recording when either names the other's page as a copy, or when the titles match and
+// the lengths are within a minute (uploads trim a little silence).
+function sameRecording(kept: Copyable, hit: Copyable) {
+  if (kept.source === hit.source) return false;
+  if (names(kept, pageKey(hit.url)) || names(hit, pageKey(kept.url))) return true;
+  return (
+    kept.duration != null &&
+    hit.duration != null &&
+    Math.abs(kept.duration - hit.duration) <= 60 &&
+    searchWords(kept.title).join(" ") === searchWords(hit.title).join(" ")
+  );
 }
 /**
- * The ranked hits with the ones already shown up to and including `held` (the focused hit) kept where they were, so
- * what arrives later only lands below it and nothing moves under the focus.
+ * The same recording from several sources shows once, with the other sources in `also`: a radio episode and its Mixcloud
+ * and SoundCloud uploads are one hit, the episode "also on Mixcloud and SoundCloud". The one that names the others as
+ * its copies (the station's own) stands for them, else the one that came first.
  */
-export function keepShown<T extends { id: string }>(
-  shown: readonly string[],
-  ranked: readonly T[],
-  held: string | null,
-): T[] {
-  const through = held ? shown.indexOf(held) + 1 : 0;
-  const byId = new Map(ranked.map((hit) => [hit.id, hit]));
-  const kept = shown.slice(0, through).flatMap((id) => byId.get(id) ?? []);
-  const keptIds = new Set(kept.map((hit) => hit.id));
-  return [...kept, ...ranked.filter((hit) => !keptIds.has(hit.id))];
+export function foldCopies<T extends Copyable>(hits: readonly T[]): T[] {
+  const kept: T[] = [];
+  for (const hit of hits) {
+    const at = kept.findIndex((other) => sameRecording(other, hit));
+    if (at < 0) {
+      kept.push(hit);
+      continue;
+    }
+    const other = kept[at]!;
+    const [first, copy] = names(hit, pageKey(other.url)) ? [hit, other] : [other, hit];
+    kept[at] = {
+      ...first,
+      also: [...new Set([...(first.also ?? []), ...(copy.also ?? []), copy.source])].filter(
+        (source) => source !== first.source,
+      ),
+      copies: [...(first.copies ?? []), ...(copy.copies ?? []), ...(copy.url ? [copy.url] : [])],
+    };
+  }
+  return kept;
 }
 
 const searchSources = [

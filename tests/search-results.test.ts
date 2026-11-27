@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { keepShown, mergeSearchHits, searchRelevance } from "../src/client/search";
+import { foldCopies, searchRelevance } from "../src/client/search";
 import { completeScope } from "../src/client/search-palette";
 import type { SearchHit } from "../src/client/sections/find/SearchOnlineResults";
 import { radioMatches, type RadioStation } from "../src/shared/radio";
@@ -56,33 +56,37 @@ test("title strength: the query itself, then every word, then some word", () => 
 
 const hit = (source: string, title: string) =>
   ({ id: `${source}:${title}`, source, title }) as unknown as SearchHit;
-const titles = (hits: SearchHit[]) => hits.map((each) => each.title);
 
-test("hits rank by title strength, then the sources take turns, then each source's order", () => {
-  const merged = mergeSearchHits(
-    ["YouTube", "SoundCloud"],
-    {
-      YouTube: [hit("YouTube", "DJ set"), hit("YouTube", "Alé dj mix"), hit("YouTube", "Other")],
-      SoundCloud: [hit("SoundCloud", "Something"), hit("SoundCloud", "DJ Alé")],
-    },
-    "dj ale",
-  );
-  expect(titles(merged)).toEqual(["DJ Alé", "Alé dj mix", "DJ set", "Something", "Other"]);
-});
-
-test("hits shown up to the focused one keep their places when more arrive", () => {
-  const first = [hit("A", "one"), hit("A", "two"), hit("A", "three")];
-  const shown = first.map((each) => each.id);
-  const later = [hit("B", "best"), ...first, hit("B", "worst")];
-  expect(titles(keepShown(shown, later, "A:two"))).toEqual([
-    "one",
-    "two",
-    "best",
-    "three",
-    "worst",
+test("the same recording from several sources shows once, with the others in its meta", () => {
+  const episode = {
+    ...hit("Radio archives", "DJ Alé"),
+    url: "https://lyl.live/episode/dj-ale",
+    duration: 3600,
+    copies: [
+      "https://www.mixcloud.com/lylradio/dj-al%C3%A9-dj-al%C3%A9-22102026/",
+      "https://soundcloud.com/lyl_radio/dj-ale",
+    ],
+  };
+  const mixcloud = {
+    ...hit("Mixcloud", "DJ Alé - DJ Alé (22.10.2026)"),
+    url: "https://www.mixcloud.com/lylradio/dj-alé-dj-alé-22102026/",
+  };
+  const soundcloud = {
+    ...hit("SoundCloud", "DJ Alé"),
+    url: "https://soundcloud.com/lyl_radio/dj-ale?utm_source=x",
+  };
+  const upload = { ...hit("YouTube", "dj ale"), url: "https://youtu.be/x", duration: 3630 };
+  const other = { ...hit("YouTube", "DJ Alé"), url: "https://youtu.be/y", duration: 1800 };
+  const folded = foldCopies([episode, mixcloud, soundcloud, upload, other]);
+  expect(folded.map((each) => [each.source, each.also])).toEqual([
+    ["Radio archives", ["Mixcloud", "SoundCloud", "YouTube"]],
+    ["YouTube", undefined],
   ]);
-  expect(titles(keepShown(shown, later, null))).toEqual(titles(later));
-  expect(titles(keepShown(shown, later.slice(2), "A:two"))).toEqual(["two", "three", "worst"]);
+  expect(folded[1]!.url).toBe("https://youtu.be/y");
+  // The station's own episode stands for its copies, even when a copy came first.
+  expect(
+    foldCopies([mixcloud, episode, soundcloud]).map((each) => [each.source, each.also]),
+  ).toEqual([["Radio archives", ["Mixcloud", "SoundCloud"]]]);
 });
 
 test("a station matches every word of the query in any order, accents folded", () => {

@@ -26,7 +26,7 @@ export const verbRow =
   "flex flex-wrap items-center gap-2 [&>[data-size=icon-lg]:first-child]:-ml-3 max-md:[&>[data-size=lg]:first-child]:w-full max-md:[&>[data-size=lg]:first-child+[data-size=lg]]:-ml-5 max-md:[&>[data-size=lg]:first-child+[data-size=icon-lg]]:-ml-3";
 
 /** Save as a bookmark that fills once saved: one fixed-width toggle, so Saved moves nothing beside it. */
-export function SaveToggle({
+function SaveToggle({
   saved,
   ...props
 }: { saved: boolean } & Omit<ComponentProps<typeof Button>, "children">) {

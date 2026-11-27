@@ -69,6 +69,9 @@ export type SearchHit = {
   collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string;
   video?: boolean;
+  /** The recording's pages on other sources, and the sources whose copies search folded into this hit. */
+  copies?: string[];
+  also?: string[];
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
   actions: MenuAction[];
@@ -461,6 +464,7 @@ function OnlineResults(props: Props) {
         live: item.live,
         collection: collectionLabel(item),
         thumbnail: item.thumbnail,
+        ...(item.copies ? { copies: item.copies } : {}),
         primary: {
           label: "Open",
           href: collectionLocation(item),
@@ -491,9 +495,24 @@ function OnlineResults(props: Props) {
                 },
                 saveAction,
               ]
-            : pageSection(item) && !saved
-              ? []
-              : [saveAction]),
+            : [
+                // An album, set or show plays whole.
+                ...(["List", "Album"].includes(collectionLabel(item) ?? "")
+                  ? [
+                      {
+                        label: "Play all",
+                        disabled: !props.canPlay || busy || !props.onCommand,
+                        run: () => play(item, true),
+                      },
+                      {
+                        label: "Queue all",
+                        disabled: busy || !props.onCommand,
+                        run: () => play(item, false),
+                      },
+                    ]
+                  : []),
+                ...(pageSection(item) && !saved ? [] : [saveAction]),
+              ]),
           ...browserActions(item.url),
           { label: "Hide", disabled: !props.connected, run: () => void hide(item) },
         ],

@@ -1,10 +1,9 @@
 import { useNavigate, useRouteContext } from "@tanstack/react-router";
-import { PageHeader } from "@/components/PageHeader";
 import { SearchPanel } from "./SearchPanel";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 
-/** The query lives in the header's field; the page starts with its results. */
+/** The query lives in the header's field; the page sets it large over its results (SearchPanel). */
 export function SearchPage() {
   const shell = useShell();
   const { credentials, available, section, changeSearch } = shell;
@@ -14,7 +13,6 @@ export function SearchPage() {
   const { searchState } = useRouteContext({ from: "/search" });
   return (
     <section data-page="Search">
-      <PageHeader title="Search results" hidden />
       <SearchPanel
         onOpenCollection={shell.openProvider}
         onManageSources={() => void navigate({ to: "/settings/couch/sources" })}

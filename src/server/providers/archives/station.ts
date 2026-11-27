@@ -138,6 +138,7 @@ export function episode(
     duration?: number;
     description?: string;
     collection?: MediaCollection;
+    copies?: (string | undefined)[];
   },
 ): ProviderItem | null {
   if (!fields.url || !fields.title) return null;
@@ -156,6 +157,9 @@ export function episode(
     ...(fields.duration ? { duration: fields.duration } : {}),
     ...(fields.description ? { description: fields.description } : {}),
     ...(fields.collection ? { collection: fields.collection } : {}),
+    ...(fields.copies?.some(Boolean)
+      ? { copies: fields.copies.filter((copy): copy is string => !!copy) }
+      : {}),
   };
 }
 
