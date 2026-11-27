@@ -1,7 +1,15 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import type { MediaCollection } from "../../shared/media";
 import { mixcloudLink, type MixcloudLink } from "../../shared/mixcloud";
-import { ProviderError, providerItemId, readProviderText, withProviderItem } from "./http";
+import {
+  catalogueTransport,
+  label,
+  object,
+  ProviderError,
+  providerItemId,
+  readProviderText,
+  withProviderItem,
+} from "./http";
 
 // Mixcloud's public REST API: https://www.mixcloud.com/developers/. It lists and describes mixes but never
 // gives audio; a mix plays through yt-dlp from its page.
@@ -11,15 +19,8 @@ const pageSize = 24;
 const listPage = 100;
 const maxOffset = 2_400;
 const maxList = 500;
-const object = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const text = (value: unknown, maximum = 200) =>
-  typeof value === "string"
-    ? value
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, maximum) || undefined
-    : undefined;
+// Expanding a whole list reads up to five pages one after another; together they get the deadline one request has.
+const listTime = 30_000;
 
 // Mixcloud throttles with HTTP 403 and a Retry-After in seconds; until then Couch doesn't ask again.
 let throttledUntil = 0;
@@ -32,7 +33,7 @@ const throttled = () =>
 async function mixcloudJson(path: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
   if (Date.now() < throttledUntil) throw throttled();
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
-  const response = await fetch(`${api}${path}`, {
+  const response = await catalogueTransport.fetch(`${api}${path}`, {
     signal: cancellation,
     redirect: "error",
     credentials: "omit",
@@ -86,19 +87,19 @@ function link(value: unknown, kind: MixcloudLink["kind"]) {
 function owner(value: unknown) {
   if (!object(value)) return;
   const url = link(value.url, "user"),
-    title = text(value.name) ?? text(value.username);
+    title = label(value.name) ?? label(value.username);
   return url && title ? { title, url } : undefined;
 }
 
 function mixcloudMix(value: unknown, collection?: MediaCollection): ProviderItem | null {
   if (!object(value)) return null;
   const url = link(value.url, "mix"),
-    title = text(value.name);
+    title = label(value.name);
   if (!url || !title) return null;
   const creator = owner(value.user);
   const date = typeof value.created_time === "string" ? value.created_time.slice(0, 10) : "";
   const tags = Array.isArray(value.tags)
-    ? value.tags.flatMap((tag) => (object(tag) && text(tag.name) ? [text(tag.name)!] : []))
+    ? value.tags.flatMap((tag) => (object(tag) && label(tag.name) ? [label(tag.name)!] : []))
     : [];
   return {
     id: providerItemId("mixcloud", url),
@@ -124,7 +125,7 @@ function mixcloudMix(value: unknown, collection?: MediaCollection): ProviderItem
 function playlist(value: unknown): ProviderItem | null {
   if (!object(value)) return null;
   const url = link(value.url, "playlist"),
-    title = text(value.name);
+    title = label(value.name);
   if (!url || !title) return null;
   const creator = owner(value.owner);
   return {
@@ -221,7 +222,7 @@ export async function browseMixcloud(
       ? mixcloudJson(`${page.path}playlists/?limit=${pageSize}`, signal)
       : undefined,
   ]);
-  const title = text(about.name) ?? text(about.username) ?? "Mixcloud";
+  const title = label(about.name) ?? label(about.username) ?? "Mixcloud";
   const mixes = await mixcloudMixes(
     `${page.path}cloudcasts/`,
     offset,
@@ -239,8 +240,11 @@ export async function browseMixcloud(
           ? about.owner.pictures
           : undefined,
     ),
-    description: text(about.biog, 2000),
+    description: label(about.biog, 2000),
     ...(owned ? { subtitle: owned.title, parent: owned } : {}),
+    ...(page.kind === "user" && Number.isSafeInteger(about.cloudcast_count)
+      ? { count: Number(about.cloudcast_count) }
+      : {}),
     items: [...(lists ? rows(lists).flatMap((row) => playlist(row) ?? []) : []), ...mixes.items],
     ...next(mixes.more),
   });
@@ -251,8 +255,9 @@ export async function loadMixcloudList(url: string, signal?: AbortSignal): Promi
   const page = mixcloudLink(url);
   if (page?.kind !== "user" && page?.kind !== "playlist")
     throw new ProviderError("Enter a Mixcloud user or playlist link.", 400);
-  const about = await mixcloudJson(page.path, signal);
-  const title = text(about.name) ?? text(about.username) ?? "Mixcloud";
+  const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(listTime)]);
+  const about = await mixcloudJson(page.path, deadline);
+  const title = label(about.name) ?? label(about.username) ?? "Mixcloud";
   const items: ProviderItem[] = [];
   for (let offset = 0; offset < maxList; offset += listPage) {
     const part = await mixcloudMixes(
@@ -260,10 +265,10 @@ export async function loadMixcloudList(url: string, signal?: AbortSignal): Promi
       offset,
       listPage,
       { title, url: page.url },
-      signal,
+      deadline,
     );
     items.push(...part.items);
-    if (!part.more) break;
+    if (!part.more || !part.items.length) break;
   }
   if (!items.length) throw new ProviderError("This Mixcloud list has no mixes.", 404);
   return { title, items: items.slice(0, maxList) };

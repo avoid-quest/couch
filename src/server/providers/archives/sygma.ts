@@ -1,4 +1,4 @@
-import { ProviderError, readProviderText } from "../http";
+import { catalogueTransport, ProviderError, readProviderText } from "../http";
 import {
   episode,
   label,
@@ -41,10 +41,14 @@ function item(value: unknown, parent?: { title: string; url: string }, thumbnail
 }
 
 const image = (value: unknown) =>
-  object(value) ? picture(object(value.small) ? value.small.url : value.url) : undefined;
+  object(value) ? picture("sygma", object(value.small) ? value.small.url : value.url) : undefined;
 
 const catalogue = remembered(60 * 60_000, async (signal) => {
-  const response = await fetch(`${origin}/`, { signal, redirect: "error", credentials: "omit" });
+  const response = await catalogueTransport.fetch(`${origin}/`, {
+    signal,
+    redirect: "error",
+    credentials: "omit",
+  });
   if (!response.ok) {
     await response.body?.cancel();
     throw new ProviderError(`Sygma Radio returned HTTP ${response.status}.`);

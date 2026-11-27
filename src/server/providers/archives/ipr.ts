@@ -56,7 +56,7 @@ function item(value: unknown) {
     title: label(value.title),
     date: value.date,
     ...(parent ? { show: { title: parent.title, url: parent.url } } : {}),
-    thumbnail: picture(value.image),
+    thumbnail: picture("ipr", value.image),
   });
 }
 
@@ -72,7 +72,7 @@ export const ipr: Station = {
       .filter(object)
       .flatMap((row): ProviderItem[] => {
         if (typeof row.href !== "string" || !row.href.startsWith("/")) return [];
-        const fields = { title: label(row.label), thumbnail: picture(row.thumb) };
+        const fields = { title: label(row.label), thumbnail: picture("ipr", row.thumb) };
         const found =
           row._type === "episode"
             ? episode("ipr", {
@@ -100,7 +100,7 @@ export const ipr: Station = {
     return wholeList(
       link,
       cursor,
-      { title, subtitle: "Internet Public Radio", thumbnail: picture(about.image) },
+      { title, subtitle: "Internet Public Radio", thumbnail: picture("ipr", about.image) },
       result.episodes.flatMap((row) => item(row) ?? []),
     );
   },

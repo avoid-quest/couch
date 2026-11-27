@@ -8,7 +8,9 @@ import {
   resolveArchiveLink,
 } from "../src/server/providers/archives";
 import { browseMixcloud } from "../src/server/providers/mixcloud";
+import { catalogueTransport } from "../src/server/providers/http";
 import { createContinuationResolver } from "../src/server/continuation";
+import { providerCollectionCursor } from "../src/client/collection-pagination";
 import bailefunk from "./fixtures/archives/lyl-baile-funk.json";
 import lylSearch from "./fixtures/archives/lyl-search.json";
 import blackoutPodcast from "./fixtures/archives/blackout-podcast.json";
@@ -17,14 +19,14 @@ import mixcloudUser from "./fixtures/archives/mixcloud-user.json";
 import mixcloudCloudcasts from "./fixtures/archives/mixcloud-cloudcasts.json";
 import mixcloudPlaylists from "./fixtures/archives/mixcloud-playlists.json";
 
-const realFetch = globalThis.fetch;
+const realFetch = catalogueTransport.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  catalogueTransport.fetch = realFetch;
 });
 type Route = (url: URL, body: unknown) => Response | undefined;
 function serve(...routes: Route[]) {
   const asked: string[] = [];
-  globalThis.fetch = (async (input: string | URL, init: RequestInit = {}) => {
+  catalogueTransport.fetch = (async (input: string | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
     asked.push(url.href);
     const body = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
@@ -38,12 +40,17 @@ function serve(...routes: Route[]) {
 }
 const lylGraphql: Route = (url, body) => {
   if (url.href !== "https://strapi.lyl.live/graphql") return;
-  const { query, variables } = body as { query: string; variables: Record<string, unknown> };
+  const { query, variables } = body as {
+    query: string;
+    variables: Record<string, unknown>;
+  };
   if (query.includes("showsByStyles"))
     return Response.json({ data: { showsByStyles: bailefunk.showsByStyles } });
   const episodes =
     bailefunk.episodesByShow[variables.show as keyof typeof bailefunk.episodesByShow];
-  return Response.json({ data: { episodesByShow: variables.start ? [] : episodes } });
+  return Response.json({
+    data: { episodesByShow: variables.start ? [] : episodes },
+  });
 };
 
 test("a station's link says what it is, from the link alone", () => {
@@ -90,6 +97,11 @@ test("a station's link says what it is, from the link alone", () => {
   ).toMatchObject({
     kind: "playlist",
   });
+  // A user's playlists are a page to choose from, not one list to play.
+  expect(mixcloudLink("https://www.mixcloud.com/lylradio/playlists/")).toMatchObject({
+    kind: "playlists",
+    shape: "page",
+  });
   expect(mixcloudLink("https://www.mixcloud.com/lylradio/favorites/")).toBeUndefined();
   expect(mixcloudLink("https://www.mixcloud.com/discover/jazz/")).toBeUndefined();
   expect(providerForUrl("https://hkcr.live/residents/lethal-fantasies")).toBe("archives");
@@ -129,7 +141,9 @@ test("an episode that hasn't aired yet isn't offered", async () => {
     const query = (body as { query?: string } | undefined)?.query ?? "";
     if (query.includes("showBySlug"))
       return Response.json({
-        data: { showBySlug: { slug: "gomar", title: "Gomar", artists: "Gomar" } },
+        data: {
+          showBySlug: { slug: "gomar", title: "Gomar", artists: "Gomar" },
+        },
       });
     if (query.includes("episodesByShow"))
       return Response.json({
@@ -182,7 +196,10 @@ test("an episode plays from the station's own file, else the recording its post 
   );
   expect(blackout.metadata).toMatchObject({
     title: "UN MESE IN VETRINA",
-    creator: { title: "ARSIDER", url: "https://radioblackout.org/shows/arsider/" },
+    creator: {
+      title: "ARSIDER",
+      url: "https://radioblackout.org/shows/arsider/",
+    },
   });
   // HKCR's broadcast has no file, only a Mixcloud player.
   expect((await resolveArchiveLink("https://hkcr.live/shows/gussief1-11-25-2026")).url).toBe(
@@ -196,8 +213,13 @@ test("a Mixcloud user's page lists their playlists, then their uploads placed in
     if (url.pathname === "/lylradio/playlists/") return Response.json(mixcloudPlaylists);
     if (url.pathname === "/lylradio/cloudcasts/") return Response.json(mixcloudCloudcasts);
   });
-  const page = await browseMixcloud({ url: "https://www.mixcloud.com/lylradio/uploads/" });
-  expect(page.item).toMatchObject({ kind: "channel", url: "https://www.mixcloud.com/lylradio/" });
+  const page = await browseMixcloud({
+    url: "https://www.mixcloud.com/lylradio/uploads/",
+  });
+  expect(page.item).toMatchObject({
+    kind: "channel",
+    url: "https://www.mixcloud.com/lylradio/",
+  });
   expect(page.items.map((item) => item.kind)).toEqual([
     "collection",
     "collection",
@@ -207,16 +229,27 @@ test("a Mixcloud user's page lists their playlists, then their uploads placed in
   ]);
   expect(page.items[2]).toMatchObject({
     provider: "mixcloud",
-    collection: { title: "LYL Radio", url: "https://www.mixcloud.com/lylradio/", index: 0 },
+    collection: {
+      title: "LYL Radio",
+      url: "https://www.mixcloud.com/lylradio/",
+      index: 0,
+    },
     creator: { url: "https://www.mixcloud.com/lylradio/" },
   });
   expect(page.nextCursor).toBe("24");
+  expect(page.count).toBe(15585);
 });
 
 test("Mixcloud's throttle is respected: Couch waits as long as it was told before asking again", async () => {
   const asked = serve(() =>
     Response.json(
-      { error: { type: "RateLimitException", message: "Slow down", retry_after: 30 } },
+      {
+        error: {
+          type: "RateLimitException",
+          message: "Slow down",
+          retry_after: 30,
+        },
+      },
       { status: 403, headers: { "Retry-After": "30" } },
     ),
   );
@@ -226,7 +259,11 @@ test("Mixcloud's throttle is respected: Couch waits as long as it was told befor
 });
 
 test("a pasted episode continues through its show, however the link was spelled", async () => {
-  const older = { ...blackoutPodcast[0]!, slug: "older-episode", title: "Older" };
+  const older = {
+    ...blackoutPodcast[0]!,
+    slug: "older-episode",
+    title: "Older",
+  };
   serve((url) => {
     if (url.pathname.endsWith("/podcastfilter"))
       return Response.json([{ id: 8162, name: "arsider" }]);
@@ -246,4 +283,76 @@ test("a pasted episode continues through its show, however the link was spelled"
   expect(next?.entries.map((entry) => [entry.source, entry.collection?.index])).toEqual([
     ["web:https://radioblackout.org/podcast/older-episode/", 1],
   ]);
+});
+
+test("a WordPress show of exactly 100 episodes ends on its full page", async () => {
+  const asked = serve((url) => {
+    if (url.pathname.endsWith("/podcastfilter"))
+      return Response.json([{ id: 8162, name: "arsider" }]);
+    if (url.pathname.endsWith("/shows")) return Response.json([{ title: "ARSIDER" }]);
+    if (url.searchParams.get("page") === "1")
+      return Response.json(
+        Array.from({ length: 100 }, (_, n) => ({
+          ...blackoutPodcast[0]!,
+          slug: `episode-${n}`,
+        })),
+        { headers: { "X-WP-TotalPages": "1" } },
+      );
+    // WordPress rejects a page past its last.
+    return Response.json({ code: "rest_post_invalid_page_number" }, { status: 400 });
+  });
+  const page = await loadArchiveList("https://radioblackout.org/shows/arsider/");
+  expect(page.items).toHaveLength(100);
+  expect(asked.some((url) => url.includes("page=2"))).toBe(false);
+});
+
+test("NTS counts a show's episodes, and a picture off the station's own hosts isn't shown", async () => {
+  const episode = (alias: string, picture: string) => ({
+    show_alias: "minimal-effort",
+    episode_alias: alias,
+    name: alias,
+    broadcast: "2026-11-01T00:00:00Z",
+    media: { picture_medium: picture },
+  });
+  serve((url) => {
+    if (url.pathname === "/api/v2/shows/minimal-effort")
+      return Response.json({ name: "Minimal Effort" });
+    if (url.pathname === "/api/v2/shows/minimal-effort/episodes")
+      return Response.json({
+        metadata: { resultset: { count: 145 } },
+        results: [
+          episode("on-the-lan", "https://192.168.1.10/x.jpeg"),
+          episode("on-nts", "https://media2.ntslive.co.uk/resize/400x400/x.jpeg"),
+        ],
+      });
+  });
+  const page = await browseArchives({
+    url: "https://www.nts.live/shows/minimal-effort",
+  });
+  expect(page.count).toBe(145);
+  expect(page.nextCursor).toBe("12");
+  expect(page.items.map((item) => item.thumbnail)).toEqual([
+    undefined,
+    "https://media2.ntslive.co.uk/resize/400x400/x.jpeg",
+  ]);
+});
+
+test("an item on a later page of a remote list is found on that page", () => {
+  const at = (url: string, index: number) => ({ title: "List", url, index });
+  expect(
+    providerCollectionCursor("archives", at("https://www.nts.live/shows/minimal-effort", 12)),
+  ).toBe("12");
+  expect(
+    providerCollectionCursor("archives", at("https://www.nts.live/shows/minimal-effort", 11)),
+  ).toBeUndefined();
+  // A station without upstream paging is one page.
+  expect(
+    providerCollectionCursor("archives", at("https://radioblackout.org/shows/arsider/", 130)),
+  ).toBeUndefined();
+  expect(providerCollectionCursor("mixcloud", at("https://www.mixcloud.com/lylradio/", 30))).toBe(
+    "24",
+  );
+  expect(
+    providerCollectionCursor("soundcloud", at("https://soundcloud.com/user/sets/set", 48)),
+  ).toBe("48");
 });

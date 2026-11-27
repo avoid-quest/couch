@@ -1,9 +1,9 @@
 import type { MediaShape } from "./media";
 
-/** A Mixcloud page: a mix (atom), or a user's uploads, their playlists, or one playlist (playlist). */
+/** A Mixcloud page: a mix (atom), a user's uploads or one playlist (playlist), or a user's playlists (a page to open). */
 export type MixcloudLink = {
   provider: "mixcloud";
-  shape: MediaShape;
+  shape: MediaShape | "page";
   kind: "mix" | "user" | "playlists" | "playlist";
   /** The canonical page, `https://www.mixcloud.com/<user>/…/` as Mixcloud's API spells it. */
   url: string;
@@ -67,7 +67,7 @@ export function mixcloudLink(value: string): MixcloudLink | undefined {
   if (!owner || !user.test(owner) || sections.has(owner.toLowerCase()) || parts.length > 3) return;
   const page = (kind: MixcloudLink["kind"], path: string): MixcloudLink => ({
     provider: "mixcloud",
-    shape: kind === "mix" ? "atom" : "playlist",
+    shape: kind === "mix" ? "atom" : kind === "playlists" ? "page" : "playlist",
     kind,
     url: `${mixcloudOrigin}${path}`,
     path,

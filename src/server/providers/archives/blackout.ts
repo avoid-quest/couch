@@ -2,7 +2,6 @@ import { ProviderError } from "../http";
 import {
   episode,
   label,
-  maxList,
   object,
   picture,
   recording,
@@ -10,6 +9,7 @@ import {
   show,
   stationJson,
   wholeList,
+  wordpressRows,
   type Station,
   slugPattern,
 } from "./station";
@@ -19,8 +19,6 @@ import {
 const origin = "https://radioblackout.org";
 const api = `${origin}/wp-json/wp/v2`;
 const fields = "_fields=slug,title,date,recording_date,featured_media,show";
-// WordPress's largest page.
-const batch = 100;
 const rendered = (value: unknown) => (object(value) ? value.rendered : value);
 const slug = (value: unknown) =>
   typeof value === "string" && slugPattern.test(value) ? value : undefined;
@@ -30,7 +28,7 @@ const image = (value: unknown) =>
   typeof value.file === "string" &&
   /^[\w./-]{1,300}$/.test(value.file) &&
   !value.file.includes("..")
-    ? picture(`${origin}/wp-content/uploads/${value.file}`)
+    ? picture("blackout", `${origin}/wp-content/uploads/${value.file}`)
     : undefined;
 
 function item(value: unknown, parent?: { title: string; url: string }) {
@@ -108,16 +106,11 @@ export const blackout: Station = {
     if (!term || !Number.isSafeInteger(term.id))
       throw new ProviderError("Radio BlackOut has no such show.", 404);
     const title = label(rendered(about?.title)) ?? label(term.name) ?? link.slug;
-    const rows: unknown[] = [];
-    for (let page = 1; rows.length < maxList; page++) {
-      const part = await stationJson(
-        `${api}/podcast?podcastfilter=${term.id}&per_page=${batch}&page=${page}&${fields}`,
-        signal,
-      );
-      if (!Array.isArray(part)) throw new ProviderError("Radio BlackOut returned an invalid show.");
-      rows.push(...part);
-      if (part.length < batch) break;
-    }
+    const rows = await wordpressRows(
+      `${api}/podcast?podcastfilter=${term.id}&${fields}`,
+      signal,
+      () => new ProviderError("Radio BlackOut returned an invalid show."),
+    );
     return wholeList(
       link,
       cursor,

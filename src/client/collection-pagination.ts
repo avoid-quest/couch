@@ -6,6 +6,7 @@ import {
 } from "../shared/providers";
 import type { CollectionLink, MediaCollection } from "../shared/media";
 import { readFrom } from "../shared/page-paths";
+import { archiveLink } from "../shared/archives";
 
 export const collectionPageSize = providerPageSize;
 export function readCollectionSearch(search: Record<string, unknown>) {
@@ -86,14 +87,23 @@ export function readCollectionSearch(search: Record<string, unknown>) {
   };
 }
 
-export const providerCollectionCursor = (provider: ProviderId, collection: MediaCollection) =>
-  provider === "animesaturn" && collection.index != null && collection.index >= 50
-    ? String(Math.floor(collection.index / 50))
-    : ["youtube", "raiplay"].includes(provider) &&
-        collection.index != null &&
-        collection.index >= collectionPageSize
-      ? String(Math.floor(collection.index / collectionPageSize) * collectionPageSize)
-      : undefined;
+/** How many items a provider's remote list pages hold, for the lists that page upstream. */
+function remotePageSize(provider: ProviderId, url: string) {
+  if (provider === "animesaturn") return 50;
+  // NTS is the only station whose shows page upstream, 12 episodes at a time.
+  if (provider === "archives") return archiveLink(url)?.station === "nts" ? 12 : undefined;
+  return ["youtube", "raiplay", "mixcloud", "soundcloud"].includes(provider)
+    ? collectionPageSize
+    : undefined;
+}
+
+/** The cursor of the page holding an item of a remote list: AnimeSaturn numbers its pages, the others count offsets. */
+export function providerCollectionCursor(provider: ProviderId, collection: MediaCollection) {
+  const size = remotePageSize(provider, collection.url);
+  if (!size || collection.index == null || collection.index < size) return;
+  const page = Math.floor(collection.index / size);
+  return String(provider === "animesaturn" ? page : page * size);
+}
 
 export function collectionPagination(
   count: number,

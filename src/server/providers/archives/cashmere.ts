@@ -2,13 +2,13 @@ import { ProviderError } from "../http";
 import {
   episode,
   label,
-  maxList,
   object,
   recording,
   searchSize,
   show,
   stationJson,
   wholeList,
+  wordpressRows,
   type Station,
   slugPattern,
 } from "./station";
@@ -18,8 +18,6 @@ import {
 const origin = "https://cashmereradio.com";
 const api = "https://backstage.cashmereradio.com/wp-json/wp/v2";
 const episodeFields = "_fields=slug,date,title,categories,acf";
-// WordPress's largest page.
-const batch = 100;
 const rendered = (value: unknown) => (object(value) ? value.rendered : value);
 
 function item(value: unknown, parent?: { title: string; url: string }) {
@@ -78,16 +76,11 @@ export const cashmere: Station = {
   async list(link, cursor, signal) {
     const parent = await category(`slug=${encodeURIComponent(link.slug)}`, signal);
     if (!parent) throw new ProviderError("Cashmere Radio has no such show.", 404);
-    const episodes: unknown[] = [];
-    for (let page = 1; episodes.length < maxList; page++) {
-      const rows = await stationJson(
-        `${api}/episode?categories=${parent.id}&per_page=${batch}&page=${page}&${episodeFields}`,
-        signal,
-      );
-      if (!Array.isArray(rows)) throw new ProviderError("Cashmere Radio returned an invalid show.");
-      episodes.push(...rows);
-      if (rows.length < batch) break;
-    }
+    const episodes = await wordpressRows(
+      `${api}/episode?categories=${parent.id}&${episodeFields}`,
+      signal,
+      () => new ProviderError("Cashmere Radio returned an invalid show."),
+    );
     return wholeList(
       link,
       cursor,

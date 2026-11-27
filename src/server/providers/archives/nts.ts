@@ -20,7 +20,7 @@ const api = `${origin}/api/v2`;
 const batch = 12;
 
 const image = (media: unknown) =>
-  object(media) ? picture(media.picture_medium ?? media.medium) : undefined;
+  object(media) ? picture("nts", media.picture_medium ?? media.medium) : undefined;
 
 function item(value: unknown, parent?: { title: string; url: string }, index?: number) {
   if (!object(value)) return null;
@@ -72,7 +72,7 @@ export const nts: Station = {
     return value.results.flatMap((row): ProviderItem[] => {
       if (!object(row) || !object(row.article) || typeof row.article.path !== "string") return [];
       const images = object(row.image) ? row.image : {};
-      const thumbnail = picture(images.medium);
+      const thumbnail = picture("nts", images.medium);
       if (row.article_type === "show")
         return [
           show("nts", {
@@ -106,16 +106,18 @@ export const nts: Station = {
     if (!object(about) || !object(page) || !Array.isArray(page.results))
       throw new ProviderError("NTS returned an invalid show.");
     const parent = { title: label(about.name) ?? "NTS", url: link.url };
-    const count =
+    const total =
       object(page.metadata) && object(page.metadata.resultset)
-        ? Number(page.metadata.resultset.count)
-        : 0;
+        ? page.metadata.resultset.count
+        : undefined;
+    const count = Number.isSafeInteger(total) ? Number(total) : 0;
     return {
       title: parent.title,
       subtitle: "NTS",
       description: label(about.description, 2000),
       thumbnail: image(about.media),
       items: page.results.flatMap((row, index) => item(row, parent, offset + index) ?? []),
+      ...(count > 0 ? { count } : {}),
       ...(offset + batch < Math.min(count, maxList) ? { nextCursor: String(offset + batch) } : {}),
     };
   },

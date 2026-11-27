@@ -7,7 +7,14 @@ import {
   type ArchiveStation,
 } from "../../../shared/archives";
 import { mixcloudLink } from "../../../shared/mixcloud";
-import { ProviderError, providerItemId, providerJson } from "../http";
+import { fold, searchWords } from "../../../shared/search-text";
+import {
+  catalogueTransport,
+  object,
+  ProviderError,
+  providerItemId,
+  providerJsonResponse,
+} from "../http";
 import { text as htmlText } from "../movies123";
 
 /** One station's archive: its own search, its lists (shows, residents, series, styles) and its episodes' recordings. */
@@ -26,8 +33,7 @@ export const maxList = 500;
 /** A station's slug, which WordPress percent-encodes when it isn't ASCII. */
 export const slugPattern = /^[A-Za-z0-9][\w%.~-]{0,299}$/;
 export const searchSize = 12;
-export const object = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+export { object };
 export const label = (value: unknown, maximum = 200) =>
   typeof value === "string"
     ? htmlText(value)
@@ -35,19 +41,37 @@ export const label = (value: unknown, maximum = 200) =>
         .trim()
         .slice(0, maximum) || undefined
     : undefined;
-/** Accents and case don't matter: `dj ale` finds `DJ Alé`. */
-const fold = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
-/** Every word of the query starts a word of the text. */
+/** Every word of the query starts a word of the text, accents and case aside: `dj ale` finds `DJ Alé`. */
 export function matches(query: string, value: string) {
-  const words = fold(value).split(/[^\p{L}\p{N}]+/u);
-  return fold(query)
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .every((word) => words.some((part) => part.startsWith(word)));
+  const words = searchWords(value);
+  return searchWords(query).every((word) => words.some((part) => part.startsWith(word)));
 }
 
-export const stationJson = (url: string, signal: AbortSignal, init: RequestInit = {}) =>
-  providerJson(url, { credentials: "omit", ...init, signal });
+const stationResponse = (url: string, signal: AbortSignal, init: RequestInit = {}) =>
+  providerJsonResponse(url, { credentials: "omit", ...init, signal }, catalogueTransport.fetch);
+export const stationJson = async (url: string, signal: AbortSignal, init: RequestInit = {}) =>
+  (await stationResponse(url, signal, init)).value;
+
+/**
+ * A WordPress collection's rows, newest first, up to 500: page after page, as far as the last page WordPress counts
+ * (asking past it is an error, so a show of exactly 100 episodes ends on its full page).
+ */
+export async function wordpressRows(url: string, signal: AbortSignal, invalid: () => Error) {
+  // WordPress's largest page.
+  const batch = 100;
+  const rows: unknown[] = [];
+  for (let page = 1; rows.length < maxList; page++) {
+    const { value, headers } = await stationResponse(
+      `${url}&per_page=${batch}&page=${page}`,
+      signal,
+    );
+    if (!Array.isArray(value)) throw invalid();
+    rows.push(...value);
+    const pages = Number(headers.get("X-WP-TotalPages"));
+    if (value.length < batch || !(page < pages)) break;
+  }
+  return rows;
+}
 
 /** A station's own page for a path, or nothing when the path isn't one Couch knows. */
 export function pageLink(station: ArchiveStation, url: string, shape: ArchiveLink["shape"]) {
@@ -55,7 +79,8 @@ export function pageLink(station: ArchiveStation, url: string, shape: ArchiveLin
   return link?.station === station && link.shape === shape ? link.url : undefined;
 }
 
-export function picture(value: unknown) {
+/** An HTTPS address without credentials. */
+export function httpsUrl(value: unknown) {
   if (typeof value !== "string" || value.length > 2048) return;
   try {
     const url = new URL(value);
@@ -65,9 +90,24 @@ export function picture(value: unknown) {
   }
 }
 
+// The hosts each station serves its pictures from. A Device loads a picture straight from its address, so one
+// elsewhere (a LAN address, say) never reaches it.
+const pictureHosts: Partial<Record<ArchiveStation, RegExp>> = {
+  lyl: /^static\.lyl\.live$/,
+  nts: /^media\d?\.ntslive\.co\.uk$/,
+  sygma: /^radio-cdn\.syg\.ma$/,
+  hkcr: /^cdn\.hkcr\.live$/,
+  ipr: /^cdn\.sanity\.io$/,
+  blackout: /^radioblackout\.org$/,
+};
+export function picture(station: ArchiveStation, value: unknown) {
+  const url = httpsUrl(value);
+  return url && pictureHosts[station]?.test(new URL(url).hostname) ? url : undefined;
+}
+
 /** A recording an episode publishes: a station file is played as it is, a SoundCloud or Mixcloud copy by its page. */
 export function recording(value: unknown): string | undefined {
-  const url = picture(value);
+  const url = httpsUrl(value);
   if (!url) return;
   const mixcloud = mixcloudLink(url);
   if (mixcloud) return mixcloud.kind === "mix" ? mixcloud.url : undefined;

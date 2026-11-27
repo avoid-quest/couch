@@ -73,10 +73,15 @@ async function searchArchives(query: string, signal?: AbortSignal) {
   };
 }
 
+// A list's requests, however many pages it takes, share one deadline, and so do an episode's.
+const deadline = (signal?: AbortSignal) =>
+  AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]);
+
 export async function browseArchives(
   request: BrowseRequest,
-  signal = AbortSignal.timeout(30_000),
+  cancellation?: AbortSignal,
 ): Promise<ProviderPage> {
+  const signal = deadline(cancellation);
   if (!request.url) {
     const query = request.query?.trim() ?? "";
     if (request.cursor) throw new ProviderError("Invalid archive page. Start a new search.", 400);
@@ -105,8 +110,9 @@ export async function browseArchives(
 /** A show, resident, series or style, whole, for Play all and Autoplay: its newest 500 episodes. */
 export async function loadArchiveList(
   url: string,
-  signal = AbortSignal.timeout(30_000),
+  cancellation?: AbortSignal,
 ): Promise<ProviderPage> {
+  const signal = deadline(cancellation);
   const link = stationLink(url);
   if (link.shape !== "playlist") throw new ProviderError("Choose a show to play all of it.", 400);
   const station = stations[link.station];
@@ -115,7 +121,7 @@ export async function loadArchiveList(
   for (let cursor = first.nextCursor; cursor && items.length < maxList;) {
     const page = await station.list(link, cursor, signal);
     items.push(...page.items);
-    cursor = page.nextCursor;
+    cursor = page.items.length ? page.nextCursor : undefined;
   }
   const media = items.filter((item) => item.kind === "media").slice(0, maxList);
   if (!media.length) throw new ProviderError("This show has no past episodes.", 404);

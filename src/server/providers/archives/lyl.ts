@@ -49,7 +49,7 @@ function image(value: unknown) {
   if (!object(value)) return;
   const formats = object(value.formats) ? value.formats : {};
   const small = object(formats.small) ? formats.small.url : undefined;
-  return picture(small ?? value.url);
+  return picture("lyl", small ?? value.url);
 }
 
 function item(value: unknown, parent?: { title: string; url: string }) {
