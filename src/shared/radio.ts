@@ -157,6 +157,11 @@ export const radioHost = (show: RadioProgrammeDetails | null | undefined) =>
   show?.artist && show.artist.localeCompare(show.title, undefined, { sensitivity: "base" })
     ? show.artist
     : undefined;
+/** What a show is filed under, then who hosts it: the names people search for. */
+export const radioShowNames = (show: RadioProgrammeDetails | null | undefined) => {
+  const host = radioHost(show);
+  return [...radioShowLabels(show), ...(host ? [host] : [])];
+};
 export function radioMatches(
   station: RadioStation,
   query: string,
