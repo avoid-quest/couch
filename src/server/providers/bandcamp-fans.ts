@@ -6,19 +6,19 @@ import {
 } from "../../shared/providers";
 import { ExtractionError, runYtDlp } from "../yt-dlp";
 import { mediaItem, target, thumbnail, type Target } from "./bandcamp";
-import { ProviderError, providerItemId, withProviderItem } from "./http";
+import { label, object, ProviderError, providerItemId, withProviderItem } from "./http";
 
-type Metadata = Record<string, unknown>;
 type Fan = NonNullable<ReturnType<typeof bandcampFanUrl>>;
-const object = (value: unknown): value is Metadata =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const label = (value: unknown, limit = 200) =>
-  typeof value === "string"
-    ? value
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, limit) || undefined
-    : undefined;
+/** A release on a fan's list, with how many tracks Bandcamp says it streams. */
+type Release = { item: ProviderItem; tracks: number };
+const maxTracks = 500;
+// Play all pages through the list and reads its albums within one deadline, as long as one list request may take.
+const loadTime = 30_000;
+// Reading a list whole, each paging request asks for this many releases (Bandcamp's own page asks for 20).
+const loadCount = 100;
+// Albums are read a few per extraction, in parallel; when one of them fails, only its group is read again album by
+// album, so that one is skipped and the rest still play.
+const albumGroup = 8;
 const unavailable = () =>
   new ProviderError("Bandcamp didn't show this fan's page. Try again shortly.");
 const cursorPattern = /^(\d{1,20})\/([0-9a-z:]{1,100})$/;
@@ -61,7 +61,7 @@ async function body(run: typeof runYtDlp, url: string, signal?: AbortSignal): Pr
   return result.couch_bandcamp_page;
 }
 
-function fanItem(entry: unknown): ProviderItem | null {
+function fanItem(entry: unknown): Release | null {
   if (!object(entry)) return null;
   let source: Target;
   try {
@@ -78,16 +78,26 @@ function fanItem(entry: unknown): ProviderItem | null {
           thumbnail: `https://f4.bcbits.com/img/a${String(entry.item_art_id).padStart(10, "0")}_5.jpg`,
         })
       : undefined;
+  const streamed = entry.num_streamable_tracks;
   return {
-    id: providerItemId("bandcamp", source.url),
-    provider: "bandcamp",
-    kind: source.kind === "album" ? "collection" : "media",
-    title,
-    url: source.url,
-    ...(band ? { subtitle: band, creator: { title: band, url: `https://${source.host}/` } } : {}),
-    ...(image ? { thumbnail: image } : {}),
+    item: {
+      id: providerItemId("bandcamp", source.url),
+      provider: "bandcamp",
+      kind: source.kind === "album" ? "collection" : "media",
+      title,
+      url: source.url,
+      ...(band ? { subtitle: band, creator: { title: band, url: `https://${source.host}/` } } : {}),
+      ...(image ? { thumbnail: image } : {}),
+    },
+    tracks:
+      source.kind === "album" && typeof streamed === "number" && Number.isSafeInteger(streamed)
+        ? Math.max(1, streamed)
+        : 1,
   };
 }
+
+const releases = (entries: unknown[]) =>
+  entries.map(fanItem).filter((release): release is Release => release !== null);
 
 /** The fan's page: its name and the first items Bandcamp lists, from the page's `pagedata` literal. */
 async function firstPage(run: typeof runYtDlp, fan: Fan, signal?: AbortSignal) {
@@ -107,123 +117,190 @@ async function firstPage(run: typeof runYtDlp, fan: Fan, signal?: AbortSignal) {
   if (typeof fanId !== "number" || !Number.isSafeInteger(fanId) || !object(list) || !object(cache))
     throw unavailable();
   const name = label(data.fan_data.name) ?? label(data.fan_data.username) ?? fan.fan;
-  const items = Object.values(cache)
-    .map(fanItem)
-    .filter((item): item is ProviderItem => item !== null);
+  const listed = releases(Object.values(cache));
   const more =
     typeof list.item_count === "number" &&
     list.item_count > Object.keys(cache).length &&
     typeof list.last_token === "string";
   return {
     title: `${name}'s ${fan.list}`,
-    items,
+    releases: listed,
     ...(more ? { nextCursor: `${fanId}/${list.last_token}` } : {}),
   };
+}
+
+/** The releases after a cursor, with the page's own paging request. */
+async function nextPage(
+  run: typeof runYtDlp,
+  fan: Fan,
+  cursor: string,
+  count: number,
+  signal?: AbortSignal,
+) {
+  const [, fanId, token] = cursorPattern.exec(cursor) ?? [];
+  if (!fanId || !token) throw new ProviderError("Invalid Bandcamp page. Open the link again.", 400);
+  let data: unknown;
+  try {
+    data = JSON.parse(
+      await body(
+        run,
+        `https://bandcamp.com/api/fancollection/1/${fan.list}_items?fan_id=${fanId}&older_than_token=${token}&count=${count}`,
+        signal,
+      ),
+    );
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw unavailable();
+  }
+  if (!object(data) || !Array.isArray(data.items)) throw unavailable();
+  return {
+    releases: releases(data.items.slice(0, count)),
+    ...(data.more_available === true && typeof data.last_token === "string"
+      ? { nextCursor: `${fanId}/${data.last_token}` }
+      : {}),
+  };
+}
+
+/** Each album's tracks, in order, from one flat extraction of several albums (one page request each, no audio). */
+function albumTracks(output: string, albums: ProviderItem[]) {
+  const tracks = new Map<string, ProviderItem[]>();
+  for (const line of output.split("\n")) {
+    let info: unknown;
+    try {
+      info = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!object(info) || !Array.isArray(info.entries) || typeof info.webpage_url !== "string")
+      continue;
+    let album: Target;
+    try {
+      album = target(info.webpage_url);
+    } catch {
+      continue;
+    }
+    const listed = albums.find((item) => item.url === album.url);
+    if (!listed) continue;
+    tracks.set(
+      album.url,
+      info.entries.flatMap((entry, index): ProviderItem[] => {
+        if (!object(entry)) return [];
+        try {
+          const track = target(entry.url);
+          if (track.kind !== "track" || track.host !== album.host) return [];
+          return [
+            {
+              ...mediaItem(entry, track),
+              ...(listed.subtitle ? { subtitle: listed.subtitle } : {}),
+              ...(listed.thumbnail ? { thumbnail: listed.thumbnail } : {}),
+              collection: { title: listed.title, url: album.url, index },
+            },
+          ];
+        } catch {
+          return [];
+        }
+      }),
+    );
+  }
+  return tracks;
 }
 
 export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
   async function browse(url: string, cursor?: string, signal?: AbortSignal): Promise<ProviderPage> {
     const fan = bandcampFanUrl(url);
     if (!fan) throw new ProviderError("Enter a Bandcamp fan's collection or wishlist link.", 400);
-    if (cursor === undefined)
-      return withProviderItem("bandcamp", fan.url, "collection", await firstPage(run, fan, signal));
-    const [, fanId, token] = cursorPattern.exec(cursor) ?? [];
-    if (!fanId || !token)
-      throw new ProviderError("Invalid Bandcamp page. Open the link again.", 400);
-    let data: unknown;
+    const page =
+      cursor === undefined
+        ? await firstPage(run, fan, signal)
+        : await nextPage(run, fan, cursor, providerPageSize, signal);
+    const { releases: listed, ...rest } = page;
+    const result = { ...rest, items: listed.map((release) => release.item) };
+    return cursor === undefined
+      ? withProviderItem("bandcamp", fan.url, "collection", result)
+      : result;
+  }
+
+  async function extract(albums: ProviderItem[], signal: AbortSignal) {
+    const output = await run(
+      [
+        "--use-extractors",
+        "bandcamp:album,end",
+        "--flat-playlist",
+        "--dump-single-json",
+        "--playlist-items",
+        `1:${maxTracks}`,
+        "--",
+        ...albums.map((album) => album.url),
+      ],
+      { signal },
+    );
+    return albumTracks(output, albums);
+  }
+
+  /** A group of albums' tracks; when the group fails, each album on its own, skipping one that fails again. */
+  async function group(albums: ProviderItem[], signal: AbortSignal) {
+    const tracks = new Map<string, ProviderItem[]>();
     try {
-      data = JSON.parse(
-        await body(
-          run,
-          `https://bandcamp.com/api/fancollection/1/${fan.list}_items?fan_id=${fanId}&older_than_token=${token}&count=${providerPageSize}`,
-          signal,
-        ),
-      );
+      return await extract(albums, signal);
     } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw unavailable();
+      // Past the deadline, the albums read so far are the list.
+      if (signal.aborted) return tracks;
+      if (!(error instanceof ExtractionError)) throw error;
+      if (albums.length === 1) return tracks;
     }
-    if (!object(data) || !Array.isArray(data.items)) throw unavailable();
-    return {
-      items: data.items
-        .slice(0, providerPageSize)
-        .map(fanItem)
-        .filter((item): item is ProviderItem => item !== null),
-      ...(data.more_available === true && typeof data.last_token === "string"
-        ? { nextCursor: `${fanId}/${data.last_token}` }
-        : {}),
-    };
+    for (const album of albums) {
+      if (signal.aborted) break;
+      for (const [url, listed] of await group([album], signal)) tracks.set(url, listed);
+    }
+    return tracks;
   }
 
   /**
-   * Play all: the tracks of the items the fan's page shows first (its newest), each album's in order. Reading every
-   * album of a long collection would take minutes, so the rest stay on the page to open one by one.
+   * Play all: the tracks of the fan's list, newest first, each album's in order, up to 500. The list pages until its
+   * releases hold 500 tracks; whatever is read when the deadline passes is what plays.
    */
   async function load(url: string, signal?: AbortSignal): Promise<ProviderPage> {
     const fan = bandcampFanUrl(url);
     if (!fan) throw new ProviderError("Enter a Bandcamp fan's collection or wishlist link.", 400);
-    const page = await firstPage(run, fan, signal);
-    const albums = page.items.filter((item) => item.kind === "collection");
-    // One extraction lists every album flat: one page request each, no audio streams.
-    const output = albums.length
-      ? await run(
-          [
-            "--use-extractors",
-            "bandcamp:album,end",
-            "--flat-playlist",
-            "--dump-single-json",
-            "--playlist-items",
-            "1:500",
-            "--",
-            ...albums.map((album) => album.url),
-          ],
-          { signal },
-        )
-      : "";
-    const tracks = new Map<string, ProviderItem[]>();
-    for (const line of output.split("\n")) {
-      let info: unknown;
+    const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(loadTime)]);
+    const first = await firstPage(run, fan, deadline);
+    const listed = [...first.releases];
+    const count = () => listed.reduce((total, release) => total + release.tracks, 0);
+    for (let cursor = first.nextCursor; cursor && count() < maxTracks;) {
+      let page;
       try {
-        info = JSON.parse(line);
-      } catch {
-        continue;
+        page = await nextPage(run, fan, cursor, loadCount, deadline);
+      } catch (error) {
+        // A later page that fails or comes too late ends the list where it is.
+        signal?.throwIfAborted();
+        if (deadline.aborted || error instanceof ProviderError) break;
+        throw error;
       }
-      if (!object(info) || !Array.isArray(info.entries) || typeof info.webpage_url !== "string")
-        continue;
-      let album: Target;
-      try {
-        album = target(info.webpage_url);
-      } catch {
-        continue;
-      }
-      const listed = albums.find((item) => item.url === album.url);
-      if (!listed) continue;
-      tracks.set(
-        album.url,
-        info.entries.flatMap((entry, index): ProviderItem[] => {
-          if (!object(entry)) return [];
-          try {
-            const track = target(entry.url);
-            if (track.kind !== "track" || track.host !== album.host) return [];
-            return [
-              {
-                ...mediaItem(entry, track),
-                ...(listed.subtitle ? { subtitle: listed.subtitle } : {}),
-                ...(listed.thumbnail ? { thumbnail: listed.thumbnail } : {}),
-                collection: { title: listed.title, url: album.url, index },
-              },
-            ];
-          } catch {
-            return [];
-          }
-        }),
-      );
+      if (!page.releases.length) break;
+      listed.push(...page.releases);
+      cursor = page.nextCursor;
     }
-    const items = page.items
+    // Only the releases that fill the list: Bandcamp says how many tracks each album streams.
+    const chosen: ProviderItem[] = [];
+    for (let tracks = 0, index = 0; tracks < maxTracks && index < listed.length; index++) {
+      chosen.push(listed[index]!.item);
+      tracks += listed[index]!.tracks;
+    }
+    const albums = chosen.filter((item) => item.kind === "collection");
+    const groups = Array.from({ length: Math.ceil(albums.length / albumGroup) }, (_, index) =>
+      albums.slice(index * albumGroup, (index + 1) * albumGroup),
+    );
+    const tracks = new Map(
+      (await Promise.all(groups.map((albums) => group(albums, deadline)))).flatMap((read) => [
+        ...read,
+      ]),
+    );
+    signal?.throwIfAborted();
+    const items = chosen
       .flatMap((item) => (item.kind === "media" ? [item] : (tracks.get(item.url) ?? [])))
-      .slice(0, 500);
+      .slice(0, maxTracks);
     if (!items.length) throw new ProviderError("This Bandcamp fan page has no public tracks.");
-    return { title: page.title, items };
+    return { title: first.title, items };
   }
 
   return { browse, load };

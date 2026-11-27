@@ -86,7 +86,10 @@ test("Bandcamp keyword search returns openable albums and tracks without extract
           { type: "b", name: "Arsider", url: "https://arsider.bandcamp.com" },
           { ...track, type: "b", url: `${track.url}-band` },
           { ...track, type: "unknown", url: `${track.url}-other` },
-          { ...album, url: "https://arsider.bandcamp.comhttps://outside.example/album/album" },
+          {
+            ...album,
+            url: "https://arsider.bandcamp.comhttps://outside.example/album/album",
+          },
           { ...album, url: `${track.url}-wrong-kind` },
         ],
       });
@@ -192,7 +195,9 @@ test("SoundCloud details are independently openable and query text cannot select
     expect(url).toBe(soundcloud().webpage_url);
     return JSON.stringify(soundcloud());
   });
-  const page = await browse({ url: `${soundcloud().webpage_url}?utm_source=clipboard` });
+  const page = await browse({
+    url: `${soundcloud().webpage_url}?utm_source=clipboard`,
+  });
   expect(page.item).toEqual(page.items[0]);
   expect((await browse({ query: "ytsearch:arsider" })).items).toEqual([]);
   for (const request of [
@@ -211,8 +216,14 @@ test("SoundCloud filters unsafe results and rejects invalid upstream data", asyn
     JSON.stringify({
       entries: [
         soundcloud(),
-        { ...soundcloud(), webpage_url: "https://outside.example/artist/track" },
-        { ...soundcloud(), webpage_url: "https://user:password@soundcloud.com/artist/track" },
+        {
+          ...soundcloud(),
+          webpage_url: "https://outside.example/artist/track",
+        },
+        {
+          ...soundcloud(),
+          webpage_url: "https://user:password@soundcloud.com/artist/track",
+        },
       ],
     }),
   );
@@ -239,10 +250,18 @@ test("SoundCloud sets and profiles browse a page at a time and queue their first
   };
   const page = await createSoundCloudBrowser(run)({ url: `${set}?si=share` });
   expect(calls[0]?.at(-1)).toBe(set);
-  expect(page.item).toMatchObject({ kind: "collection", url: set, title: "Album" });
+  expect(page.item).toMatchObject({
+    kind: "collection",
+    url: set,
+    title: "Album",
+  });
   expect(page.count).toBe(600);
   expect(page.items).toHaveLength(24);
-  expect(page.items[1]?.collection).toEqual({ title: "Album", url: set, index: 1 });
+  expect(page.items[1]?.collection).toEqual({
+    title: "Album",
+    url: set,
+    index: 1,
+  });
   expect(page.nextCursor).toBe("24");
   const next = await createSoundCloudBrowser(run)({ url: set, cursor: "24" });
   expect(next.items[0]?.collection?.index).toBe(24);
@@ -269,8 +288,14 @@ const albumEntity = {
   subtitle: "Pitbull",
   visualIdentity: {
     image: [
-      { url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d00004851aaaa", maxWidth: 64 },
-      { url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273bbbb", maxWidth: 640 },
+      {
+        url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d00004851aaaa",
+        maxWidth: 64,
+      },
+      {
+        url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273bbbb",
+        maxWidth: 640,
+      },
     ],
   },
   trackList: [
@@ -306,7 +331,11 @@ test("Spotify reads a list's tracks from its public embed page and keeps their S
   }) as typeof fetch);
   const page = await catalog.browse({ url: `${spotifyAlbum}?si=share` });
   expect(urls).toEqual(["https://open.spotify.com/embed/album/4aawyAB9vmqN3uQ7FjRGTy"]);
-  expect(page.item).toMatchObject({ provider: "spotify", kind: "collection", url: spotifyAlbum });
+  expect(page.item).toMatchObject({
+    provider: "spotify",
+    kind: "collection",
+    url: spotifyAlbum,
+  });
   expect(page.items).toEqual([
     {
       id: expect.any(String),
@@ -332,7 +361,10 @@ test("Spotify reads a list's tracks from its public embed page and keeps their S
     ).rejects.toThrow("Spotify changed its player page");
   await expect(
     createSpotifyCatalog((async () =>
-      spotifyPage({ ...albumEntity, id: "0000000000000000000000" })) as typeof fetch).browse({
+      spotifyPage({
+        ...albumEntity,
+        id: "0000000000000000000000",
+      })) as typeof fetch).browse({
       url: spotifyAlbum,
     }),
   ).rejects.toThrow("Spotify changed its player page");
@@ -353,7 +385,9 @@ test("A Spotify track plays the first YouTube hit within 10 seconds of its lengt
       (async () => spotifyPage(trackEntity)) as typeof fetch,
       async ({ query }) => {
         queries.push(query!);
-        return { items: durations.map((duration, index) => hit(`video${index}abcd`, duration)) };
+        return {
+          items: durations.map((duration, index) => hit(`video${index}abcd`, duration)),
+        };
       },
     );
   const { url, item } = await catalog([200, 96, 90]).match(
@@ -365,10 +399,12 @@ test("A Spotify track plays the first YouTube hit within 10 seconds of its lengt
   await expect(
     catalog([200]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
   ).rejects.toThrow("no YouTube upload");
-  await expect(catalog([90]).match(spotifyAlbum)).rejects.toMatchObject({ status: 400 });
+  await expect(catalog([90]).match(spotifyAlbum)).rejects.toMatchObject({
+    status: 400,
+  });
 });
 
-test("A Bandcamp fan's page lists its items, pages with its token, and Play all queues their tracks", async () => {
+test("A Bandcamp fan's page lists its items, pages with its token, and Play all queues every page's tracks", async () => {
   const escape = (value: unknown) =>
     JSON.stringify(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
   const collected = (type: "a" | "t", host: string, slug: string) => ({
@@ -385,7 +421,10 @@ test("A Bandcamp fan's page lists its items, pages with its token, and Play all 
       collection: {
         a1: collected("a", "label", "first"),
         t2: collected("t", "artist", "single"),
-        x3: { ...collected("a", "label", "elsewhere"), item_url: "https://music.example/album/x" },
+        x3: {
+          ...collected("a", "label", "elsewhere"),
+          item_url: "https://music.example/album/x",
+        },
       },
     },
   };
@@ -400,21 +439,36 @@ test("A Bandcamp fan's page lists its items, pages with its token, and Play all 
     if (url.startsWith("https://bandcamp.com/api/"))
       return JSON.stringify({
         couch_bandcamp_page: JSON.stringify({
-          items: [collected("t", "artist", "older")],
+          items: [
+            collected("t", "artist", "older"),
+            collected("a", "label", "removed"),
+            collected("a", "label", "second"),
+          ],
           more_available: false,
         }),
       });
-    return JSON.stringify({
-      _type: "playlist",
-      webpage_url: "https://label.bandcamp.com/album/first",
-      entries: [1, 2].map((n) => ({
-        url: `https://label.bandcamp.com/track/song-${n}`,
-        title: `Song ${n}`,
-      })),
-    });
+    const albums = args.slice(args.indexOf("--") + 1);
+    // One album that no longer opens fails its whole extraction.
+    if (albums.includes("https://label.bandcamp.com/album/removed"))
+      throw new ExtractionError("Couldn't open this page. It may be unsupported.");
+    return albums
+      .map((album) =>
+        JSON.stringify({
+          _type: "playlist",
+          webpage_url: album,
+          entries: [1, 2].map((n) => ({
+            url: `${album.replace("/album/", "/track/")}-song-${n}`,
+            title: `${album.split("/").at(-1)} ${n}`,
+          })),
+        }),
+      )
+      .join("\n");
   });
   const page = await fans.browse("https://www.bandcamp.com/fan/");
-  expect(page.item).toMatchObject({ kind: "collection", url: "https://bandcamp.com/fan" });
+  expect(page.item).toMatchObject({
+    kind: "collection",
+    url: "https://bandcamp.com/fan",
+  });
   expect(page.title).toBe("Bimbo in Lacrime's collection");
   expect(page.items.map((item) => [item.kind, item.title])).toEqual([
     ["collection", "first & co"],
@@ -426,16 +480,25 @@ test("A Bandcamp fan's page lists its items, pages with its token, and Play all 
   expect(calls.at(-1)?.at(-1)).toBe(
     "https://bandcamp.com/api/fancollection/1/collection_items?fan_id=957304&older_than_token=1789822872:3585349819:a::&count=24",
   );
-  expect(next.items.map((item) => item.title)).toEqual(["older & co"]);
+  expect(next.items.map((item) => item.title)).toEqual([
+    "older & co",
+    "removed & co",
+    "second & co",
+  ]);
   expect(next.nextCursor).toBeUndefined();
   await expect(fans.browse("https://bandcamp.com/fan", "957304/x&y=1")).rejects.toMatchObject({
     status: 400,
   });
+  calls.length = 0;
   const queued = await fans.load("https://bandcamp.com/fan");
-  expect(calls.at(-1)?.slice(-2)).toEqual(["--", "https://label.bandcamp.com/album/first"]);
+  // Play all reads the later pages too, many releases per request.
+  expect(calls[1]?.at(-1)).toEndWith("&count=100");
   expect(queued.items.map((item) => [item.title, item.url, item.collection?.index])).toEqual([
-    ["Song 1", "https://label.bandcamp.com/track/song-1", 0],
-    ["Song 2", "https://label.bandcamp.com/track/song-2", 1],
+    ["first 1", "https://label.bandcamp.com/track/first-song-1", 0],
+    ["first 2", "https://label.bandcamp.com/track/first-song-2", 1],
     ["single & co", "https://artist.bandcamp.com/track/single", undefined],
+    ["older & co", "https://artist.bandcamp.com/track/older", undefined],
+    ["second 1", "https://label.bandcamp.com/track/second-song-1", 0],
+    ["second 2", "https://label.bandcamp.com/track/second-song-2", 1],
   ]);
 });

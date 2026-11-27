@@ -1,18 +1,16 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { ExtractionError, runYtDlp } from "../yt-dlp";
-import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
+import {
+  label,
+  object,
+  ProviderError,
+  providerItemId,
+  providerJson,
+  withProviderItem,
+} from "./http";
 
 type Metadata = Record<string, unknown>;
 export type Target = { url: string; kind: "track" | "album"; host: string };
-const object = (value: unknown): value is Metadata =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const label = (value: unknown, limit = 200) =>
-  typeof value === "string"
-    ? value
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, limit) || undefined
-    : undefined;
 const invalidCatalog = () =>
   new ProviderError("Bandcamp returned invalid catalog information. Update yt-dlp and try again.");
 

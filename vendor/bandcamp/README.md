@@ -9,7 +9,8 @@ existing HTTP transport returns the JSON; its JavaScript runtime selection
 `CouchBandcampFan` makes one GET to a fan's page (`bandcamp.com/<fan>`,
 `/<fan>/wishlist`) and `CouchBandcampFanItems` one POST to the page's own paging
 endpoint (`/api/fancollection/1/{collection,wishlist}_items`, with the fan ID, token
-and count Core gives), for the same reason.
+and count Core gives), for the same reason. Both read at most 4 MiB of the response
+(Core's helper output limit is 8 MiB) and refuse a redirect.
 
 The plugin passes the raw response to Core's existing `providerJson` validation.
 It does not visit result pages, follow a challenge or retry it. Core retains
