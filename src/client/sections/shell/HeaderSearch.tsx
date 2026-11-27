@@ -25,6 +25,7 @@ import {
 import { focusPageControl } from "@/navigation";
 import { isLink, readSearchState, searchLocation } from "@/search";
 import {
+  chipScopes,
   chooseScope,
   completeScope,
   dropScope,
@@ -32,11 +33,11 @@ import {
   isChosen,
   kindLabels,
   scopeLabels,
-  scopes,
   suggest,
   type Scope,
   type SearchScope,
 } from "@/search-palette";
+import { ScopeChips } from "@/sections/find/ScopeChips";
 import { isTvPresentation } from "@/session/presentation";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/shell-context";
@@ -48,6 +49,7 @@ import { historyQuery } from "@/api/progress";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery, radioSearchQuery } from "@/api/radio";
 import { cn } from "@/lib/utils";
+import { metaLine } from "@/media-caption";
 import { linkTarget, providerForUrl, providerNames } from "../../../shared/providers";
 import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
 import type { RadioStation } from "../../../shared/radio";
@@ -64,7 +66,6 @@ type RowKeys = {
 };
 
 const none = "none";
-const kindScopes = scopes.filter((scope) => scope.kind);
 const sourceOf = (url?: string) => {
   const provider = url ? providerForUrl(url) : undefined;
   return provider && providerNames[provider];
@@ -230,7 +231,7 @@ export function HeaderSearch({ className }: { className?: string }) {
     setOpen(false);
     input.current?.blur();
   };
-  // Left and Right move between the TV's columns in the empty palette, and along the kinds elsewhere, where they are a line.
+  // Left and Right move between the TV's columns in the empty palette.
   const list = useRef<HTMLDivElement>(null);
   const across = (step: number) => {
     const columns = [
@@ -245,31 +246,39 @@ export function HeaderSearch({ className }: { className?: string }) {
     const row = items(columns[at]).findIndex(
       (item) => item.getAttribute("aria-selected") === "true",
     );
-    const next = isTvPresentation()
-      ? items(columns[at + step]).at(Math.min(row, items(columns[at + step]).length - 1))
-      : columns[at]?.hasAttribute("data-palette-kinds")
-        ? items(columns[at])[row + step]
-        : undefined;
+    const next = items(columns[at + step]).at(Math.min(row, items(columns[at + step]).length - 1));
     if (at < 0 || !next) return false;
     setSelected(next.getAttribute("data-value")!);
     return true;
   };
-  // The TV's hero holds its verbs on one line: Left and Right move along it, Down leaves it, and Up from the row under it
-  // comes back to its first verb rather than its last.
-  const hero = (key: string) => {
+  // The chips and the TV hero's verbs are lines: Left and Right move along one, Up and Down leave it, and a line is entered
+  // on its chosen chip, else its first.
+  const line = (key: string) => {
     const items = [
       ...(list.current?.querySelectorAll<HTMLElement>('[cmdk-item]:not([aria-disabled="true"])') ??
         []),
     ];
-    const values = items.map((item) => item.getAttribute("data-value")!);
+    const values = items.map((item) => item.dataset.value!);
+    const lineOf = (value?: string) =>
+      ["chip:", "top:"].find((prefix) => value?.startsWith(prefix));
+    const enter = (value?: string) => {
+      const prefix = lineOf(value);
+      const members = items.filter((item) => prefix && item.dataset.value!.startsWith(prefix));
+      const landing = members.find((item) => item.dataset.checked === "true") ?? members[0];
+      return landing ? landing.dataset.value : value;
+    };
     const at = values.indexOf(selected);
-    const verbs = values.filter((item) => item.startsWith("top:"));
+    const own = lineOf(selected);
+    const members = own ? values.filter((value) => value.startsWith(own)) : [];
     let next: string | undefined;
-    if (selected.startsWith("top:") && (key === "ArrowLeft" || key === "ArrowRight"))
-      next = verbs[verbs.indexOf(selected) + (key === "ArrowLeft" ? -1 : 1)] ?? selected;
-    else if (selected.startsWith("top:") && key === "ArrowDown")
-      next = values.slice(at + 1).find((item) => !item.startsWith("top:"));
-    else if (key === "ArrowUp" && values[at - 1]?.startsWith("top:")) next = verbs[0];
+    if (own && (key === "ArrowLeft" || key === "ArrowRight"))
+      next = members[members.indexOf(selected) + (key === "ArrowLeft" ? -1 : 1)] ?? selected;
+    else if (own && key === "ArrowDown")
+      next = enter(values.slice(at + 1).find((value) => !value.startsWith(own))) ?? selected;
+    else if (own && key === "ArrowUp")
+      next = enter(values.slice(0, at).findLast((value) => !value.startsWith(own))) ?? selected;
+    else if (key === "ArrowUp" && lineOf(values[at - 1])) next = enter(values[at - 1]);
+    else if (key === "ArrowDown" && lineOf(values[at + 1])) next = enter(values[at + 1]);
     if (!next) return false;
     setSelected(next);
     return true;
@@ -406,14 +415,20 @@ export function HeaderSearch({ className }: { className?: string }) {
               if (event.key.startsWith("Arrow")) moved.current = true;
               const rows = open && text && !link ? rowKeys.current : null;
               const atEnd = event.currentTarget.selectionStart === value.length;
+              // The TV hero's Left and Right move along its verbs; its menu is its "…".
+              const onHero = selected.startsWith("top:");
               if (
-                rows &&
-                ((event.key === "Enter" && event.shiftKey && rows.queue(selected)) ||
-                  (plain && event.key === "ArrowRight" && atEnd && rows.menu(selected, true)) ||
-                  (plain &&
-                    (event.key === "ArrowLeft" || event.key === "Escape") &&
-                    rows.menu(selected, false)) ||
-                  (plain && event.key.startsWith("Arrow") && hero(event.key)))
+                (rows &&
+                  ((event.key === "Enter" && event.shiftKey && rows.queue(selected)) ||
+                    (plain &&
+                      event.key === "ArrowRight" &&
+                      atEnd &&
+                      !onHero &&
+                      rows.menu(selected, true)) ||
+                    (plain &&
+                      ((event.key === "ArrowLeft" && !onHero) || event.key === "Escape") &&
+                      rows.menu(selected, false)))) ||
+                (open && !link && plain && event.key.startsWith("Arrow") && line(event.key))
               ) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -470,6 +485,7 @@ export function HeaderSearch({ className }: { className?: string }) {
                 open &&
                 !value &&
                 plain &&
+                isTvPresentation() &&
                 (event.key === "ArrowLeft" || event.key === "ArrowRight")
               ) {
                 if (across(event.key === "ArrowLeft" ? -1 : 1)) event.preventDefault();
@@ -527,6 +543,30 @@ export function HeaderSearch({ className }: { className?: string }) {
             }}
             className="absolute inset-x-0 top-full z-30 mt-2 max-h-[min(40rem,calc(100dvh-var(--top-bar,4rem)-1rem))] rounded-lg bg-popover p-2 **:[[cmdk-item]]:min-h-10 **:[[cmdk-item]]:text-body **:[[cmdk-group-heading]]:text-meta touch:fixed touch:top-(--top-bar) touch:bottom-0 touch:mt-0 touch:max-h-none touch:rounded-none touch:bg-background touch:px-[calc(var(--gutter)-0.5rem)] touch:pt-4 tv:fixed tv:top-(--top-bar) tv:bottom-0 tv:mt-0 tv:max-h-none tv:rounded-none tv:bg-background tv:px-[calc(var(--gutter)-0.5rem)] tv:py-8 tv:**:[[cmdk-item]]:min-h-10 tv:**:[[cmdk-item]]:text-base tv:**:[[cmdk-group-heading]]:text-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
           >
+            {!link && (
+              <ScopeChips
+                palette
+                chips={[
+                  {
+                    label: "All",
+                    checked: !hasScope(scope),
+                    onPress: () => rescope({ kind: undefined, source: "All" }),
+                  },
+                  ...chipScopes(scope).map((item) => ({
+                    label: item.label,
+                    checked: isChosen(scope, item),
+                    hint: completeScope(text) === item && (
+                      <Kbd aria-hidden="true" className="pointer-coarse:hidden tv:hidden">
+                        Tab
+                      </Kbd>
+                    ),
+                    onPress: () => choose(item),
+                  })),
+                ]}
+                onMore={(label) => setSelected(`chip:${label}`)}
+                className="px-0.5 pb-2 tv:pb-6"
+              />
+            )}
             {text ? (
               <Typed
                 text={text}
@@ -544,7 +584,6 @@ export function HeaderSearch({ className }: { className?: string }) {
                 onSelectRow={setSelected}
                 onRun={(run) => leave(run)}
                 onSearch={() => search(text, "enter")}
-                onScope={(next) => choose(next)}
                 onRecent={pick}
                 onOpen={(href) => leave(() => details.open(href))}
                 onPlayStation={(station) => leave(() => void shell.enqueueRadio(station, true))}
@@ -566,9 +605,7 @@ export function HeaderSearch({ className }: { className?: string }) {
               />
             ) : (
               <Empty
-                scope={scope}
                 recents={recents}
-                onScope={(next) => choose(next)}
                 onRecent={pick}
                 onOpen={(href) => leave(() => details.open(href))}
               />
@@ -628,35 +665,6 @@ function PaletteInput({
   );
 }
 
-/** The kinds and sources as rows, the chosen ones checked; choosing one again removes it. */
-function ScopeRows({
-  items,
-  scope,
-  onScope,
-  hint,
-}: {
-  items: Scope[];
-  scope: SearchScope;
-  onScope: (scope: Scope) => void;
-  hint?: Scope;
-}) {
-  return items.map((item) => (
-    <CommandItem
-      key={item.label}
-      value={`scope:${item.label}`}
-      data-checked={isChosen(scope, item)}
-      onSelect={() => onScope(item)}
-    >
-      <span className="truncate">{item.label}</span>
-      {hint === item && (
-        <Kbd aria-hidden="true" className="ml-auto pointer-coarse:hidden tv:hidden">
-          Tab
-        </Kbd>
-      )}
-    </CommandItem>
-  ));
-}
-
 /** A title the client already holds: its artwork, then the title over where it comes from. */
 function TitleRow({
   value,
@@ -688,6 +696,17 @@ function TitleRow({
   );
 }
 
+type Placed = {
+  collection?: { title: string; parent?: { title: string } } | null;
+  creator?: { title: string } | null;
+};
+// What a held title belongs to: its series, collection and creator.
+const placeOf = (item: Placed) => [
+  item.collection?.parent?.title,
+  item.collection?.title,
+  item.creator?.title,
+];
+
 // The cached lists the palette draws on; each is read from the client's cache and never fetched from here.
 function useHeld() {
   const { credentials } = useSessionGate();
@@ -704,9 +723,9 @@ function useHeld() {
     saved: [
       ...later.map((item) => ({
         title: item.title,
-        context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title]
-          .filter(Boolean)
-          .join(" "),
+        context: placeOf(item).filter(Boolean).join(" "),
+        detail: metaLine(...placeOf(item)) || sourceOf(item.url),
+        url: item.url,
         source: sourceOf(item.url),
         thumbnail: item.thumbnail,
         href: itemLocation("saved", item.id),
@@ -715,6 +734,8 @@ function useHeld() {
       ...kept.map((item) => ({
         title: item.title,
         context: "",
+        detail: providerNames[item.provider],
+        url: item.url,
         source: providerNames[item.provider],
         thumbnail: item.thumbnail,
         href: collectionLocation(item),
@@ -723,9 +744,9 @@ function useHeld() {
     ],
     played: played.map((item) => ({
       title: item.title,
-      context: [item.collection?.parent?.title, item.collection?.title, item.creator?.title]
-        .filter(Boolean)
-        .join(" "),
+      context: placeOf(item).filter(Boolean).join(" "),
+      detail: metaLine(...placeOf(item)) || item.sourceLabel || sourceOf(item.url),
+      url: item.url,
       source: item.sourceLabel ?? sourceOf(item.url),
       thumbnail: item.thumbnail,
       href: itemLocation("history", item.mediaId),
@@ -736,61 +757,48 @@ function useHeld() {
 }
 
 /**
- * The empty palette: the kinds to search in, then recent searches and what was played. One column under the field (the
- * kinds a line of chips); on the TV, columns the arrows cross.
+ * The empty palette under the chips: recent searches and what was played, one column under the field; on the TV, two
+ * columns the arrows cross.
  */
 function Empty({
-  scope,
   recents,
-  onScope,
   onRecent,
   onOpen,
 }: {
-  scope: SearchScope;
   recents: string[];
-  onScope: (scope: Scope) => void;
   onRecent: (query: string) => void;
   onOpen: (href: string) => void;
 }) {
   const { played } = useHeld();
   const recent = recents.slice(0, 6),
     continuing = played.slice(0, 6);
-  // The kinds as chips (Design → Chips): a quiet fill that steps up under the pointer, the chosen one checked as a
-  // ChoiceGroup's is, and the keys' selection inverted as every focus is. On the TV, rows.
-  const chips =
-    "**:[[cmdk-group-items]]:flex **:[[cmdk-group-items]]:flex-wrap **:[[cmdk-group-items]]:gap-2 **:[[cmdk-group-items]]:px-2 **:[[cmdk-group-items]]:pb-1 **:[[cmdk-item]]:min-h-control **:[[cmdk-item]]:gap-1.5 **:[[cmdk-item]]:rounded-full **:[[cmdk-item]]:bg-secondary **:[[cmdk-item]]:px-3.5 **:[[cmdk-item]]:data-[selected=true]:bg-fill-hover **:[[cmdk-item]]:[&>svg]:order-first **:[[cmdk-item]]:[&>svg]:-ml-1 tv:**:[[cmdk-group-items]]:block tv:**:[[cmdk-group-items]]:px-0 tv:**:[[cmdk-item]]:rounded-md tv:**:[[cmdk-item]]:px-2 tv:**:[[cmdk-item]]:bg-transparent";
   return (
-    <div className="grid gap-y-2 tv:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] tv:gap-x-8">
-      <div data-palette-column data-palette-kinds className={chips}>
-        <CommandGroup heading="Search in">
-          <ScopeRows items={kindScopes} scope={scope} onScope={onScope} />
-        </CommandGroup>
-      </div>
-      {(recent.length > 0 || continuing.length > 0) && (
-        <div data-palette-column className="grid content-start gap-2">
-          {recent.length > 0 && (
-            <CommandGroup heading="Recent searches" data-search-recents>
-              {recent.map((query) => (
-                <CommandItem key={query} value={`recent:${query}`} onSelect={() => onRecent(query)}>
-                  <span className="truncate">{query}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          {continuing.length > 0 && (
-            <CommandGroup heading="Continue">
-              {continuing.map((item) => (
-                <TitleRow
-                  key={item.key}
-                  value={`continue:${item.key}`}
-                  title={item.title}
-                  detail={item.context || item.source}
-                  thumbnail={item.thumbnail}
-                  onSelect={() => onOpen(item.href)}
-                />
-              ))}
-            </CommandGroup>
-          )}
+    <div className="grid gap-2 tv:grid-cols-2 tv:gap-x-8">
+      {recent.length > 0 && (
+        <div data-palette-column>
+          <CommandGroup heading="Recent searches" data-search-recents>
+            {recent.map((query) => (
+              <CommandItem key={query} value={`recent:${query}`} onSelect={() => onRecent(query)}>
+                <span className="truncate">{query}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </div>
+      )}
+      {continuing.length > 0 && (
+        <div data-palette-column>
+          <CommandGroup heading="Continue">
+            {continuing.map((item) => (
+              <TitleRow
+                key={item.key}
+                value={`continue:${item.key}`}
+                title={item.title}
+                detail={item.detail}
+                thumbnail={item.thumbnail}
+                onSelect={() => onOpen(item.href)}
+              />
+            ))}
+          </CommandGroup>
         </div>
       )}
     </div>
@@ -817,7 +825,6 @@ function Typed({
   onSelectRow,
   onRun,
   onSearch,
-  onScope,
   onRecent,
   onOpen,
   onPlayStation,
@@ -837,7 +844,6 @@ function Typed({
   onSelectRow: (value: string) => void;
   onRun: (run: () => void) => void;
   onSearch: () => void;
-  onScope: (scope: Scope) => void;
   onRecent: (query: string) => void;
   onOpen: (href: string) => void;
   onPlayStation: (station: RadioStation) => void;
@@ -896,10 +902,13 @@ function Typed({
   const list = usePastedList(credentials, text, target);
   // Suggestions follow the typing once it pauses; the query row follows every key.
   const [settled] = useDebouncedValue(text, { wait: 120 });
+  // The top row shows once: what Couch holds of the same page doesn't repeat it below.
+  const notTop = (item: { url?: string }) =>
+    !top || !item.url || (item.url !== top.url && !top.copies?.includes(item.url));
   const found = suggest(settled, scope, {
     recents,
-    saved: held.saved,
-    played: held.played,
+    saved: held.saved.filter(notTop),
+    played: held.played.filter(notTop),
     stations: held.stations,
   });
   if (link) {
@@ -981,11 +990,6 @@ function Typed({
           </div>
         </div>
       )}
-      {found.scopes.length > 0 && (
-        <CommandGroup heading="Search in">
-          <ScopeRows items={found.scopes} scope={scope} onScope={onScope} hint={found.scopes[0]} />
-        </CommandGroup>
-      )}
       {found.recents.length > 0 && (
         <CommandGroup heading="Recent searches" data-search-recents>
           {found.recents.map((query) => (
@@ -1002,7 +1006,7 @@ function Typed({
               key={item.key}
               value={item.key}
               title={item.title}
-              detail={item.context || item.source}
+              detail={item.detail}
               thumbnail={item.thumbnail}
               onSelect={() => onOpen(item.href)}
             />
@@ -1016,7 +1020,7 @@ function Typed({
               key={item.key}
               value={item.key}
               title={item.title}
-              detail={item.context || item.source}
+              detail={item.detail}
               thumbnail={item.thumbnail}
               onSelect={() => onOpen(item.href)}
             />

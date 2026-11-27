@@ -11,7 +11,14 @@ import {
   type SearchKind,
   type SearchRouteState,
 } from "../../search";
-import { kindLabels, scopeLabels } from "../../search-palette";
+import {
+  chipScopes,
+  chooseScope,
+  hasScope,
+  isChosen,
+  scopeLabels,
+  type SearchScope,
+} from "../../search-palette";
 import {
   memo,
   useMemo,
@@ -58,7 +65,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 import { SearchRadioResults } from "./SearchRadioResults";
-import { SearchKinds, SearchSources } from "./SearchFilters";
+import { ScopeChips } from "./ScopeChips";
 import {
   supportsWebVideoQuality,
   useEnqueueVideoQuality,
@@ -109,11 +116,6 @@ type Entry = [source: string, summary: SearchResultSummary];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
 type GroupId = Exclude<SearchKind, "audio"> | "channels";
-// The kinds above the results; only those the query found are offered.
-const kinds = (["films", "radio", "live", "music", "videos"] as const).map((value) => ({
-  value: value as SearchKind,
-  label: kindLabels[value],
-}));
 const kindOf = (group: GroupId): SearchKind => (group === "channels" ? "videos" : group);
 // RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
 const groupOf = (hit: SearchHit): GroupId =>
@@ -254,17 +256,6 @@ export function SearchPanel(props: Props) {
   const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
   const inKind = (hit: SearchHit, of = kind) =>
     !of || (of === "audio" ? canReturn(hit.source, of) : kindOfHit(hit) === of);
-  const choices = kind === "audio" ? [{ value: kind, label: kindLabels.audio }, ...kinds] : kinds;
-  const foundKinds = choices.flatMap((option) => {
-    const n = found.filter((hit) => inKind(hit, option.value)).length;
-    return n || (option.value === kind && found.length) ? [{ ...option, count: n }] : [];
-  });
-  const foundSources = sourceOrder
-    .map((source) => ({
-      value: source,
-      count: found.filter((hit) => hit.source === source && inKind(hit)).length,
-    }))
-    .filter((source) => source.count || (source.value === filter && found.length));
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
   const scoped = hits.filter((hit) => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
@@ -297,26 +288,49 @@ export function SearchPanel(props: Props) {
       ) ?? panel.current?.querySelector<HTMLElement>("[data-play], [data-media-tile]");
     row?.focus({ preventScroll: true });
   }, [relevant, props.active]);
-  // A heading that changed the kind, or a source that took its line away, left with its control; the focus goes to the chosen kind.
+  // A shelf heading that changed the source, or a chip that went once unchosen, left with its control; the focus goes to
+  // the chosen chip.
   const shownFilters = useRef(`${kind}:${filter}`);
   useLayoutEffect(() => {
     if (shownFilters.current === `${kind}:${filter}`) return;
     shownFilters.current = `${kind}:${filter}`;
     if (document.activeElement === document.body)
       panel.current
-        ?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')
+        ?.querySelector<HTMLElement>('[data-chip][aria-pressed="true"]')
         ?.focus({ preventScroll: true });
   }, [kind, filter]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
-  // A kind keeps the chosen source when the source has hits of it; otherwise every source.
-  const withKind = (next?: SearchKind): SearchRouteState => ({
-    ...searchState,
-    kind: next,
-    source:
-      canReturn(filter, next) && found.some((hit) => hit.source === filter && inKind(hit, next))
-        ? filter
-        : "All",
-  });
+  // The chips come from what was found, so no choice made here comes up empty: each counts what pressing it shows, and
+  // shows once that is something. A chosen one always shows; the page says when it holds nothing. Audio overlaps music
+  // and videos, so it shows only when chosen.
+  const current: SearchScope = { kind, source: filter };
+  const holds = (state: SearchScope) =>
+    found.filter(
+      (hit) =>
+        (state.source === "All" || hit.source === state.source) &&
+        (!state.kind || inKind(hit, state.kind)),
+    ).length;
+  const chips = [
+    {
+      label: "All",
+      checked: !hasScope(current),
+      count: found.length,
+      onPress: () => props.onSearchChange({ query, source: "All" }),
+    },
+    ...chipScopes(current).flatMap((scope) => {
+      const checked = isChosen(current, scope);
+      const count = holds(checked ? current : chooseScope(current, scope));
+      if (!checked && (!count || scope.kind === "audio")) return [];
+      return [
+        {
+          label: scope.label,
+          checked,
+          count,
+          onPress: () => props.onSearchChange({ ...searchState, ...chooseScope(current, scope) }),
+        },
+      ];
+    }),
+  ];
   const everything = () => props.onSearchChange({ query, source: "All" });
   const [looseOpen, setLooseOpen] = useState(false);
   return (
@@ -339,33 +353,11 @@ export function SearchPanel(props: Props) {
         <>
           <SearchRoom thumbnail={litHit?.thumbnail} />
           <SearchTitle title={query} />
-          {/* The lines hold their height while sources answer, so nothing below moves as options arrive. A chosen kind
-          always keeps its source line, empty while it has one source. */}
-          {(foundKinds.length > 0 || asking.length > 0) && (
-            <div role="group" aria-label="Search filters" className="flex flex-col gap-1">
-              <div className="min-h-8 touch:min-h-11">
-                {foundKinds.length > 0 && (
-                  <SearchKinds
-                    query={resultsKey}
-                    value={kind ?? "all"}
-                    onChange={(next) =>
-                      props.onSearchChange(withKind(next === "all" ? undefined : next))
-                    }
-                    options={[{ value: "all", label: "All", count: found.length }, ...foundKinds]}
-                  />
-                )}
-              </div>
-              {(kind || filter !== "All") && (
-                <div className="min-h-8 touch:min-h-11">
-                  {(foundSources.length > 1 || filter !== "All") && (
-                    <SearchSources
-                      query={`${resultsKey}:${kind}`}
-                      value={filter}
-                      onChange={(source) => props.onSearchChange({ ...searchState, kind, source })}
-                      options={foundSources}
-                    />
-                  )}
-                </div>
+          {/* The row holds its height while sources answer, so nothing below moves as chips arrive. */}
+          {(found.length > 0 || asking.length > 0 || hasScope(current)) && (
+            <div className="min-h-control touch:min-h-11">
+              {(found.length > 0 || hasScope(current)) && (
+                <ScopeChips query={resultsKey} chips={chips} />
               )}
             </div>
           )}
