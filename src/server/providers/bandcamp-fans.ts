@@ -238,21 +238,20 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
   }
 
   /** A group of albums' tracks; when the group fails, each album on its own, skipping one that fails again. */
-  async function group(albums: ProviderItem[], signal: AbortSignal) {
-    const tracks = new Map<string, ProviderItem[]>();
+  async function group(
+    albums: ProviderItem[],
+    signal: AbortSignal,
+  ): Promise<Map<string, ProviderItem[]>> {
     try {
       return await extract(albums, signal);
     } catch (error) {
       // Past the deadline, the albums read so far are the list.
-      if (signal.aborted) return tracks;
+      if (signal.aborted) return new Map();
       if (!(error instanceof ExtractionError)) throw error;
-      if (albums.length === 1) return tracks;
+      if (albums.length === 1) return new Map();
     }
-    for (const album of albums) {
-      if (signal.aborted) break;
-      for (const [url, listed] of await group([album], signal)) tracks.set(url, listed);
-    }
-    return tracks;
+    const read = await Promise.all(albums.map((album) => group([album], signal)));
+    return new Map(read.flatMap((tracks) => [...tracks]));
   }
 
   /**
