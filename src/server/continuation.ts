@@ -30,8 +30,10 @@ export function createContinuationResolver(loadList = loadProviderList) {
       ? { title: entry.title, url: `${movies123.origin}${movies123.pathname}`, index: undefined }
       : null;
     const provider = providerForUrl(url);
+    // A pasted episode continues through its series or show.
     const anime =
-      !entry.collection && (provider === "animesaturn" || provider === "animeunity")
+      !entry.collection &&
+      (provider === "animesaturn" || provider === "animeunity" || provider === "archives")
         ? await resolveProviderMetadata(url, signal)
         : undefined;
     let collection =
@@ -49,6 +51,8 @@ export function createContinuationResolver(loadList = loadProviderList) {
         "movies123",
         "animesaturn",
         "animeunity",
+        "mixcloud",
+        "archives",
       ].includes(provider) ||
       (provider === "youtube" && !isYouTubePlaylistUrl(collection.url))
     )
@@ -67,7 +71,7 @@ export function createContinuationResolver(loadList = loadProviderList) {
       const next = episode && streamingEpisode(candidate);
       return (
         candidate === url ||
-        ((provider === "youtube" || provider === "animesaturn" || provider === "animeunity") &&
+        (["youtube", "animesaturn", "animeunity", "mixcloud", "archives"].includes(provider) &&
           !!publicProviderMediaUrl(url) &&
           publicProviderMediaUrl(candidate) === publicProviderMediaUrl(url)) ||
         (!!movies123 && movies123PageUrl(candidate)?.href === movies123.href) ||

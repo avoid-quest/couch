@@ -17,6 +17,8 @@ export function savedSourceLabel(item: ForLaterItem) {
           movies123: "123MoviesFree",
           animesaturn: "AnimeSaturn",
           animeunity: "AnimeUnity",
+          mixcloud: "Mixcloud",
+          archives: "Radio archives",
         }[provider]
       : new URL(item.url).hostname.replace(/^www\./, "");
   } catch {

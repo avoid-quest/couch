@@ -42,6 +42,8 @@ const providerIds = new Set([
   "movies123",
   "animesaturn",
   "animeunity",
+  "mixcloud",
+  "archives",
 ]);
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) =>

@@ -17,6 +17,10 @@ import { browseSoundCloud } from "./soundcloud";
 import { browseMovies123, loadMovies123List } from "./movies123";
 import { browseAnimeSaturn, loadAnimeSaturnList } from "./animesaturn";
 import { browseAnimeUnity, loadAnimeUnityList } from "./animeunity";
+import { browseMixcloud, loadMixcloudList } from "./mixcloud";
+import { browseArchives, loadArchiveList } from "./archives";
+import { archiveLink } from "../../shared/archives";
+import { mixcloudLink } from "../../shared/mixcloud";
 import { animeSaturnPageUrl } from "../../shared/animesaturn";
 import { animeUnityPageUrl } from "../../shared/animeunity";
 import { movies123PageUrl } from "../../shared/movies123";
@@ -41,6 +45,8 @@ const adapters = (
   movies123: browseMovies123,
   animesaturn: browseAnimeSaturn,
   animeunity: browseAnimeUnity,
+  mixcloud: browseMixcloud,
+  archives: browseArchives,
 });
 const providerIds = new Set(Object.keys(adapters(async () => "")));
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -71,9 +77,13 @@ function publicUrl(value: unknown, provider?: ProviderId): string {
           ? !!animeSaturnPageUrl(url.href)
           : candidate === "animeunity"
             ? !!animeUnityPageUrl(url.href)
-            : domains[candidate]!.some(
-                (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`),
-              );
+            : candidate === "mixcloud"
+              ? !!mixcloudLink(url.href)
+              : candidate === "archives"
+                ? !!archiveLink(url.href)
+                : domains[candidate]!.some(
+                    (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`),
+                  );
   if (
     !["http:", "https:"].includes(url.protocol) ||
     url.username ||
@@ -152,6 +162,8 @@ export async function loadProviderList(
   if (provider === "movies123") return loadMovies123List(url, signal);
   if (provider === "animesaturn") return loadAnimeSaturnList(url, signal);
   if (provider === "animeunity") return loadAnimeUnityList(url, signal);
+  if (provider === "mixcloud") return loadMixcloudList(url, signal);
+  if (provider === "archives") return loadArchiveList(url, signal);
   const page = await browseTwitch({ url }, signal);
   const items = page.items.filter((item) => item.kind === "media");
   if (!items.length) throw new ProviderError("This Twitch list has no supported media.", 404);
@@ -407,7 +419,7 @@ export function createProviders({
           );
         }
         const match =
-          /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|soundcloud|streamingcommunity|movies123|animesaturn|animeunity)\/items$/.exec(
+          /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|soundcloud|streamingcommunity|movies123|animesaturn|animeunity|mixcloud|archives)\/items$/.exec(
             pathname,
           );
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });

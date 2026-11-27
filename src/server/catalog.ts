@@ -158,6 +158,8 @@ export function createCatalog({ radio, viewing }: Services) {
           movies123: "123MoviesFree",
           animesaturn: "AnimeSaturn",
           animeunity: "AnimeUnity",
+          mixcloud: "Mixcloud",
+          archives: "Radio archives",
         }[provider]
       : "Online";
     const url =
@@ -265,6 +267,8 @@ export function createCatalog({ radio, viewing }: Services) {
               "movies123",
               "animesaturn",
               "animeunity",
+              "mixcloud",
+              "archives",
             ].includes(provider)
           )
             throw new RequestError("Invalid provider.");

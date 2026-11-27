@@ -290,7 +290,7 @@ function OnlineResults(props: Props) {
   const lifetime = useRef<AbortController | null>(null);
   // Only presentation state is retained locally. Query owns pages, requests,
   // errors and retries, so changing a query or connection retires its reads.
-  const music = provider === "bandcamp" || provider === "soundcloud";
+  const music = ["bandcamp", "soundcloud", "mixcloud", "archives"].includes(provider);
   const facet = (item: ProviderItem): Pick<SearchHit, "kind" | "duration"> => ({
     kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Stream" : "Video",
     duration: item.duration,
