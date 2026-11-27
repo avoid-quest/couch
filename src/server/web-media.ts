@@ -14,6 +14,8 @@ import { resolveAnimeSaturnLink } from "./animesaturn";
 import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
+import { isArchiveHost } from "../shared/archives";
+import { archiveEpisode, resolveArchiveLink } from "./providers/archives";
 import { logMediaResolution } from "./media-diagnostics";
 import type { SelectedChannels } from "./source-preparation";
 import { storyboardPreview } from "./playback-preview";
@@ -387,7 +389,9 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         ? await resolveAnimeSaturnLink(source, signal)
         : isAnimeUnityHost(host)
           ? await resolveAnimeUnityLink(source, signal)
-          : undefined;
+          : isArchiveHost(host)
+            ? await resolveArchiveLink(source, signal)
+            : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     // yt-dlp's res uses the smaller dimension, including portrait Shorts.
     const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
@@ -587,6 +591,13 @@ function createWebMediaInspector(options: ResolverOptions = {}) {
     if (inspectTitle) {
       const { title, thumbnail, duration } = (await inspectTitle(source, signal)).item;
       return { title, thumbnail, duration };
+    }
+    if (isArchiveHost(host)) {
+      const { title, thumbnail, duration, creator } = await archiveEpisode(
+        source,
+        signal ?? AbortSignal.timeout(25_000),
+      );
+      return { title, thumbnail, duration, creator };
     }
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const output = await runYtDlp(

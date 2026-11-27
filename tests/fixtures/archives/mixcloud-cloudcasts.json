@@ -1,0 +1,91 @@
+{
+  "data": [
+    {
+      "key": "/lylradio/neon-cleptu-laima-26112026/",
+      "url": "https://www.mixcloud.com/lylradio/neon-cleptu-laima-26112026/",
+      "name": "Neon Cleptu - Laima (26.11.2026)",
+      "created_time": "2026-11-26T22:06:25Z",
+      "audio_length": 3597,
+      "tags": [
+        {
+          "name": "Dark ambient"
+        },
+        {
+          "name": "Experimental"
+        },
+        {
+          "name": "Psytrance"
+        },
+        {
+          "name": "Techno"
+        }
+      ],
+      "pictures": {
+        "320wx320h": "https://thumbnailer.mixcloud.com/unsafe/320x320/extaudio/f/9/8/4/e708-9a01-43ab-8db0-b51938a49148"
+      },
+      "user": {
+        "url": "https://www.mixcloud.com/lylradio/",
+        "name": "LYL Radio",
+        "username": "lylradio"
+      }
+    },
+    {
+      "key": "/lylradio/6-feet-deep-vvs237-26112026/",
+      "url": "https://www.mixcloud.com/lylradio/6-feet-deep-vvs237-26112026/",
+      "name": "6 Feet Deep - VVS237 (26.11.2026)",
+      "created_time": "2026-11-26T21:06:36Z",
+      "audio_length": 3613,
+      "tags": [
+        {
+          "name": "Drill"
+        },
+        {
+          "name": "West Coast Hip Hop"
+        },
+        {
+          "name": "Trap"
+        }
+      ],
+      "pictures": {
+        "320wx320h": "https://thumbnailer.mixcloud.com/unsafe/320x320/extaudio/b/b/e/5/cf6f-0a22-4168-adb0-044d6410977e"
+      },
+      "user": {
+        "url": "https://www.mixcloud.com/lylradio/",
+        "name": "LYL Radio",
+        "username": "lylradio"
+      }
+    },
+    {
+      "key": "/lylradio/script-courage-fuyons-26112026/",
+      "url": "https://www.mixcloud.com/lylradio/script-courage-fuyons-26112026/",
+      "name": "Script - courage fuyons (26.11.2026)",
+      "created_time": "2026-11-26T18:05:59Z",
+      "audio_length": 3363,
+      "tags": [
+        {
+          "name": "Folk"
+        },
+        {
+          "name": "Blooming Guitar"
+        },
+        {
+          "name": "Leftfield"
+        },
+        {
+          "name": "Greek folk"
+        }
+      ],
+      "pictures": {
+        "320wx320h": "https://thumbnailer.mixcloud.com/unsafe/320x320/extaudio/7/6/1/1/5940-6c49-42e3-bd79-3ea5a708c414"
+      },
+      "user": {
+        "url": "https://www.mixcloud.com/lylradio/",
+        "name": "LYL Radio",
+        "username": "lylradio"
+      }
+    }
+  ],
+  "paging": {
+    "next": "https://api.mixcloud.com/lylradio/cloudcasts/?limit=3&offset=3"
+  }
+}

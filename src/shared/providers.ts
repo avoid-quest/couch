@@ -3,6 +3,8 @@ import { isStreamingCommunityHost } from "./streamingcommunity";
 import { isAnimeSaturnHost, animeSaturnPageUrl } from "./animesaturn";
 import { isAnimeUnityHost, animeUnityPageUrl } from "./animeunity";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
+import { archiveLink, isArchiveHost } from "./archives";
+import { isMixcloudHost, mixcloudLink } from "./mixcloud";
 
 export type ProviderId =
   | "youtube"
@@ -13,7 +15,9 @@ export type ProviderId =
   | "streamingcommunity"
   | "movies123"
   | "animesaturn"
-  | "animeunity";
+  | "animeunity"
+  | "mixcloud"
+  | "archives";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export const providerPageSize = 24;
@@ -96,6 +100,8 @@ export function providerForUrl(value: string): ProviderId | undefined {
     if (isMovies123Host(url.hostname)) return "movies123";
     if (isAnimeSaturnHost(url.hostname)) return "animesaturn";
     if (isAnimeUnityHost(url.hostname)) return "animeunity";
+    if (isMixcloudHost(url.hostname)) return "mixcloud";
+    if (isArchiveHost(url.hostname)) return "archives";
     const domains: Partial<Record<ProviderId, string[]>> = {
       youtube: ["youtube.com", "youtu.be"],
       twitch: ["twitch.tv"],
@@ -121,6 +127,10 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       provider = providerForUrl(value);
     if (!provider || url.port || url.hash) return;
     const path = url.pathname.replace(/\/$/, "");
+    if (provider === "mixcloud" || provider === "archives") {
+      const link = provider === "mixcloud" ? mixcloudLink(value) : archiveLink(value);
+      return link?.shape === "atom" ? link.url : undefined;
+    }
     if (provider === "animesaturn") {
       const page = animeSaturnPageUrl(value);
       return page && !page.pathname.startsWith("/anime/") ? page.href : undefined;
@@ -206,4 +216,6 @@ export const providerNames: Record<ProviderId, string> = {
   movies123: "123MoviesFree",
   animesaturn: "AnimeSaturn",
   animeunity: "AnimeUnity",
+  mixcloud: "Mixcloud",
+  archives: "Radio archives",
 };

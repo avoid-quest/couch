@@ -21,6 +21,8 @@ export function readCollectionSearch(search: Record<string, unknown>) {
       "movies123",
       "animesaturn",
       "animeunity",
+      "mixcloud",
+      "archives",
     ].includes(String(search.provider)) &&
     (search.url === undefined ||
       search.url === "" ||

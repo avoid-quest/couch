@@ -84,6 +84,45 @@ a database ID (not the episode number).
   [domain tracker](https://domains-tracker.server66.workers.dev/get) shared with
   StreamingCommunity, validating real catalogue records before adopting it.
 
+## Mixcloud
+
+`api.mixcloud.com`, Mixcloud's public REST API: search (`/search/?type=cloudcast`),
+a user's uploads (`/<user>/cloudcasts/`) with their playlists first, a user's
+playlists and one playlist's mixes, 24 per page by `offset`. The API never gives
+audio: a mix plays through yt-dlp from its page (`www.mixcloud.com/<user>/<mix>/`,
+the URL Couch keeps). Play all and Autoplay take a user's or playlist's first 500
+mixes. Mixcloud throttles with HTTP 403 and `Retry-After` (seconds, also in
+`error.retry_after`); Core sends nothing to Mixcloud until that time has passed
+and says how long to wait.
+
+## Radio archives
+
+Past episodes of the stations in avoid radio, each read from the station's own
+public API by a small module in `src/server/providers/archives/`:
+
+| Station | Search | Lists | Episode recording |
+| --- | --- | --- | --- |
+| Lyl Radio | `strapi.lyl.live/api/lyl/search?q=` | GraphQL `episodesByShow`; a residents page by style (`/shows/residents?styles=`) is `showsByStyles`, then every show's episodes | `audio.url`, else SoundCloud, else Mixcloud |
+| NTS | `/api/v2/search` | `/api/v2/shows/<show>/episodes`, 12 per page | `audio_sources` (SoundCloud or Mixcloud) |
+| Cashmere Radio | WordPress `episode?search=` and show pages | `episode?categories=` (the show's category) | `episode_mixcloud_link` |
+| Sygma Radio | the catalogue embedded in its home page, kept an hour | `backend.radio.syg.ma/shows/<show>.json` | `mc_link` |
+| HKCR | `cms.hkcr.live/shows/search` | `/shows?residents=` | `mixFile.url`, else the Mixcloud player's `feed`, else YouTube |
+| Internet Public Radio | `/api/search` | Sanity GROQ by resident or series | `audioUrl` (SoundCloud or Mixcloud) |
+| Radio BlackOut | WordPress `podcast?search=` (titles) | `podcast?podcastfilter=` (the show's filter) | the post's `<audio>`/`<source>`, else a SoundCloud or Mixcloud player |
+| Resonance Extra | series names from `/api/series_index`, kept a day | `/api/series/<series>` | `mixcloud_stream_url`, or the original broadcast's for a repeat |
+| Radio Alhara | its Mixcloud uploads, kept a day | — (Mixcloud items) | Mixcloud |
+
+- Links classify without fetching (`archiveLink` in `src/shared/archives.ts`,
+  `mixcloudLink` in `src/shared/mixcloud.ts`): an episode page is an atom; a
+  show, resident, series or style page is a playlist, newest first, each
+  episode once, at most 500. Episodes not yet aired are left out.
+- A search asks every station at once; each has 3 seconds. A station that fails
+  or is slow is named ("NTS didn't answer.") and the others still show.
+- Playback resolves the episode page when it plays: the station's own file goes
+  to yt-dlp as a direct file, a SoundCloud or Mixcloud copy as that page. Up
+  next, Saved and history keep the station's episode page; Autoplay continues
+  through the episode's show.
+
 ## Queue limit
 
 Whole-series queueing stops at 500 episodes (Couch's queue limit); longer series
