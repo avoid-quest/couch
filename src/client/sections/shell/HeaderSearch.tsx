@@ -38,7 +38,6 @@ import {
 } from "@/search-palette";
 import { isTvPresentation } from "@/session/presentation";
 import { useSessionGate } from "@/session/session-context";
-import { createId } from "@/session/session";
 import { useShell } from "@/sections/shell/shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -48,7 +47,8 @@ import { historyQuery } from "@/api/progress";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery, radioSearchQuery } from "@/api/radio";
 import { cn } from "@/lib/utils";
-import { providerForUrl, providerNames } from "../../../shared/providers";
+import { linkTarget, providerForUrl, providerNames } from "../../../shared/providers";
+import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
 import type { RadioStation } from "../../../shared/radio";
 import { readSearchRecents, rememberSearch } from "./search-recents";
 
@@ -89,8 +89,15 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   // The palette's selected row: a pasted link's Play, else the query; none while the field is empty (Enter then submits).
   const [selected, setSelected] = useState(none);
+  // A pasted list opens on Play all, a page (a channel, a series) on Open, anything else on Play.
   const first = (next: string) =>
-    !next.trim() ? none : isLink(next.trim()) && connected ? "link:play" : "query";
+    !next.trim()
+      ? none
+      : isLink(next.trim()) && connected
+        ? linkTarget(next.trim())?.shape === "page"
+          ? "link:open"
+          : "link:play"
+        : "query";
   const type = (next: string) => {
     setDraft((current) => ({ ...current, value: next }));
     setSelected(first(next));
@@ -480,15 +487,17 @@ export function HeaderSearch({ className }: { className?: string }) {
                 onRecent={pick}
                 onOpen={(href) => leave(() => details.open(href))}
                 onPlayStation={(station) => leave(() => void shell.enqueueRadio(station, true))}
-                onPlayLink={() =>
+                onLink={(verb, list) =>
                   leave(() => {
-                    void run({
-                      type: "enqueueWeb",
-                      entryId: createId(),
-                      url: text,
-                      quality: videoQualityPreference?.quality ?? "auto",
-                      playNow: true,
-                    });
+                    void run(
+                      linkAction(
+                        text,
+                        linkTarget(text),
+                        verb,
+                        videoQualityPreference?.quality ?? "auto",
+                        list,
+                      ),
+                    );
                     setDraft((current) => ({ ...current, value: "" }));
                     input.current?.blur();
                   })
@@ -740,7 +749,7 @@ function Typed({
   onRecent,
   onOpen,
   onPlayStation,
-  onPlayLink,
+  onLink,
 }: {
   text: string;
   link: boolean;
@@ -753,9 +762,12 @@ function Typed({
   onRecent: (query: string) => void;
   onOpen: (href: string) => void;
   onPlayStation: (station: RadioStation) => void;
-  onPlayLink: () => void;
+  onLink: (verb: LinkVerb, list: { title?: string; count?: number }) => void;
 }) {
   const held = useHeld();
+  const { credentials } = useSessionGate();
+  const target = link ? linkTarget(text) : undefined;
+  const list = usePastedList(credentials, text, target);
   // Suggestions follow the typing once it pauses; the query row follows every key.
   const [settled] = useDebouncedValue(text, { wait: 120 });
   const found = suggest(settled, scope, {
@@ -765,27 +777,58 @@ function Typed({
     stations: held.stations,
   });
   if (link) {
-    const provider = providerForUrl(text);
     const where = text.replace(/^https?:\/\//i, "");
+    const shape = target?.shape ?? "atom";
+    // The first row reads as the link itself; the verbs after it are plain rows.
+    const lead = "min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight";
+    const open = target && (
+      <CommandItem
+        value="link:open"
+        className={cn(shape === "page" && lead)}
+        onSelect={() => onOpen(collectionLocation({ provider: target.provider, url: text }))}
+      >
+        <span className="shrink-0">Open</span>
+        {shape === "page" && (
+          <span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span>
+        )}
+      </CommandItem>
+    );
+    const verb = (value: LinkVerb, label: string, className?: string) => (
+      <CommandItem
+        value={`link:${value}`}
+        disabled={!connected}
+        onSelect={() => onLink(value, list)}
+        className={className}
+      >
+        <span className="shrink-0">{label}</span>
+        {value === "play" && (
+          <span className="min-w-0 truncate font-normal text-muted-foreground">
+            {shape === "playlist" ? (list.title ?? where) : where}
+          </span>
+        )}
+        {shape === "playlist" && listLimit(list.count, value === "play" ? 0 : list.queued) && (
+          <span className="ml-auto shrink-0 font-normal text-muted-foreground">
+            {listLimit(list.count, value === "play" ? 0 : list.queued)}
+          </span>
+        )}
+      </CommandItem>
+    );
     return (
       <CommandGroup>
-        <CommandItem
-          value="link:play"
-          disabled={!connected}
-          onSelect={onPlayLink}
-          className="min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight"
-        >
-          <span className="shrink-0">Play</span>
-          <span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span>
-        </CommandItem>
-        {provider && (
-          <CommandItem
-            value="link:open"
-            onSelect={() => onOpen(collectionLocation({ provider, url: text }))}
-          >
-            Open page
-          </CommandItem>
+        {shape === "page" && open}
+        {shape === "playlist" ? (
+          <>
+            {verb("play", listLabel("Play all", list.count), lead)}
+            {verb("queue", listLabel("Queue all", list.count))}
+          </>
+        ) : (
+          <>
+            {verb("play", "Play", shape === "page" ? undefined : lead)}
+            {shape !== "page" && verb("queue", "Queue")}
+          </>
         )}
+        {shape !== "page" && verb("next", "Play next")}
+        {shape !== "page" && open}
         <CommandItem value="query" onSelect={onSearch}>
           Choose how to play
         </CommandItem>

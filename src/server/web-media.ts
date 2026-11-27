@@ -22,6 +22,7 @@ import { storyboardPreview } from "./playback-preview";
 import { vttPreview, type PreviewInput } from "./preview-manifest";
 import { hlsPreview } from "./hls-preview";
 import type { CollectionLink } from "../shared/media";
+import { browseSpotify, matchSpotifyTrack } from "./providers/spotify";
 
 export type WebMediaMetadata = {
   creator?: CollectionLink;
@@ -364,6 +365,21 @@ function formatSelector(
       : `bv*${filter}${transport}${codecs}+${sound}/${muxed}`;
 }
 
+// The track's own name and cover from Spotify; the stream from its YouTube match.
+async function spotifyMatch(source: string, signal?: AbortSignal) {
+  const { url, item } = await matchSpotifyTrack(source, signal).catch((error: unknown) => {
+    signal?.throwIfAborted();
+    throw new ExtractionError(
+      error instanceof Error ? error.message : "Couch found no YouTube upload of this track.",
+    );
+  });
+  const metadata: WebMediaMetadata = {
+    title: item.title,
+    ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+  };
+  return { url, headers: {}, metadata, subtitles: [] };
+}
+
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
   return async function resolveWebMedia(
@@ -391,8 +407,13 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
           ? await resolveAnimeUnityLink(source, signal)
           : isArchiveHost(host)
             ? await resolveArchiveLink(source, signal)
-            : undefined;
-    const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+            : host === "open.spotify.com"
+              ? await spotifyMatch(source, signal)
+              : undefined;
+    // A Spotify track plays its YouTube match, chosen and checked as YouTube's own items are.
+    const played = new URL(direct?.url ?? source).hostname;
+    const youtube =
+      played === "youtu.be" || played === "youtube.com" || played.endsWith(".youtube.com");
     // yt-dlp's res uses the smaller dimension, including portrait Shorts.
     const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
     // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
@@ -434,7 +455,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         direct?.url ?? streamingCommunity ?? source,
       ],
       { ...options, signal, plugin },
-      plugin ?? providerForUrl(source) ?? "other",
+      plugin ?? (youtube ? "youtube" : undefined) ?? providerForUrl(source) ?? "other",
       async (extracted) => {
         const info = parseInfo(extracted);
         // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
@@ -587,7 +608,9 @@ function createWebMediaInspector(options: ResolverOptions = {}) {
         ? animeSaturnTitle
         : isAnimeUnityHost(host)
           ? animeUnityTitle
-          : undefined;
+          : host === "open.spotify.com"
+            ? spotifyTitle
+            : undefined;
     if (inspectTitle) {
       const { title, thumbnail, duration } = (await inspectTitle(source, signal)).item;
       return { title, thumbnail, duration };
@@ -614,6 +637,12 @@ function createWebMediaInspector(options: ResolverOptions = {}) {
     );
     return publicMetadata(parseInfo(output));
   };
+}
+
+async function spotifyTitle(url: string, signal?: AbortSignal) {
+  const { item } = await browseSpotify({ url }, signal);
+  if (!item) throw new ExtractionError("Couldn't open this page. It may be unsupported.");
+  return { item };
 }
 
 export const resolveWebMedia = createWebMediaResolver();

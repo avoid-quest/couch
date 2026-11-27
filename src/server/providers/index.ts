@@ -13,7 +13,8 @@ import { browseYouTube, youtubeChannelTitle } from "./youtube";
 import { browseTwitch, liveTwitchChannels } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
-import { browseSoundCloud } from "./soundcloud";
+import { browseSoundCloud, loadSoundCloudList } from "./soundcloud";
+import { browseSpotify, loadSpotifyList } from "./spotify";
 import { browseMovies123, loadMovies123List } from "./movies123";
 import { browseAnimeSaturn, loadAnimeSaturnList } from "./animesaturn";
 import { browseAnimeUnity, loadAnimeUnityList } from "./animeunity";
@@ -25,6 +26,8 @@ import { animeSaturnPageUrl } from "../../shared/animesaturn";
 import { animeUnityPageUrl } from "../../shared/animeunity";
 import { movies123PageUrl } from "../../shared/movies123";
 import { loadBandcampAlbum } from "./bandcamp";
+import { browseBandcampFan, loadBandcampFan } from "./bandcamp-fans";
+import { bandcampFanUrl } from "../../shared/providers";
 import { loadRaiPlayProgramme } from "./raiplay";
 import { loadYouTubePlaylist } from "./youtube";
 import { loadStreamingCommunityList } from "./streamingcommunity";
@@ -38,7 +41,11 @@ const adapters = (
   youtube: browseYouTube,
   twitch: browseTwitch,
   raiplay: browseRaiPlay,
-  bandcamp: browseBandcamp,
+  // A fan's collection or wishlist is a page of its own; search, albums and tracks are the catalogue's.
+  bandcamp: (request, signal) =>
+    request.url && bandcampFanUrl(request.url)
+      ? browseBandcampFan(request.url, request.cursor, signal)
+      : browseBandcamp(request, signal),
   soundcloud: browseSoundCloud,
   streamingcommunity: async (request, signal) =>
     browseStreamingCommunity(request, signal, await streamingCommunityOrigin()),
@@ -47,6 +54,7 @@ const adapters = (
   animeunity: browseAnimeUnity,
   mixcloud: browseMixcloud,
   archives: browseArchives,
+  spotify: browseSpotify,
 });
 const providerIds = new Set(Object.keys(adapters(async () => "")));
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -67,6 +75,7 @@ function publicUrl(value: unknown, provider?: ProviderId): string {
     raiplay: ["raiplay.it"],
     bandcamp: ["bandcamp.com"],
     soundcloud: ["soundcloud.com"],
+    spotify: ["open.spotify.com"],
   };
   const hostAllowed = (candidate: ProviderId) =>
     candidate === "streamingcommunity"
@@ -153,10 +162,11 @@ export async function loadProviderList(
   url: string,
   signal?: AbortSignal,
 ): Promise<ProviderPage> {
-  if (provider === "soundcloud")
-    throw new ProviderError("Choose an individual SoundCloud track.", 400);
+  if (provider === "soundcloud") return loadSoundCloudList(url, signal);
+  if (provider === "spotify") return loadSpotifyList({ url }, signal);
   if (provider === "youtube") return loadYouTubePlaylist(url, signal);
-  if (provider === "bandcamp") return loadBandcampAlbum(url, signal);
+  if (provider === "bandcamp")
+    return bandcampFanUrl(url) ? loadBandcampFan(url, signal) : loadBandcampAlbum(url, signal);
   if (provider === "raiplay") return loadRaiPlayProgramme(url, signal);
   if (provider === "streamingcommunity") return loadStreamingCommunityList(url, signal);
   if (provider === "movies123") return loadMovies123List(url, signal);
@@ -419,7 +429,7 @@ export function createProviders({
           );
         }
         const match =
-          /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|soundcloud|streamingcommunity|movies123|animesaturn|animeunity|mixcloud|archives)\/items$/.exec(
+          /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|soundcloud|streamingcommunity|movies123|animesaturn|animeunity|mixcloud|archives|spotify)\/items$/.exec(
             pathname,
           );
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });

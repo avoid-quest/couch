@@ -17,7 +17,8 @@ export type ProviderId =
   | "animesaturn"
   | "animeunity"
   | "mixcloud"
-  | "archives";
+  | "archives"
+  | "spotify";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export const providerPageSize = 24;
@@ -44,6 +45,8 @@ export type ProviderItem = {
 export type ProviderPage = {
   item?: ProviderItem;
   items: ProviderItem[];
+  /** How many items the whole list holds, when the source says (a paged list shows only its first). */
+  count?: number;
   nextCursor?: string;
   title?: string;
   thumbnail?: string;
@@ -108,6 +111,7 @@ export function providerForUrl(value: string): ProviderId | undefined {
       raiplay: ["raiplay.it"],
       bandcamp: ["bandcamp.com"],
       soundcloud: ["soundcloud.com"],
+      spotify: ["open.spotify.com"],
     };
     return (Object.keys(domains) as ProviderId[]).find((provider) =>
       domains[provider]!.some(
@@ -218,4 +222,155 @@ export const providerNames: Record<ProviderId, string> = {
   animeunity: "AnimeUnity",
   mixcloud: "Mixcloud",
   archives: "Radio archives",
+  spotify: "Spotify",
 };
+
+const soundCloudHosts = ["soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"];
+// First path segments that are SoundCloud's own pages, not a profile.
+const soundCloudPages =
+  /^(?:search|discover|you|stations|charts|library|upload|pages|settings|messages|notifications|feed|people|tags|jobs|imprint|pro|connect|mobile|logout|signin|terms-of-use|popular)$/i;
+
+/** A public SoundCloud set (`/<user>/sets/<set>`) or profile (`/<user>`), canonical; never a private or reserved page. */
+export function soundCloudListUrl(value: string): string | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !soundCloudHosts.includes(url.hostname) ||
+      url.searchParams.has("secret_token")
+    )
+      return;
+    const path = url.pathname.replace(/\/$/, "");
+    const match = /^\/([a-z0-9_-]+)(\/sets\/[a-z0-9_-]+)?$/i.exec(path);
+    if (!match || soundCloudPages.test(match[1]!)) return;
+    return `https://soundcloud.com${path}`;
+  } catch {
+    return;
+  }
+}
+
+// bandcamp.com's own pages, not a fan's.
+const bandcampPages =
+  /^(?:api|search|tag|tags|discover|login|signup|help|about|artists|fans|labels|terms_of_use|privacy|guide|gift_cards|settings|yum|feed|apps|developer|community|daily|EmbeddedPlayer|stream_redirect|download|cart|contact)$/i;
+
+/** A Bandcamp fan's public collection (`bandcamp.com/<fan>`) or wishlist (`/<fan>/wishlist`), canonical. */
+export function bandcampFanUrl(
+  value: string,
+): { url: string; fan: string; list: "collection" | "wishlist" } | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !["bandcamp.com", "www.bandcamp.com"].includes(url.hostname)
+    )
+      return;
+    const match = /^\/([a-z0-9_]{1,64})(\/wishlist)?\/?$/i.exec(url.pathname);
+    if (!match || bandcampPages.test(match[1]!)) return;
+    const fan = match[1]!.toLowerCase();
+    return {
+      url: `https://bandcamp.com/${fan}${match[2] ? "/wishlist" : ""}`,
+      fan,
+      list: match[2] ? "wishlist" : "collection",
+    };
+  } catch {
+    return;
+  }
+}
+
+/** A Spotify track, album or playlist link (`open.spotify.com[/intl-xx]/<kind>/<id>`), canonical. */
+export function spotifyLink(
+  value: string,
+): { url: string; kind: "track" | "album" | "playlist"; id: string } | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hostname !== "open.spotify.com"
+    )
+      return;
+    const match =
+      /^(?:\/intl-[a-z]{2}(?:-[a-z]{2})?)?\/(track|album|playlist)\/([A-Za-z0-9]{22})\/?$/i.exec(
+        url.pathname,
+      );
+    if (!match) return;
+    const kind = match[1]!.toLowerCase() as "track" | "album" | "playlist";
+    return { url: `https://open.spotify.com/${kind}/${match[2]}`, kind, id: match[2]! };
+  } catch {
+    return;
+  }
+}
+
+/**
+ * What a pasted link is, from its URL alone (no fetch, so Enter is always safe): an `atom` plays by itself, a `playlist`
+ * queues whole, and a `page` (a channel, a series, a category) is opened to choose from. Undefined: Couch's providers
+ * don't open it, and it plays as a webpage.
+ */
+export type LinkTarget = { provider: ProviderId; shape: MediaShape | "page" };
+type LinkClassifier = (url: string) => LinkTarget | undefined;
+
+function builtInLink(value: string): LinkTarget | undefined {
+  const provider = providerForUrl(value);
+  if (!provider) return;
+  const path = new URL(value).pathname.replace(/\/$/, "");
+  // Twitch pages list only channels and categories; a VOD plays as a webpage.
+  if (provider === "twitch")
+    return path.startsWith("/videos/") ? undefined : { provider, shape: "page" };
+  if (provider === "spotify") {
+    const link = spotifyLink(value);
+    return link && { provider, shape: link.kind === "track" ? "atom" : "playlist" };
+  }
+  if (provider === "youtube" && isYouTubePlaylistUrl(value))
+    return { provider, shape: path === "/playlist" ? "playlist" : "atom" };
+  // Share links carry tracking and start-time parameters (`?si=`, `&t=`) that don't change what plays.
+  const page = new URL(value);
+  page.hash = "";
+  if (provider === "youtube") {
+    const v = page.searchParams.get("v");
+    page.search = path === "/watch" && v ? `?v=${encodeURIComponent(v)}` : "";
+  } else if (["soundcloud", "bandcamp", "raiplay"].includes(provider)) page.search = "";
+  if (publicProviderMediaUrl(page.href)) return { provider, shape: "atom" };
+  if (provider === "soundcloud")
+    return soundCloudListUrl(value) ? { provider, shape: "playlist" } : undefined;
+  if (provider === "bandcamp")
+    return /^[a-z0-9-]+\.bandcamp\.com$/i.test(new URL(value).hostname) &&
+      /^\/album\/[a-z0-9_-]+$/i.test(path)
+      ? { provider, shape: "playlist" }
+      : bandcampFanUrl(value)
+        ? { provider, shape: "playlist" }
+        : undefined;
+  return { provider, shape: "page" };
+}
+
+/** Each host's classifier, first match wins. */
+const linkClassifiers: LinkClassifier[] = [
+  (value) => {
+    const link = archiveLink(value) ?? mixcloudLink(value);
+    return link && { provider: link.provider, shape: link.shape };
+  },
+  builtInLink,
+];
+
+export function linkTarget(value: string): LinkTarget | undefined {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
+  } catch {
+    return;
+  }
+  for (const classify of linkClassifiers) {
+    const target = classify(value);
+    if (target) return target;
+  }
+}

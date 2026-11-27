@@ -23,6 +23,7 @@ export function readCollectionSearch(search: Record<string, unknown>) {
       "animeunity",
       "mixcloud",
       "archives",
+      "spotify",
     ].includes(String(search.provider)) &&
     (search.url === undefined ||
       search.url === "" ||

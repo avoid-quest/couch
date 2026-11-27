@@ -78,7 +78,7 @@ for (const channel of [
     });
     const page = await load(source);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.slice(-4)).toEqual(["--playlist-items", "1:501", "--", `${source}/videos`]);
+    expect(calls[0]!.slice(-4)).toEqual(["--playlist-items", "1:500", "--", `${source}/videos`]);
     expect(page.items.map((item) => item.url)).toEqual([
       "https://www.youtube.com/watch?v=abcdefghijk",
       "https://www.youtube.com/watch?v=lmnopqrstuv",

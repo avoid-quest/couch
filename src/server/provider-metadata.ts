@@ -8,6 +8,7 @@ import { movies123Title } from "./providers/movies123";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
 import { archiveEpisode } from "./providers/archives";
+import { browseSpotify } from "./providers/spotify";
 
 export type ProviderMetadata = Pick<
   QueueEntry,
@@ -64,6 +65,7 @@ export async function resolveProviderMetadata(
           : undefined;
   if (title) return providerMetadata((await title(url, signal, fetchPage)).item);
   if (provider === "archives") return providerMetadata(await archiveEpisode(url, signal));
+  if (provider === "spotify") return providerMetadata((await browseSpotify({ url }, signal)).item);
   if (providerForUrl(url) !== "streamingcommunity") return {};
   const context = /\/titles\/\d+-[\w-]+$/.test(new URL(url).pathname)
     ? { titleUrl: url, seasonUrl: undefined, episodeId: undefined }
@@ -111,9 +113,14 @@ export function createProviderMetadata({
     if (
       shutdown.signal.aborted ||
       pending.size >= 100 ||
-      !["streamingcommunity", "movies123", "animesaturn", "animeunity", "archives"].includes(
-        providerForUrl(url) ?? "",
-      )
+      ![
+        "streamingcommunity",
+        "movies123",
+        "animesaturn",
+        "animeunity",
+        "archives",
+        "spotify",
+      ].includes(providerForUrl(url) ?? "")
     )
       return Promise.resolve({});
     const task = Promise.withResolvers<ProviderMetadata>();

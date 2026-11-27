@@ -338,6 +338,9 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
             },
           }
         : {}),
+      ...(isYouTubePlaylistUrl(source.url) && typeof info.playlist_count === "number"
+        ? { count: info.playlist_count }
+        : {}),
       ...(source.kind === "collection"
         ? {
             thumbnail: thumbnail(info, source),
@@ -393,7 +396,8 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
         "--flat-playlist",
         "--dump-single-json",
         "--playlist-items",
-        "1:501",
+        // Couch's queue limit: a longer list queues its first 500.
+        "1:500",
         "--",
         source.url,
       ],
@@ -408,18 +412,11 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
     }
     if (!object(info) || info._type !== "playlist" || !Array.isArray(info.entries))
       throw new ProviderError("YouTube returned invalid playlist information.");
-    if (
-      info.entries.length > 500 ||
-      (typeof info.playlist_count === "number" && info.playlist_count > 500)
-    )
-      throw new ProviderError(
-        "This playlist has more than 500 videos. Add individual videos instead.",
-        400,
-      );
+    const count = typeof info.playlist_count === "number" ? info.playlist_count : undefined;
     if (
       isYouTubePlaylistUrl(source.url) &&
-      info.playlist_count != null &&
-      info.playlist_count !== info.entries.length
+      count !== undefined &&
+      Math.min(count, 500) !== Math.min(info.entries.length, 500)
     )
       throw new ProviderError(
         "YouTube returned an incomplete playlist. Try again or add individual videos.",
@@ -436,7 +433,7 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
         throw new ProviderError("YouTube returned a different playlist.");
     }
     const creator = channelSection ? channelCreator(info) : undefined;
-    const items = info.entries.map((raw) => item(raw, creator));
+    const items = info.entries.slice(0, 500).map((raw) => item(raw, creator));
     if (!items.length) throw new ProviderError("This playlist is empty.");
     if (items.some((entry) => !entry || entry.kind !== "media"))
       throw new ProviderError(
@@ -445,6 +442,7 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
     const title = label(info.title) ?? (channelSection ? "YouTube channel" : "YouTube playlist");
     return {
       title,
+      ...(count === undefined ? {} : { count }),
       items: (items as ProviderItem[]).map((entry, index) =>
         isYouTubePlaylistUrl(source.url)
           ? { ...entry, collection: { title, url: source.url, index } }

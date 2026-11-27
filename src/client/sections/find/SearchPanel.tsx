@@ -30,7 +30,7 @@ import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import {
-  providerForUrl,
+  linkTarget,
   type ProviderId,
   type ProviderItem,
   type VideoQuality,
@@ -67,6 +67,7 @@ import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SaveToggle, verbRow } from "@/components/DetailHeader";
 import { useLiveSourceHits } from "./useLiveSourceHits";
+import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
 
 export type Props = {
   origin: string;
@@ -1061,7 +1062,14 @@ function PastedLink({
   }, [props.origin, props.token, props.connected]);
   const { hostname, pathname } = new URL(url);
   const { on } = usePlayOn();
-  async function send(playNow: boolean, deviceId?: string) {
+  const target = linkTarget(url);
+  const listed = target?.shape === "playlist";
+  const list = usePastedList(
+    props.origin && props.token ? { origin: props.origin, token: props.token } : null,
+    url,
+    target,
+  );
+  async function send(verb: LinkVerb, deviceId?: string) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
@@ -1069,14 +1077,15 @@ function PastedLink({
     try {
       if (
         (await props.onCommand(
-          mode === "Direct media"
+          mode === "Direct media" && !listed
             ? {
                 type: "enqueue",
                 entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url },
-                playNow,
+                ...(verb === "play" ? { playNow: true } : {}),
+                ...(verb === "next" ? { placement: "next" as const } : {}),
                 deviceId,
               }
-            : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, deviceId },
+            : linkAction(url, target, verb, quality, list, deviceId),
         )) &&
         !signal.aborted
       )
@@ -1086,23 +1095,29 @@ function PastedLink({
     }
   }
   const navigation = useDetailNavigation();
-  const provider = providerForUrl(url);
   const disabled = !props.connected || pending;
+  const limits = [
+    listLimit(list.count) && `Play all keeps the ${listLimit(list.count)}`,
+    listLimit(list.count, list.queued) &&
+      `Queue all adds the ${listLimit(list.count, list.queued)}`,
+  ].filter(Boolean);
   return (
     <section className="max-w-3xl space-y-4" aria-label="Pasted link">
       <SettingsSection>
-        <SettingsRow label="Open as">
-          <ChoiceGroup
-            label="Open link as"
-            value={mode}
-            onValueChange={setMode}
-            disabled={disabled}
-            options={[
-              { value: "Webpage", label: "Webpage" },
-              { value: "Direct media", label: "Direct media" },
-            ]}
-          />
-        </SettingsRow>
+        {!listed && (
+          <SettingsRow label="Open as">
+            <ChoiceGroup
+              label="Open link as"
+              value={mode}
+              onValueChange={setMode}
+              disabled={disabled}
+              options={[
+                { value: "Webpage", label: "Webpage" },
+                { value: "Direct media", label: "Direct media" },
+              ]}
+            />
+          </SettingsRow>
+        )}
         {mode === "Webpage" && supportsWebVideoQuality(url) && (
           <SettingsRow label="Quality">
             <ChoiceGroup
@@ -1116,32 +1131,39 @@ function PastedLink({
         )}
       </SettingsSection>
       <div className="flex flex-wrap gap-2">
-        {/* Keep playback available for provider links outside the catalog, such as Twitch VODs. */}
-        {provider && (
+        {/* Open shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage. */}
+        {target && (
           <Button
             variant="outline"
-            onClick={() => navigation.open(collectionLocation({ provider, url }))}
+            onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
           >
             Open page
           </Button>
         )}
         <Button
           disabled={disabled || !props.canPlay || !props.onCommand}
-          onClick={() => void send(true)}
+          onClick={() => void send("play")}
         >
-          {on("Play")}
+          {on(listed ? listLabel("Play all", list.count) : "Play")}
         </Button>
         <PlayOnMenu
-          title={hostname + pathname}
+          title={list.title ?? hostname + pathname}
           disabled={disabled || !props.canPlay || !props.onCommand}
-          onPlay={(deviceId) => void send(true, deviceId)}
+          onPlay={(deviceId) => void send("play", deviceId)}
         />
         <Button
           variant="ghost"
           disabled={disabled || !props.onCommand}
-          onClick={() => void send(false)}
+          onClick={() => void send("queue")}
         >
-          Queue
+          {listed ? listLabel("Queue all", list.count) : "Queue"}
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={disabled || !props.onCommand}
+          onClick={() => void send("next")}
+        >
+          Play next
         </Button>
         {/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && (
           <Button variant="ghost" onClick={() => props.onManageSources?.("streaming-community")}>
@@ -1149,6 +1171,11 @@ function PastedLink({
           </Button>
         )}
       </div>
+      {limits.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Up next holds 500 items: {limits.join(", ")}.
+        </p>
+      )}
     </section>
   );
 }
