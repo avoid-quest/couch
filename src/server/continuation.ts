@@ -71,7 +71,7 @@ export function createContinuationResolver(loadList = loadProviderList) {
       const next = episode && streamingEpisode(candidate);
       return (
         candidate === url ||
-        ((provider === "youtube" || provider === "animesaturn" || provider === "animeunity") &&
+        (["youtube", "animesaturn", "animeunity", "mixcloud", "archives"].includes(provider) &&
           !!publicProviderMediaUrl(url) &&
           publicProviderMediaUrl(candidate) === publicProviderMediaUrl(url)) ||
         (!!movies123 && movies123PageUrl(candidate)?.href === movies123.href) ||

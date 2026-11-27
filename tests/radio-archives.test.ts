@@ -8,6 +8,7 @@ import {
   resolveArchiveLink,
 } from "../src/server/providers/archives";
 import { browseMixcloud } from "../src/server/providers/mixcloud";
+import { createContinuationResolver } from "../src/server/continuation";
 import bailefunk from "./fixtures/archives/lyl-baile-funk.json";
 import lylSearch from "./fixtures/archives/lyl-search.json";
 import blackoutPodcast from "./fixtures/archives/blackout-podcast.json";
@@ -222,4 +223,27 @@ test("Mixcloud's throttle is respected: Couch waits as long as it was told befor
   await expect(browseMixcloud({ query: "lyl" })).rejects.toThrow(/Try again in 30 s/);
   await expect(browseMixcloud({ query: "nts" })).rejects.toThrow(/Try again in/);
   expect(asked).toHaveLength(1);
+});
+
+test("a pasted episode continues through its show, however the link was spelled", async () => {
+  const older = { ...blackoutPodcast[0]!, slug: "older-episode", title: "Older" };
+  serve((url) => {
+    if (url.pathname.endsWith("/podcastfilter"))
+      return Response.json([{ id: 8162, name: "arsider" }]);
+    if (url.pathname.endsWith("/shows")) return Response.json([{ title: "ARSIDER" }]);
+    if (url.searchParams.has("podcastfilter")) return Response.json([blackoutPodcast[0], older]);
+    if (url.pathname.endsWith("/podcast")) return Response.json(blackoutPodcast);
+  });
+  const next = await createContinuationResolver()(
+    {
+      id: "entry",
+      title: "UN MESE IN VETRINA",
+      source: "web:https://radioblackout.org/podcast/un-mese-in-vetrina",
+    },
+    AbortSignal.timeout(5_000),
+  );
+  expect(next?.title).toBe("ARSIDER");
+  expect(next?.entries.map((entry) => [entry.source, entry.collection?.index])).toEqual([
+    ["web:https://radioblackout.org/podcast/older-episode/", 1],
+  ]);
 });
