@@ -200,8 +200,7 @@ function OnlineResults(props: Props) {
     state?.devices?.map(({ id, name }) => [id, name]),
   ]);
   const request = props.url ? { url: props.url } : { query: props.query };
-  // Hidden sources still report search counts. Active controls presentation,
-  // not whether a source participates in the cross-source search.
+  // Active controls presentation (Twitch's live refresh), not whether the source is searched.
   const refetchInterval = provider === "twitch" && props.connected && props.active ? 20_000 : false;
   const browse = useInfiniteQuery({
     ...providerBrowseQuery(props, provider, request),

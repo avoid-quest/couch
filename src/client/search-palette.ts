@@ -1,3 +1,4 @@
+import { fold } from "../shared/search-text";
 import { canReturn, searchRelevance, type SearchKind, type SearchRouteState } from "./search";
 
 /** What a search is narrowed to before it runs: the results page's kind and source, or none. */
@@ -38,11 +39,7 @@ export const scopes: Scope[] = [
   { source: "Shared sources", label: "Shared sources", words: ["shared"] },
 ];
 
-const squash = (value: string) =>
-  value
-    .normalize("NFC")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
+const squash = (value: string) => fold(value).replace(/[^\p{L}\p{N}]+/gu, "");
 /** The scopes the typed text names, best first: an exact name or short form, then those it starts. Two letters at least. */
 function matchScopes(text: string): Scope[] {
   const typed = squash(text);
@@ -107,7 +104,7 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
   limit = 3,
 ) {
   const { strong } = searchRelevance(text);
-  const typed = text.trim().toLocaleLowerCase();
+  const typed = fold(text.trim());
   const radio = !current.kind || current.kind === "radio";
   const titled = <I extends Titled>(items: I[]) =>
     current.kind === "radio"
@@ -130,7 +127,7 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
   return {
     scopes: matchScopes(text).slice(0, 3),
     recents: held.recents
-      .filter((query) => query.toLocaleLowerCase() !== typed && strong({ title: query }))
+      .filter((query) => fold(query.trim()) !== typed && strong({ title: query }))
       .slice(0, limit),
     saved: titled(held.saved).filter(once),
     played: titled(held.played).filter(once),
