@@ -7,8 +7,9 @@ phone. Everyone sees the same Up next, who added what, and what plays next.
 
 ## Journey
 
-1. **Search or paste a link**: YouTube, Twitch, Bandcamp, SoundCloud, RaiPlay or
-   any page yt-dlp understands (**Open as → Webpage / Direct media**).
+1. **Search or paste a link** ([Find and play anything](find-and-play-anything.md)):
+   YouTube, Twitch, Bandcamp, SoundCloud, Mixcloud, RaiPlay, radio archives or any
+   page yt-dlp understands (**Open as → Webpage / Direct media**).
 2. **Play** starts it now, **Queue** adds it to the end, **Play next** after
    what's playing.
 3. **Up next**: **Earlier**, **Later**, **Play next**, **Remove** (with
