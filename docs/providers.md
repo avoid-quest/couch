@@ -91,7 +91,8 @@ a user's uploads (`/<user>/cloudcasts/`) with their playlists first, a user's
 playlists and one playlist's mixes, 24 per page by `offset`. The API never gives
 audio: a mix plays through yt-dlp from its page (`www.mixcloud.com/<user>/<mix>/`,
 the URL Couch keeps). Play all and Autoplay take a user's or playlist's first 500
-mixes. Mixcloud throttles with HTTP 403 and `Retry-After` (seconds, also in
+mixes, its pages sharing one 30-second deadline; a user's page says how many uploads
+they have. A user's playlists page is opened to choose a playlist. Mixcloud throttles with HTTP 403 and `Retry-After` (seconds, also in
 `error.retry_after`); Core sends nothing to Mixcloud until that time has passed
 and says how long to wait.
 
@@ -116,6 +117,10 @@ public API by a small module in `src/server/providers/archives/`:
   `mixcloudLink` in `src/shared/mixcloud.ts`): an episode page is an atom; a
   show, resident, series or style page is a playlist, newest first, each
   episode once, at most 500. Episodes not yet aired are left out.
+- Every request goes through the public network boundary, and a list's pages share
+  one 30-second deadline. Pictures are shown only from each station's own image
+  hosts. WordPress stations (Cashmere, Radio BlackOut) stop at the last page
+  `X-WP-TotalPages` counts.
 - A search asks every station at once; each has 3 seconds. A station that fails
   or is slow is named ("NTS didn't answer.") and the others still show.
 - Playback resolves the episode page when it plays: the station's own file goes
@@ -129,9 +134,11 @@ A fan's collection (`bandcamp.com/<fan>`) and wishlist (`/<fan>/wishlist`) read
 the page's `pagedata` literal (fan ID, first items, paging token), then page with
 the site's own `POST /api/fancollection/1/{collection,wishlist}_items`. bandcamp.com
 challenges Node's HTTP client, so both requests go through the managed yt-dlp's
-transport, as Bandcamp search does (`vendor/bandcamp`). **Play all** on a fan page
-queues the tracks of the items the page shows first, each album's in order, listed
-flat in one extraction; the rest stay on the page to open one by one.
+transport, as Bandcamp search does (`vendor/bandcamp`), each read at most 4 MiB with
+redirects refused. **Play all** and **Queue all** on a fan page page through the list
+(100 releases a request) until its releases hold 500 tracks, then read the albums a
+few per extraction in parallel, each album's tracks in order, all within 30 seconds.
+An album that fails is skipped; what was read when the time runs out is what plays.
 
 ## SoundCloud lists
 
