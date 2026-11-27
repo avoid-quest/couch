@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { createBandcampCatalog } from "../src/server/providers/bandcamp";
-import { createSoundCloudBrowser } from "../src/server/providers/soundcloud";
+import {
+  createSoundCloudBrowser,
+  createSoundCloudListLoader,
+} from "../src/server/providers/soundcloud";
+import { createSpotifyCatalog } from "../src/server/providers/spotify";
+import { createBandcampFans } from "../src/server/providers/bandcamp-fans";
 import { ExtractionError } from "../src/server/yt-dlp";
 
 const album = {
@@ -194,7 +199,7 @@ test("SoundCloud details are independently openable and query text cannot select
     { query: "arsider", cursor: "1" },
     { query: "arsider", cursor: "2424" },
     { url: "https://example.com/arsider/track" },
-    { url: "https://soundcloud.com/arsider/sets/album" },
+    { url: "https://soundcloud.com/discover" },
     { url: `${soundcloud().webpage_url}?secret_token=private` },
   ]) {
     await expect(browse(request)).rejects.toThrow();
@@ -216,4 +221,221 @@ test("SoundCloud filters unsafe results and rejects invalid upstream data", asyn
     await expect(createSoundCloudBrowser(async () => output)({ query: "arsider" })).rejects.toThrow(
       "invalid catalog information",
     );
+});
+
+test("SoundCloud sets and profiles browse a page at a time and queue their first 500 tracks", async () => {
+  const set = "https://soundcloud.com/arsiderprod/sets/album";
+  const calls: string[][] = [];
+  const run = async (args: string[]) => {
+    calls.push(args);
+    const [from, to] = args[args.indexOf("--playlist-items") + 1]!.split(":").map(Number);
+    return JSON.stringify({
+      _type: "playlist",
+      title: "Album",
+      uploader: "Arsider Produzioni",
+      playlist_count: 600,
+      entries: Array.from({ length: to! - from! + 1 }, (_, index) => soundcloud(from! - 1 + index)),
+    });
+  };
+  const page = await createSoundCloudBrowser(run)({ url: `${set}?si=share` });
+  expect(calls[0]?.at(-1)).toBe(set);
+  expect(page.item).toMatchObject({ kind: "collection", url: set, title: "Album" });
+  expect(page.count).toBe(600);
+  expect(page.items).toHaveLength(24);
+  expect(page.items[1]?.collection).toEqual({ title: "Album", url: set, index: 1 });
+  expect(page.nextCursor).toBe("24");
+  const next = await createSoundCloudBrowser(run)({ url: set, cursor: "24" });
+  expect(next.items[0]?.collection?.index).toBe(24);
+  const list = await createSoundCloudListLoader(run)(set);
+  expect(calls.at(-1)).toContain("1:500");
+  expect(list.items).toHaveLength(500);
+  expect(list.count).toBe(600);
+  await expect(createSoundCloudListLoader(run)(soundcloud().webpage_url)).rejects.toMatchObject({
+    status: 400,
+  });
+});
+
+const spotifyPage = (entity: unknown) =>
+  new Response(
+    `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+      props: { pageProps: { state: { data: { entity } } } },
+    })}</script></html>`,
+  );
+const spotifyAlbum = "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy";
+const albumEntity = {
+  type: "album",
+  id: "4aawyAB9vmqN3uQ7FjRGTy",
+  title: "Global Warming",
+  subtitle: "Pitbull",
+  visualIdentity: {
+    image: [
+      { url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d00004851aaaa", maxWidth: 64 },
+      { url: "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273bbbb", maxWidth: 640 },
+    ],
+  },
+  trackList: [
+    {
+      uri: "spotify:track:6OmhkSOpvYBokMKQxpIGx2",
+      title: "Global Warming (feat. Sensato)",
+      subtitle: "Pitbull,\u00a0Sensato",
+      duration: 85400,
+    },
+    { uri: "spotify:local:x", title: "Local file", duration: 1000 },
+    {
+      uri: "spotify:track:2iblMMIgSznA464mNov7A8",
+      title: "Gone",
+      duration: 2000,
+      isPlayable: false,
+    },
+  ],
+};
+const trackEntity = {
+  type: "track",
+  id: "6OmhkSOpvYBokMKQxpIGx2",
+  uri: "spotify:track:6OmhkSOpvYBokMKQxpIGx2",
+  title: "Global Warming (feat. Sensato)",
+  artists: [{ name: "Pitbull" }, { name: "Sensato" }],
+  duration: 85400,
+};
+
+test("Spotify reads a list's tracks from its public embed page and keeps their Spotify links", async () => {
+  const urls: string[] = [];
+  const catalog = createSpotifyCatalog((async (url: string) => {
+    urls.push(url);
+    return spotifyPage(albumEntity);
+  }) as typeof fetch);
+  const page = await catalog.browse({ url: `${spotifyAlbum}?si=share` });
+  expect(urls).toEqual(["https://open.spotify.com/embed/album/4aawyAB9vmqN3uQ7FjRGTy"]);
+  expect(page.item).toMatchObject({ provider: "spotify", kind: "collection", url: spotifyAlbum });
+  expect(page.items).toEqual([
+    {
+      id: expect.any(String),
+      provider: "spotify",
+      kind: "media",
+      title: "Global Warming (feat. Sensato)",
+      url: "https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2",
+      subtitle: "Pitbull, Sensato, plays from YouTube",
+      thumbnail: "https://image-cdn-ak.spotifycdn.com/image/ab67616d0000b273bbbb",
+      collection: { title: "Global Warming", url: spotifyAlbum, index: 0 },
+      duration: 85.4,
+    },
+  ]);
+  for (const body of [
+    "<html></html>",
+    JSON.stringify({}),
+    '<script id="__NEXT_DATA__" type="application/json">{</script>',
+  ])
+    await expect(
+      createSpotifyCatalog((async () => new Response(body)) as typeof fetch).browse({
+        url: spotifyAlbum,
+      }),
+    ).rejects.toThrow("Spotify changed its player page");
+  await expect(
+    createSpotifyCatalog((async () =>
+      spotifyPage({ ...albumEntity, id: "0000000000000000000000" })) as typeof fetch).browse({
+      url: spotifyAlbum,
+    }),
+  ).rejects.toThrow("Spotify changed its player page");
+});
+
+test("A Spotify track plays the first YouTube hit within 10 seconds of its length", async () => {
+  const queries: string[] = [];
+  const hit = (id: string, duration: number) => ({
+    id,
+    provider: "youtube" as const,
+    kind: "media" as const,
+    title: id,
+    url: `https://www.youtube.com/watch?v=${id}`,
+    duration,
+  });
+  const catalog = (durations: number[]) =>
+    createSpotifyCatalog(
+      (async () => spotifyPage(trackEntity)) as typeof fetch,
+      async ({ query }) => {
+        queries.push(query!);
+        return { items: durations.map((duration, index) => hit(`video${index}abcd`, duration)) };
+      },
+    );
+  const { url, item } = await catalog([200, 96, 90]).match(
+    "https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2",
+  );
+  expect(queries).toEqual(["Pitbull, Sensato Global Warming (feat. Sensato)"]);
+  expect(url).toBe("https://www.youtube.com/watch?v=video2abcd");
+  expect(item.url).toBe("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2");
+  await expect(
+    catalog([200]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
+  ).rejects.toThrow("no YouTube upload");
+  await expect(catalog([90]).match(spotifyAlbum)).rejects.toMatchObject({ status: 400 });
+});
+
+test("A Bandcamp fan's page lists its items, pages with its token, and Play all queues their tracks", async () => {
+  const escape = (value: unknown) =>
+    JSON.stringify(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  const collected = (type: "a" | "t", host: string, slug: string) => ({
+    tralbum_type: type,
+    item_url: `https://${host}.bandcamp.com/${type === "a" ? "album" : "track"}/${slug}`,
+    item_title: `${slug} & co`,
+    band_name: host,
+    item_art_id: 3758392852,
+  });
+  const blob = {
+    fan_data: { fan_id: 957304, name: "Bimbo in Lacrime", username: "fan" },
+    collection_data: { item_count: 4, last_token: "1789822872:3585349819:a::" },
+    item_cache: {
+      collection: {
+        a1: collected("a", "label", "first"),
+        t2: collected("t", "artist", "single"),
+        x3: { ...collected("a", "label", "elsewhere"), item_url: "https://music.example/album/x" },
+      },
+    },
+  };
+  const calls: string[][] = [];
+  const fans = createBandcampFans(async (args) => {
+    calls.push(args);
+    const url = args.at(-1)!;
+    if (url === "https://bandcamp.com/fan")
+      return JSON.stringify({
+        couch_bandcamp_page: `<div id="pagedata" data-blob="${escape(blob)}"></div>`,
+      });
+    if (url.startsWith("https://bandcamp.com/api/"))
+      return JSON.stringify({
+        couch_bandcamp_page: JSON.stringify({
+          items: [collected("t", "artist", "older")],
+          more_available: false,
+        }),
+      });
+    return JSON.stringify({
+      _type: "playlist",
+      webpage_url: "https://label.bandcamp.com/album/first",
+      entries: [1, 2].map((n) => ({
+        url: `https://label.bandcamp.com/track/song-${n}`,
+        title: `Song ${n}`,
+      })),
+    });
+  });
+  const page = await fans.browse("https://www.bandcamp.com/fan/");
+  expect(page.item).toMatchObject({ kind: "collection", url: "https://bandcamp.com/fan" });
+  expect(page.title).toBe("Bimbo in Lacrime's collection");
+  expect(page.items.map((item) => [item.kind, item.title])).toEqual([
+    ["collection", "first & co"],
+    ["media", "single & co"],
+  ]);
+  expect(page.items[0]?.thumbnail).toBe("https://f4.bcbits.com/img/a3758392852_5.jpg");
+  expect(page.nextCursor).toBe("957304/1789822872:3585349819:a::");
+  const next = await fans.browse("https://bandcamp.com/fan", page.nextCursor);
+  expect(calls.at(-1)?.at(-1)).toBe(
+    "https://bandcamp.com/api/fancollection/1/collection_items?fan_id=957304&older_than_token=1789822872:3585349819:a::&count=24",
+  );
+  expect(next.items.map((item) => item.title)).toEqual(["older & co"]);
+  expect(next.nextCursor).toBeUndefined();
+  await expect(fans.browse("https://bandcamp.com/fan", "957304/x&y=1")).rejects.toMatchObject({
+    status: 400,
+  });
+  const queued = await fans.load("https://bandcamp.com/fan");
+  expect(calls.at(-1)?.slice(-2)).toEqual(["--", "https://label.bandcamp.com/album/first"]);
+  expect(queued.items.map((item) => [item.title, item.url, item.collection?.index])).toEqual([
+    ["Song 1", "https://label.bandcamp.com/track/song-1", 0],
+    ["Song 2", "https://label.bandcamp.com/track/song-2", 1],
+    ["single & co", "https://artist.bandcamp.com/track/single", undefined],
+  ]);
 });

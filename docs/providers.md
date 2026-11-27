@@ -84,7 +84,36 @@ a database ID (not the episode number).
   [domain tracker](https://domains-tracker.server66.workers.dev/get) shared with
   StreamingCommunity, validating real catalogue records before adopting it.
 
+## Bandcamp fan pages
+
+A fan's collection (`bandcamp.com/<fan>`) and wishlist (`/<fan>/wishlist`) read
+the page's `pagedata` literal (fan ID, first items, paging token), then page with
+the site's own `POST /api/fancollection/1/{collection,wishlist}_items`. bandcamp.com
+challenges Node's HTTP client, so both requests go through the managed yt-dlp's
+transport, as Bandcamp search does (`vendor/bandcamp`). **Play all** on a fan page
+queues the tracks of the items the page shows first, each album's in order, listed
+flat in one extraction; the rest stay on the page to open one by one.
+
+## SoundCloud lists
+
+Sets (`/<user>/sets/<set>`) and profiles (`/<user>`) list through yt-dlp's
+`--flat-playlist`. A set's page lists only its first tracks in full;
+`vendor/soundcloud` completes the rest with the same `tracks?ids=` request upstream
+makes for private sets, so every entry has its public page, title and length.
+
+## Spotify
+
+Spotify plays only in its own DRM player. Couch reads the literal track list from
+the public embed page (`open.spotify.com/embed/{track,album,playlist}/<id>`,
+`__NEXT_DATA__`), with no account. Each track keeps its canonical
+`open.spotify.com/track/<id>` link in Up next and Saved, and its meta line says it
+plays from YouTube: at play time Couch searches YouTube for "artists title" and
+plays the first video within 10 seconds of Spotify's length, else the item is
+unavailable with **Try again**. There is no Spotify search.
+
 ## Queue limit
 
-Whole-series queueing stops at 500 episodes (Couch's queue limit); longer series
+Up next holds 500 entries. A pasted or opened list (a YouTube playlist, a Bandcamp
+album, a SoundCloud set or profile, a Spotify list) longer than that queues its first
+500 and says so. Whole-series queueing stops at 500 episodes; longer series
 return an error, and their episodes stay playable one by one.
