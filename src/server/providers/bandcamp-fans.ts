@@ -19,6 +19,26 @@ const loadCount = 100;
 // Albums are read a few per extraction, in parallel; when one of them fails, only its group is read again album by
 // album, so that one is skipped and the rest still play.
 const albumGroup = 8;
+// yt-dlp runs three extractions at once for all of Core; a fan list takes no more, so it never fills the waiting
+// line and Bandcamp sees no burst.
+const albumLanes = 3;
+
+/** Runs tasks so that at most `count` are underway at once, the rest in the order they came. */
+function lanes(count: number) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (running < count) running++;
+    else await new Promise<void>((resolve) => waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running--;
+    }
+  };
+}
 const unavailable = () =>
   new ProviderError("Bandcamp didn't show this fan's page. Try again shortly.");
 const cursorPattern = /^(\d{1,20})\/([0-9a-z:]{1,100})$/;
@@ -206,6 +226,7 @@ function albumTracks(output: string, albums: ProviderItem[]) {
 }
 
 export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
+  const lane = lanes(albumLanes);
   async function browse(url: string, cursor?: string, signal?: AbortSignal): Promise<ProviderPage> {
     const fan = bandcampFanUrl(url);
     if (!fan) throw new ProviderError("Enter a Bandcamp fan's collection or wishlist link.", 400);
@@ -221,18 +242,20 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
   }
 
   async function extract(albums: ProviderItem[], signal: AbortSignal) {
-    const output = await run(
-      [
-        "--use-extractors",
-        "bandcamp:album,end",
-        "--flat-playlist",
-        "--dump-single-json",
-        "--playlist-items",
-        `1:${maxTracks}`,
-        "--",
-        ...albums.map((album) => album.url),
-      ],
-      { signal },
+    const output = await lane(() =>
+      run(
+        [
+          "--use-extractors",
+          "bandcamp:album,end",
+          "--flat-playlist",
+          "--dump-single-json",
+          "--playlist-items",
+          `1:${maxTracks}`,
+          "--",
+          ...albums.map((album) => album.url),
+        ],
+        { signal },
+      ),
     );
     return albumTracks(output, albums);
   }
