@@ -10,7 +10,7 @@ screen or sound.
   playlists), Twitch, RaiPlay, public Bandcamp albums, tracks and fan
   collections, SoundCloud tracks, sets and profiles, and links from other sites
   yt-dlp supports.
-- **Spotify** track, album and playlist links, each track played from its
+- **Spotify** track, album, playlist and artist links, each track played from its
   YouTube match. See [providers](providers.md).
 - **StreamingCommunity, 123MoviesFree, AnimeSaturn and AnimeUnity** catalogues.
   Couch follows StreamingCommunity when its address moves through a redirect or

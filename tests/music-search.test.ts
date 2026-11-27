@@ -7,6 +7,7 @@ import {
 import { createSpotifyCatalog } from "../src/server/providers/spotify";
 import { createBandcampFans } from "../src/server/providers/bandcamp-fans";
 import { ExtractionError } from "../src/server/yt-dlp";
+import spotifyArtist from "./fixtures/spotify-artist.json";
 
 const album = {
   type: "a",
@@ -368,6 +369,30 @@ test("Spotify reads a list's tracks from its public embed page and keeps their S
       url: spotifyAlbum,
     }),
   ).rejects.toThrow("Spotify changed its player page");
+});
+
+test("A Spotify artist's top tracks play in embed order from either share link", async () => {
+  const path = "/artist/2enCZC6FjkZDdEW7rKBfw0";
+  const canonical = `https://open.spotify.com${path}`;
+  const catalog = createSpotifyCatalog((async (url) => {
+    expect(url).toBe(`https://open.spotify.com/embed${path}`);
+    return spotifyPage(spotifyArtist);
+  }) as typeof fetch);
+  for (const prefix of ["", "/intl-it"]) {
+    const page = await catalog.browse({ url: `https://open.spotify.com${prefix}${path}` });
+    expect(page.item).toMatchObject({ kind: "collection", title: "Devi Tensione", url: canonical });
+    expect(page.items).toHaveLength(10);
+    expect(page.items.map((track) => track.url)).toEqual(
+      spotifyArtist.trackList.map(({ uri }) =>
+        uri.replace("spotify:track:", "https://open.spotify.com/track/"),
+      ),
+    );
+    expect(page.items[0]).toMatchObject({
+      title: "Quanto basta",
+      duration: 138.75,
+      collection: { title: "Devi Tensione", url: canonical, index: 0 },
+    });
+  }
 });
 
 test("A Spotify track plays the first YouTube hit within 10 seconds of its length", async () => {

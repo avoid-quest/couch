@@ -150,8 +150,9 @@ makes for private sets, so every entry has its public page, title and length.
 ## Spotify
 
 Spotify plays only in its own DRM player. Couch reads the literal track list from
-the public embed page (`open.spotify.com/embed/{track,album,playlist}/<id>`,
-`__NEXT_DATA__`), with no account. Each track keeps its canonical
+the public embed page (`open.spotify.com/embed/{track,album,playlist,artist}/<id>`,
+`__NEXT_DATA__`), with no account. An artist link plays the top tracks in the
+order Spotify lists them in the embed (up to ten). Each track keeps its canonical
 `open.spotify.com/track/<id>` link in Up next and Saved, and its meta line says it
 plays from YouTube: at play time Couch searches YouTube for "artists title" and
 plays the first video within 10 seconds of Spotify's length, else the item is

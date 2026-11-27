@@ -47,6 +47,10 @@ test("a pasted link classifies from its URL alone", () => {
       { provider: "spotify", shape: "atom" },
     ],
     ["https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk", undefined],
+    [
+      "https://open.spotify.com/intl-it/artist/2enCZC6FjkZDdEW7rKBfw0",
+      { provider: "spotify", shape: "playlist" },
+    ],
     ["https://lyl.live/episode/dj-ale", { provider: "archives", shape: "atom" }],
     [
       "https://lyl.live/shows/residents?styles=Baile%20Funk",

@@ -289,10 +289,12 @@ export function bandcampFanUrl(
   }
 }
 
-/** A Spotify track, album or playlist link (`open.spotify.com[/intl-xx]/<kind>/<id>`), canonical. */
+type SpotifyKind = "track" | "album" | "playlist" | "artist";
+
+/** A Spotify track or list link (`open.spotify.com[/intl-xx]/<kind>/<id>`), canonical. */
 export function spotifyLink(
   value: string,
-): { url: string; kind: "track" | "album" | "playlist"; id: string } | undefined {
+): { url: string; kind: SpotifyKind; id: string } | undefined {
   if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
   try {
     const url = new URL(value);
@@ -305,11 +307,11 @@ export function spotifyLink(
     )
       return;
     const match =
-      /^(?:\/intl-[a-z]{2}(?:-[a-z]{2})?)?\/(track|album|playlist)\/([A-Za-z0-9]{22})\/?$/i.exec(
+      /^(?:\/intl-[a-z]{2}(?:-[a-z]{2})?)?\/(track|album|playlist|artist)\/([A-Za-z0-9]{22})\/?$/i.exec(
         url.pathname,
       );
     if (!match) return;
-    const kind = match[1]!.toLowerCase() as "track" | "album" | "playlist";
+    const kind = match[1]!.toLowerCase() as SpotifyKind;
     return { url: `https://open.spotify.com/${kind}/${match[2]}`, kind, id: match[2]! };
   } catch {
     return;

@@ -135,12 +135,12 @@ export function createSpotifyCatalog(
     signal?.throwIfAborted();
     if (!browse.url) {
       if (browse.query?.trim() || browse.cursor)
-        throw new ProviderError("Paste a Spotify track, album or playlist link.", 400);
+        throw new ProviderError("Paste a Spotify track, album, playlist or artist link.", 400);
       return { title: "Spotify", items: [] };
     }
     const link = spotifyLink(browse.url);
     if (!link || browse.cursor)
-      throw new ProviderError("Paste a Spotify track, album or playlist link.", 400);
+      throw new ProviderError("Paste a Spotify track, album, playlist or artist link.", 400);
     const entity = await embed(link.kind, link.id, signal, request);
     const thumbnail = artwork(entity);
     if (link.kind === "track") {
