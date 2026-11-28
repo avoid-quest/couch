@@ -159,8 +159,10 @@ the public embed page (`open.spotify.com/embed/{track,album,playlist,artist}/<id
 order Spotify lists them in the embed (up to ten). Each track keeps its canonical
 `open.spotify.com/track/<id>` link in Up next and Saved, and its meta line says it
 plays from YouTube: at play time Couch searches YouTube for "artists title" and
-plays the first video within 10 seconds of Spotify's length, else the item is
-unavailable with **Try again**.
+plays the video closest to Spotify's length, within 10 seconds, whose title has
+every word of the track's title (its "(feat. …)", "[…]" and " - Remastered …" parts
+aside) and whose title or channel names one of its artists ("<Artist> - Topic"
+does). With none, the item is unavailable with **Try again**.
 
 Search asks what open.spotify.com asks for a logged-out visitor, reimplemented in
 `src/server/providers/spotify-token.ts` and `spotify.ts`:
