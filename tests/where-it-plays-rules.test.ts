@@ -532,8 +532,14 @@ describe("groups", () => {
       ...livingRoom,
       members: [{ deviceId: "kitchen", picture: false, sound: true }],
     };
-    expect(applySteps(plan(radio, kitchen), rows(radio), "p").at(-1)!.actions).toEqual([
+    const leave = applySteps(plan(radio, kitchen), rows(radio), "p").at(-1)!;
+    expect(leave.actions).toEqual([
       { type: "output", deviceId: "tv", picture: false, level: 0, playbackId: "p" },
+    ]);
+    // Undo puts its picture back too, so a video after the radio shows on it again.
+    expect(leave.undone.map(({ channel, on }) => ({ channel, on }))).toEqual([
+      { channel: "sound", on: false },
+      { channel: "picture", on: false },
     ]);
   });
 

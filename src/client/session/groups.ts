@@ -98,7 +98,19 @@ export function applySteps(plan: Plan, rows: Row[], playbackId: string) {
             ...(picture ? { picture: picture.on } : {}),
             ...(sound ? { level: sound.on ? row.device.volume || 50 : 0 } : {}),
           };
-      return { changes, gains: gains(id), actions: soundActions(row, { ...action, playbackId }) };
+      // What Undo puts back: these changes, and a channel the leave took that the media hides (a radio's picture).
+      const hidden = (["picture", "sound"] as const)
+        .filter(
+          (channel) =>
+            leaves && row.output![channel] && !changes.some((change) => change.channel === channel),
+        )
+        .map((channel) => ({ deviceId: id, name: row.device.name, channel, on: false }));
+      return {
+        changes,
+        undone: [...changes, ...hidden],
+        gains: gains(id),
+        actions: soundActions(row, { ...action, playbackId }),
+      };
     });
 }
 

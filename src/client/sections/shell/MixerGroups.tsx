@@ -277,7 +277,7 @@ function GroupPreview({
       if (!step.gains && !plan.same.length && !applied.some((change) => change.on)) break;
       try {
         for (const action of step.actions) await gate.command(action);
-        applied.push(...step.changes);
+        applied.push(...step.undone);
       } catch (error) {
         reason = error;
         refused.push(...channelNames(step.changes).map((text) => `${text} (couldn't change)`));
