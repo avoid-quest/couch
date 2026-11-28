@@ -10,6 +10,7 @@ import { mixcloudLink } from "../../../shared/mixcloud";
 import { fold, searchWords } from "../../../shared/search-text";
 import {
   catalogueTransport,
+  label as plainLabel,
   object,
   ProviderError,
   providerItemId,
@@ -34,13 +35,9 @@ export const maxList = 500;
 export const slugPattern = /^[A-Za-z0-9][\w%.~-]{0,299}$/;
 export const searchSize = 12;
 export { object };
+/** http.ts's label, of a station's text with its HTML entities and tags read. */
 export const label = (value: unknown, maximum = 200) =>
-  typeof value === "string"
-    ? htmlText(value)
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, maximum) || undefined
-    : undefined;
+  plainLabel(typeof value === "string" ? htmlText(value) : value, maximum);
 /** Every word of the query starts a word of the text, accents and case aside: `dj ale` finds `DJ Alé`. */
 export function matches(query: string, value: string) {
   const words = searchWords(value);
