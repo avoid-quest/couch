@@ -106,6 +106,21 @@ function moveFocus(key: string) {
       return;
     }
   }
+  // Up from the top of the full player's band (no timeline above) reaches what stands under the title (a station's
+  // notes and their links) before the top bar, though it stands beside the picture: its lowest line, from the left.
+  const band = key === "ArrowUp" ? active.closest("[data-player-band]") : null;
+  if (
+    band &&
+    !controls.some((element) => band.contains(element) && box(element).bottom <= box(active).top)
+  ) {
+    const notes = controls
+      .filter((element) => element.closest("[data-player-summary]"))
+      .sort((a, b) => box(b).bottom - box(a).bottom || box(a).left - box(b).left);
+    if (notes[0]) {
+      focus(notes[0]);
+      return;
+    }
+  }
   if (key === "ArrowDown" && active.closest(".player-page [role=slider]")) {
     const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
     if (play && visible(play)) {

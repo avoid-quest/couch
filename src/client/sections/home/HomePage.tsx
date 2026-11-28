@@ -471,7 +471,7 @@ export function HomePage() {
     sources: (
       <section className="flex min-w-0">
         <div className="min-w-0 flex-1 [&>section]:mr-0">
-          <BrowseLine />
+          <BrowseLine first={!(hasRow("continue") && continued.length)} />
         </div>
         <div className="-mr-(--gutter) flex items-center border-y pr-(--gutter) pl-1">
           {options("sources")}

@@ -545,10 +545,10 @@
   padding-inline: var(--gutter);
 }
 
-/* Primary controls never wrap. Names yield to search; sharing has a separate, optional row.
-   Container units follow interface zoom as well as the window's available width. */
+/* Primary controls never wrap. A name takes its own width, up to a fifth of the header, then yields to search; sharing
+   has a separate, optional row. Container units follow interface zoom as well as the window's available width. */
 .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr);
+  grid-template-columns: fit-content(clamp(2.75rem, 20cqw, 12rem)) auto 2.75rem minmax(0, 1fr);
 }
 .app-header-couch {
   grid-area: 1 / 1;
@@ -619,7 +619,7 @@
   }
 }
 .tv-presentation .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr) auto;
+  grid-template-columns: fit-content(clamp(2.75rem, 20cqw, 12rem)) auto 2.75rem minmax(0, 1fr) auto;
 }
 .tv-presentation .app-header-couch {
   display: flex;

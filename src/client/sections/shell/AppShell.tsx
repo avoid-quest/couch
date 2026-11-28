@@ -1,4 +1,5 @@
 import { useRadioClock } from "@/radio-clock";
+import { restoredByUndo } from "@/session/undo";
 import {
   defaultStringifySearch,
   Link,
@@ -242,7 +243,8 @@ function useShellValue() {
       !picked &&
       current.settled &&
       (newlySelected || explicitlyStarted) &&
-      section !== "Now"
+      section !== "Now" &&
+      !restoredByUndo()
     )
       openPlayer();
     current.picture = picture;

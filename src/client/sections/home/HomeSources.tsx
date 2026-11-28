@@ -256,8 +256,11 @@ const doors: Door[] = [
   },
 ];
 
-/** One quiet line of doors to the sources, each saying what is behind it; it scrolls sideways where it doesn't fit. */
-export function BrowseLine() {
+/**
+ * One quiet line of doors to the sources, each saying what is behind it; it scrolls sideways where it doesn't fit. With
+ * `first` (nothing to continue leads Home), its first door takes a remote's first press.
+ */
+export function BrowseLine({ first = false }: { first?: boolean }) {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
@@ -273,7 +276,7 @@ export function BrowseLine() {
         Browse
       </h2>
       <ul data-nav-row aria-labelledby="home-browse" className="flex flex-1">
-        {doors.map((door) => {
+        {doors.map((door, index) => {
           const href =
             "to" in door
               ? door.to
@@ -286,7 +289,12 @@ export function BrowseLine() {
           return (
             <li key={door.label} className="flex min-w-36 flex-1 border-l first:border-l-0">
               {href ? (
-                <Button asChild variant="ghost" className={doorClass}>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className={doorClass}
+                  data-page-first={(first && index === 0) || undefined}
+                >
                   <a
                     href={detailHref(href)}
                     aria-label={down ? `${door.label}, couldn't load` : undefined}
@@ -310,6 +318,7 @@ export function BrowseLine() {
                 <Button
                   variant="ghost"
                   className={doorClass}
+                  data-page-first={(first && index === 0) || undefined}
                   onClick={() => "scope" in door && scopeSearch(door.scope)}
                 >
                   {body}
