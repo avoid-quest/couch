@@ -252,6 +252,17 @@ export function HeaderSearch({ className }: { className?: string }) {
     setSelected(next.getAttribute("data-value")!);
     return true;
   };
+  // A pasted link's first verb can come later (a station's Play, once Couch finds the station): until it shows, the
+  // first row that does takes the selection, so Enter always does something; it comes back unless the keys or pointer
+  // moved the selection.
+  useLayoutEffect(() => {
+    if (!open || !link || moved.current) return;
+    const preferred = first(value);
+    const next = list.current?.querySelector(`[cmdk-item][data-value="${CSS.escape(preferred)}"]`)
+      ? preferred
+      : list.current?.querySelector<HTMLElement>("[cmdk-item]")?.dataset.value;
+    if (next && next !== selected) setSelected(next);
+  });
   // The chips and the TV hero's verbs are lines: Left and Right move along one, Up and Down leave it, and a line is entered
   // on its chosen chip, else its first.
   const line = (key: string) => {
