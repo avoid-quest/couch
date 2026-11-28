@@ -314,7 +314,8 @@ export function WhereList({
 
 /**
  * The rows' own scroll: every row while they fit, else at least four (or, opened, three) and the rest by scrolling,
- * softly cut where they go on.
+ * softly cut where they go on. Where even those don't fit, they stick out of the column, which the side player reads
+ * as its cue to set the picture beside its title.
  */
 function Scroller({
   rows,
@@ -348,7 +349,7 @@ function Scroller({
       ref={box}
       data-where-list={whole ? "whole" : ""}
       style={{
-        minHeight: `min(calc(${Math.min(whole ? rows : 4, rows)} * var(--desk-row)), 100%)`,
+        minHeight: `calc(${Math.min(whole ? rows : 4, rows)} * var(--desk-row))`,
       }}
       className={cn(
         "-mx-2 min-h-0 shrink overflow-y-auto overscroll-contain px-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",

@@ -152,6 +152,10 @@ function reorderedForPlay(state: SessionState, entryId: string) {
 // within the moment.
 let restoringUntil = 0;
 const restoreWindow = 5_000;
+/** An Undo is bringing a picture back: the next one to return isn't a new one to open the full player for. */
+export function restoringByUndo() {
+  restoringUntil = performance.now() + restoreWindow;
+}
 export function restoredByUndo() {
   const restored = performance.now() < restoringUntil;
   restoringUntil = 0;
@@ -164,7 +168,7 @@ export async function applyUndo(
   current: () => SessionState | null,
 ) {
   if ("stoppedId" in plan) {
-    restoringUntil = performance.now() + restoreWindow;
+    restoringByUndo();
     return command({ type: "undoStop", stoppedId: plan.stoppedId });
   }
   let state = current();

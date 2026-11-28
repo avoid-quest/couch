@@ -1,4 +1,5 @@
 import type { Action, Output, PlaybackSummary, SessionState } from "../../shared/protocol";
+import { restoringByUndo } from "./undo";
 
 // What made way for a change that takes devices (Play on, Move here, a device's Sound or Picture key), so its Undo puts
 // everything back: the Playback it started stops, an item it replaced in a device's own Playback plays again from
@@ -12,6 +13,10 @@ export type MadeWay = {
   replaced?: { entryId: string; newEntryId: string };
   /** Each Playback the change touched, with the devices it had. */
   restore: { playbackId: string; outputs: Channels[] }[];
+  /** Playbacks that played before and were paused by the change, which play again. */
+  resume: string[];
+  /** The Playback this window controlled before, which it controls again. */
+  controlled?: string;
 };
 
 const channels = (outputs: Output[]) =>
@@ -52,7 +57,16 @@ export function madeWay(before: SessionState, after: SessionState, played = fals
         changed(playback, now.get(playback.id)),
     )
     .map((playback) => ({ playbackId: playback.id, outputs: channels(playback.outputs) }));
-  return { started, replaced, restore };
+  const resume = [...was.values()]
+    .filter(
+      (playback) =>
+        playback.id !== started &&
+        playback.status === "playing" &&
+        !playback.private &&
+        now.get(playback.id)?.status === "paused",
+    )
+    .map((playback) => playback.id);
+  return { started, replaced, restore, resume, controlled: before.playback ?? undefined };
 }
 
 /**
@@ -73,6 +87,25 @@ export async function undoMadeWay(
     await command({ type: "play", entryId: plan.replaced.entryId });
     await command({ type: "remove", entryId: plan.replaced.newEntryId });
   }
+  restoringByUndo();
   for (const { playbackId, outputs } of plan.restore)
     await command({ type: "restoreOutputs", playbackId, outputs });
+  // Play and Pause name the item that plays, which this window learns once it controls that Playback.
+  for (const id of plan.resume) {
+    await command({ type: "selectPlayback", playbackId: id });
+    const playing = await controls(current, id);
+    if (playing) await command({ type: "pause", playbackId: playing, paused: false });
+  }
+  if (plan.controlled && current()?.playback !== plan.controlled)
+    await command({ type: "selectPlayback", playbackId: plan.controlled }).catch(() => {});
+}
+
+/** The item this window's controlled Playback `id` plays, once its state says so (Core answers within moments). */
+async function controls(current: () => SessionState | null, id: string) {
+  for (let tries = 0; tries < 40; tries++) {
+    const state = current();
+    if (state?.playback === id && state.player.playbackId) return state.player.playbackId;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return null;
 }
