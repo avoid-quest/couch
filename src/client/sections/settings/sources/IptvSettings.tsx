@@ -2,9 +2,8 @@ import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { TryAgain } from "@/components/TryAgain";
 import { GuideSources, type GuideRequest } from "@/components/GuideSources";
-import { TRY_AGAIN } from "@/copy";
 import { iptvRequest, iptvSourcesQuery } from "@/api/iptv";
 import type { SourceSettingsProps } from "@/components/sourceTypes";
 
@@ -40,14 +39,7 @@ export function IptvSettings({ credentials, connected, canManage }: SourceSettin
         <Alert variant="destructive">
           <AlertDescription>Couldn't load Live TV sources.</AlertDescription>
           <AlertAction>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!connected}
-              onClick={() => void page.refetch()}
-            >
-              {TRY_AGAIN}
-            </Button>
+            <TryAgain disabled={!connected} onClick={() => void page.refetch()} />
           </AlertAction>
         </Alert>
       )}

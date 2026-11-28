@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ADMIN_ONLY } from "@/copy";
@@ -97,14 +98,7 @@ export function StreamingCommunitySettings({
           <AlertDescription>{error}</AlertDescription>
           {page.error && !saving.error && (
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!available}
-                onClick={() => void page.refetch()}
-              >
-                Try again
-              </Button>
+              <TryAgain disabled={!available} onClick={() => void page.refetch()} />
             </AlertAction>
           )}
         </Alert>

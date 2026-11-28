@@ -1,11 +1,12 @@
 import { useRef, useState, type ComponentProps } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { CircleAlert, MoreHorizontal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { liveAudioSettingsQuery } from "@/api/settings";
 import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,9 +48,15 @@ export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
               role={viewer.error ? "alert" : undefined}
               className={cn(
                 "text-meta [overflow-wrap:anywhere]",
-                viewer.error ? "text-destructive" : "text-muted-foreground",
+                viewer.error ? "text-foreground" : "text-muted-foreground",
               )}
             >
+              {viewer.error && (
+                <CircleAlert
+                  aria-hidden="true"
+                  className="mr-1.5 inline size-[1.1em] -translate-y-px text-destructive"
+                />
+              )}
               {viewerLine(viewer, undefined)}
             </span>
           </div>
@@ -132,18 +139,14 @@ function LiveSettingsStatus({ live }: { live: ReturnType<typeof useLiveAudioSett
           {errorText(query.error ?? save.error)}
         </AlertDescription>
         <AlertAction>
-          <Button
+          <TryAgain
             type="button"
-            variant="ghost"
-            size="sm"
             disabled={!connected || query.isFetching || save.isPending}
             onClick={() => {
               if (query.error) void query.refetch();
               else if (save.variables) save.mutate(save.variables);
             }}
-          >
-            Try again
-          </Button>
+          />
         </AlertAction>
       </Alert>
     );

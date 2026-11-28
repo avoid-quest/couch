@@ -17,6 +17,7 @@ import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
 import { PageHeader } from "@/components/PageHeader";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { savedSourceLabel } from "@/saved-source";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -188,9 +189,7 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
           <Alert variant="destructive">
             <AlertDescription>{query.error.message}</AlertDescription>
             <AlertAction>
-              <Button variant="ghost" onClick={() => void query.refetch()}>
-                Try again
-              </Button>
+              <TryAgain onClick={() => void query.refetch()} />
             </AlertAction>
           </Alert>
         ) : (
@@ -522,9 +521,9 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
         ]}
       >
         {action.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {action.error.message}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{action.error.message}</AlertDescription>
+          </Alert>
         )}
       </DetailLayout>
       <RelatedCollection

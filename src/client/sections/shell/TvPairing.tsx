@@ -4,9 +4,9 @@ import { QRCodeSVG } from "qrcode.react";
 import { ApiError } from "@/api/client";
 import { CouchMark } from "@/components/CouchMark";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { TRY_AGAIN } from "@/copy";
 import { useSessionGate } from "@/session/session-context";
 import { deviceId, localDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
@@ -105,9 +105,7 @@ export function TvPairing({ status, onEnterCode }: { status: ReactNode; onEnterC
           <Alert variant="destructive">
             <AlertDescription>{request.error.message}</AlertDescription>
             <AlertAction>
-              <Button variant="ghost" size="sm" onClick={() => void request.refetch()}>
-                {TRY_AGAIN}
-              </Button>
+              <TryAgain onClick={() => void request.refetch()} />
             </AlertAction>
           </Alert>
         )}

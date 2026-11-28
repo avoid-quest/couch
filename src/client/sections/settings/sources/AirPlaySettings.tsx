@@ -3,6 +3,7 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 import { airplayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -188,9 +189,7 @@ function AirPlayControls({
           <AlertDescription>{failure}</AlertDescription>
           {query.isError && (
             <AlertAction>
-              <Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>
-                Try again
-              </Button>
+              <TryAgain disabled={!connected} onClick={() => void query.refetch()} />
             </AlertAction>
           )}
         </Alert>

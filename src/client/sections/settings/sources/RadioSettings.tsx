@@ -5,6 +5,7 @@ import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/rad
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { RowOptions } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -176,14 +177,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
             <AlertDescription>{error}</AlertDescription>
             {page.error && !mutation.error && (
               <AlertAction>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!available}
-                  onClick={() => void page.refetch()}
-                >
-                  Try again
-                </Button>
+                <TryAgain disabled={!available} onClick={() => void page.refetch()} />
               </AlertAction>
             )}
           </Alert>

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  CircleAlert,
   Ellipsis,
   Monitor,
   MonitorOff,
@@ -435,9 +436,15 @@ const statusLine = (row: Row) =>
       data-output-status
       className={cn(
         "text-sm [overflow-wrap:anywhere]",
-        row.failed ? "text-destructive" : "text-muted-foreground",
+        row.failed ? "text-foreground" : "text-muted-foreground",
       )}
     >
+      {row.failed && (
+        <CircleAlert
+          aria-hidden="true"
+          className="mr-1.5 inline size-[1.1em] -translate-y-px text-destructive"
+        />
+      )}
       {row.status}
     </span>
   );

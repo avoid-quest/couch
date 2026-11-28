@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText, useSessionGate } from "@/session/session-context";
@@ -82,9 +83,9 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
         readOnly={pending}
       />
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       <Button
         type="submit"

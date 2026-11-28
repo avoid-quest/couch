@@ -1,4 +1,5 @@
 import { usePlaybackClock } from "@/session/playback-clock";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ClientSessionState } from "@/session/session";
 import { useEffect, useRef, useState } from "react";
 import { PlayButton, Time, TimeSlider, useMedia } from "@videojs/react";
@@ -482,14 +483,14 @@ export function LiveParticipation({
             : ""}
       </span>
       {error && (
-        <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {failed && (
-        <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">
-          Couldn't {receiving ? "leave" : "join"}. Try again.
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>Couldn't {receiving ? "leave" : "join"}. Try again.</AlertDescription>
+        </Alert>
       )}
     </div>
   );

@@ -3,7 +3,7 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { defaultStringifySearch, useLocation, useNavigate } from "@tanstack/react-router";
-import { offline, TRY_AGAIN } from "@/copy";
+import { offline } from "@/copy";
 import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
 import { collectionPageSize } from "@/collection-pagination";
@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { FilterBar, FilterInput, FilterSelect } from "@/components/ContentFilters";
@@ -191,9 +192,7 @@ export function LiveTvPage() {
         <Alert variant="destructive">
           <AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription>
           <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>
-              {TRY_AGAIN}
-            </Button>
+            <TryAgain onClick={() => void guide.refetch()} />
           </AlertAction>
         </Alert>
       )}

@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChevronDown } from "lucide-react";
 import { ApiError } from "@/api/client";
 import { SettingsRow } from "@/components/SettingsRow";
@@ -31,13 +32,13 @@ const helperStatuses: Record<HelperUpdates["items"][number]["status"], string> =
   compatible: "Compatible",
   held: "Kept for compatibility",
   system: "Managed by the system",
-  error: "Update failed",
+  error: "Couldn't update",
 };
 const batchStatuses = {
   waiting: "Waiting",
   installing: "Updating…",
   updated: "Updated",
-  failed: "Update failed",
+  failed: "Couldn't update",
 };
 
 function MediaTools() {
@@ -48,7 +49,7 @@ function MediaTools() {
     helperError ??
     helpers?.items
       .filter((item) => item.status === "error")
-      .map((item) => `${item.name}: ${item.error ?? "Update failed"}`)
+      .map((item) => `${item.name}: ${item.error ?? "Couldn't update"}`)
       .join("; ");
   const checking = helpers?.status === "checking" || batch?.helpers === "checking";
   return (
@@ -250,9 +251,9 @@ export function UpdateReview({ targets }: { targets: UpdateCenterTarget[] }) {
         className="sticky bottom-[var(--bottom-bar,0px)] in-[.electron]:bottom-0 z-10 -mt-3 space-y-3 bg-background py-3"
       >
         {error && (
-          <p role="alert" className="break-words text-sm text-destructive">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         {confirmation ? (
           <p role="alert" className="text-sm">

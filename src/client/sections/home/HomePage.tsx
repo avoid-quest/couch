@@ -8,7 +8,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
@@ -30,7 +29,6 @@ import { useShell } from "@/sections/shell/AppShell";
 import { mediaIdentity } from "@/sections/find/provider-progress";
 import { useSessionGate } from "@/session/session-context";
 import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
-import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
 import {
   avoidRadioPlaylistId,
@@ -423,7 +421,7 @@ export function HomePage() {
     !hero &&
     onHome.find((row) => !isFollowId(row.id) && boardRows.includes(row.id) && filled[row.id])?.id;
   const lists: Partial<Record<HomeSectionId, ReactNode>> = {
-    continue: !!continued.length && (
+    continue: continued.length ? (
       <Shelf title="Continue" href="/saved?tab=played">
         {continued.slice(0, shelfLength).map((item, index) => (
           <li key={item.mediaId} className="flex shrink-0">
@@ -446,6 +444,10 @@ export function HomePage() {
           </li>
         ))}
       </Shelf>
+    ) : (
+      history.error && (
+        <Failed title="Continue" href="/saved?tab=played" retry={() => void history.refetch()} />
+      )
     ),
 
     upNext: !!upcoming.length && (
@@ -456,7 +458,7 @@ export function HomePage() {
       />
     ),
 
-    later: !!savedMedia.length && (
+    later: savedMedia.length ? (
       <Shelf title="For later" href="/saved?tab=later">
         {savedMedia.slice(0, shelfLength).map((item, index) => (
           <li key={item.id} className="flex shrink-0">
@@ -479,9 +481,13 @@ export function HomePage() {
           </li>
         ))}
       </Shelf>
+    ) : (
+      later.error && (
+        <Failed title="For later" href="/saved?tab=later" retry={() => void later.refetch()} />
+      )
     ),
 
-    recent: !!recent.length && (
+    recent: recent.length ? (
       <Shelf title="Played recently" href="/saved?tab=played">
         {recent.slice(0, shelfLength).map((item, index) => (
           <li key={item.mediaId} className="flex shrink-0">
@@ -503,12 +509,22 @@ export function HomePage() {
           </li>
         ))}
       </Shelf>
+    ) : (
+      // One failure, said once: at Continue when Home shows it.
+      history.error &&
+      !hasRow("continue") && (
+        <Failed
+          title="Played recently"
+          href="/saved?tab=played"
+          retry={() => void history.refetch()}
+        />
+      )
     ),
 
     shared: !!sharedSources.length && <SharedSources hits={sharedSources} />,
 
     // Every station on air, yours (played here lately, saved) first; the heading opens every station.
-    radio: !!stations.length && (
+    radio: stations.length ? (
       <Shelf title="Radio" label="Radio stations" href="/radio">
         {stations.map((station, index) => {
           const show = onAir(station.id);
@@ -536,19 +552,31 @@ export function HomePage() {
           );
         })}
       </Shelf>
+    ) : (
+      (favorites.error || builtIn.error) && (
+        <Failed
+          title="Radio"
+          href="/radio"
+          retry={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}
+        />
+      )
     ),
 
     "live-tv": iptv.data?.sources.some((source) => source.channelCount) ? (
       <LiveTvShelf />
     ) : iptv.error && !iptv.data ? (
-      <Failed what="Live TV" retry={() => void iptv.refetch()} />
+      <Failed title="Live TV" href="/live-tv" retry={() => void iptv.refetch()} />
     ) : null,
     // Saved channels fail once, where the first source shelf would be.
     ...Object.fromEntries(
       sourceHomes.map((provider) => [
         provider,
         provider === shownHomes[0] && sourceFavorites.error && !sourceFavorites.data ? (
-          <Failed what="saved channels" retry={() => void sourceFavorites.refetch()} />
+          <Failed
+            title={homeRows[provider].label}
+            what="saved channels"
+            retry={() => void sourceFavorites.refetch()}
+          />
         ) : (
           <SavedSourceShelf provider={provider} items={saved(provider)} />
         ),
@@ -610,43 +638,6 @@ export function HomePage() {
   return (
     <section data-page="Home" aria-label="Home" className="grid gap-section">
       <PageHeader title="Home" hidden />
-      {historyShown && history.error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}
-          </AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void history.refetch()}>
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      )}
-      {hasRow("later") && later.error && (
-        <Alert variant="destructive">
-          <AlertDescription>Couldn't load For later.</AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void later.refetch()}>
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      )}
-      {hasRow("radio") && !stations.length && (favorites.error || builtIn.error) && (
-        <Alert variant="destructive">
-          <AlertDescription>Couldn't load Radio.</AlertDescription>
-          <AlertAction>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}
-            >
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      )}
-
       {hero === undefined && <DetailSkeleton home />}
       {lead}
       {hero !== undefined &&

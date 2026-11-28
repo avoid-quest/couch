@@ -5,6 +5,7 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 import { displayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import type { DisplayState } from "../../../../shared/display";
 
@@ -108,14 +109,7 @@ export function DisplaySettings({
           <AlertDescription>{error}</AlertDescription>
           {display.error && !changeMutation.error && (
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!connected || pending}
-                onClick={() => void display.refetch()}
-              >
-                Try again
-              </Button>
+              <TryAgain disabled={!connected || pending} onClick={() => void display.refetch()} />
             </AlertAction>
           )}
         </Alert>

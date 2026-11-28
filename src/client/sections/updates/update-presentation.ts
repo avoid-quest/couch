@@ -19,7 +19,7 @@ export const updateStatuses: Record<UpdateState["status"], string> = {
   downloading: "Downloading…",
   ready: "Update ready",
   installing: "Installing…",
-  error: "Update failed",
+  error: "Couldn't update",
 };
 export const updateBusy = (state?: UpdateState) =>
   !!state && ["checking", "downloading", "installing"].includes(state.status);

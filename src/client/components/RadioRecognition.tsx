@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createPortal } from "react-dom";
 import { AudioLines, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -144,9 +145,9 @@ export function RadioRecognition({
                     : "No song identified. Try another part of the stream.")}
               </div>
               {error && (
-                <p role="alert" className="text-destructive">
-                  {error}
-                </p>
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
             </div>
             {(error || (result && !result.track)) && (

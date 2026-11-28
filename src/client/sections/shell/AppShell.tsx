@@ -20,7 +20,7 @@ import {
   type RefObject,
 } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { BookmarkIcon, HouseIcon, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
+import { BookmarkIcon, HouseIcon, SettingsIcon, TvIcon, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import { freshRadioProgramme, type RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -54,9 +54,10 @@ import {
   type SettingsPage,
 } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
+import { PageProblem } from "@/components/PageProblem";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
 import { TvRest, useTvName } from "./TvRest";
@@ -68,7 +69,7 @@ import {
 } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
-import { dismiss, waitingForTap } from "@/toasts";
+import { dismiss, failed, waitingForTap } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
@@ -448,16 +449,9 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
   override render() {
     if (!this.state.error) return this.props.children;
     return (
-      <main id="main" className="px-(--gutter) py-6">
-        <Alert variant="destructive">
-          <AlertDescription>{this.state.error.message}</AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => this.setState({ error: null })}>
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      </main>
+      <PageProblem>
+        <TryAgain onClick={() => this.setState({ error: null })} />
+      </PageProblem>
     );
   }
 }
@@ -503,10 +497,10 @@ function useTapToHear() {
 
 const isOffline = (status: string) => status === "server-unavailable" || status === "reconnecting";
 
-// Connection and player state as one quiet line; red only for errors that need a decision. Offline is the header's
-// (HeaderOffline) while Couch reconnects on its own; the line stays for the app pointed at another Couch, which offers
-// to try again or use this computer.
-function ConnectionStatus({ paired }: { paired: boolean }) {
+// The whole app's problems (Couch out of reach, refusing this address, updated, its player unavailable) as one quiet
+// line in one fixed place: the header's status row, or the pairing page when there is no header. The app pointed at
+// another Couch offers to try again or use this computer.
+function ConnectionStatus() {
   const { nativeHost, localHost, state, status, details, credentials, connected, reconnect } =
     useSessionGate();
   const device = usePlaybackDevice();
@@ -516,30 +510,16 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
       details?.name ??
       (remoteApp && device?.address ? device.address.replace(/^https?:\/\//i, "") : undefined),
   );
-  const recovery = remoteApp && (
-    <>
-      <Button variant="ghost" size="sm" onClick={reconnect}>
-        {TRY_AGAIN}
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>
-        Use this computer
-      </Button>
-    </>
-  );
   if (status === "connection-rejected")
     return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          {name} refused this address. Open Couch at the address it shows.
-        </AlertDescription>
-      </Alert>
+      <StatusLine>{name} refused this address. Open Couch at the address it shows.</StatusLine>
     );
   if (status === "build-mismatch")
     return (
       <StatusLine
         actions={
-          <Button variant="ghost" size="sm" onClick={() => void reloadAppShell()}>
-            {TRY_AGAIN}
+          <Button variant="secondary" size="sm" onClick={() => void reloadAppShell()}>
+            Reload
           </Button>
         }
       >
@@ -547,8 +527,20 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
       </StatusLine>
     );
   if (isOffline(status))
-    return paired && !remoteApp ? null : (
-      <StatusLine busy actions={recovery}>
+    return (
+      <StatusLine
+        busy
+        actions={
+          remoteApp && (
+            <>
+              <TryAgain onClick={reconnect} />
+              <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>
+                Use this computer
+              </Button>
+            </>
+          )
+        }
+      >
         {offline(name)}
       </StatusLine>
     );
@@ -728,14 +720,17 @@ function ShellChrome({ children }: PropsWithChildren) {
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
 
-  const status = (
-    <>
-      <ConnectionStatus paired={paired} />
-      {error && section !== "Remote" && (
-        <ErrorAlert error={error} onDismiss={() => setError(null)} />
-      )}
-    </>
-  );
+  // A failed action is a message beside nothing else (docs/design.md "Problems"); Remote says it on its own page.
+  useEffect(() => {
+    if (!error || section === "Remote") return;
+    failed(error);
+    setError(null);
+  }, [error, section]);
+  // Core couldn't save progress or Up next: said once each time it starts failing.
+  const progressError = state?.progressError;
+  useEffect(() => {
+    if (progressError) failed(progressError);
+  }, [progressError]);
 
   if (setupPending)
     return (
@@ -817,29 +812,21 @@ function ShellChrome({ children }: PropsWithChildren) {
                   <DigitalClock className="app-header-tools text-muted-foreground" />
                 )}
               </div>
+              {/* The whole app's one status place, inside the measured header: nothing over the page's content. */}
               <div
                 data-app-status
                 className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden"
               >
-                <HeaderOffline />
+                <ConnectionStatus />
                 {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (
                   <UpdateCue />
                 )}
               </div>
-              {/* Notices are part of the measured header, above a Stage's artwork, with no space when empty. */}
-              {!onPlayer && (
-                <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>
-              )}
             </header>
           )}
           <AppPage>
-            {onPlayer && error && (
-              <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3">
-                <ErrorAlert error={error} onDismiss={() => setError(null)} />
-              </div>
-            )}
             {!paired ? (
-              <PairingPage status={status} />
+              <PairingPage status={<ConnectionStatus />} />
             ) : (
               <>
                 {!tvPresentation && section !== "Remote" && (
@@ -902,23 +889,6 @@ function AppPage({ children }: PropsWithChildren) {
     </ScrollArea>
   ) : (
     <div {...props}>{children}</div>
-  );
-}
-
-/**
- * Offline, the header's status row says so: a Spinner and "Reconnecting…" (the Spinner alone on a phone).
- * Navigation and search keep their place; the hollow mark and the shell's status region say it too.
- */
-function HeaderOffline() {
-  const { nativeHost, localHost, status } = useSessionGate();
-  if (!isOffline(status) || (nativeHost && !localHost)) return null;
-  return (
-    <span className="mr-3 flex shrink-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
-      <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className="size-3.5" />
-      <span aria-hidden="true" className="max-sm:hidden">
-        Reconnecting…
-      </span>
-    </span>
   );
 }
 
@@ -997,18 +967,5 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
           );
         })}
     </nav>
-  );
-}
-
-function ErrorAlert({ error, onDismiss }: { error: string; onDismiss: () => void }) {
-  return (
-    <Alert variant="destructive">
-      <AlertDescription>{error}</AlertDescription>
-      <AlertAction>
-        <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onDismiss}>
-          <X aria-hidden="true" />
-        </Button>
-      </AlertAction>
-    </Alert>
   );
 }

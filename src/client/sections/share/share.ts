@@ -203,10 +203,10 @@ const receiverWords: Partial<Record<ReceiverState, string>> = {
 };
 /**
  * What a viewer's row says under its name: its channels and its route on the sharer's own panel, where every row names
- * it (docs/live-inputs.md); its state and Can't play as Where it plays says them.
+ * it (docs/live-inputs.md); its state and Core's reason it can't play, as Where it plays says them.
  */
 export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
-  if (viewer.error) return `Can't play: ${viewer.error}`;
+  if (viewer.error) return viewer.error;
   const channels =
     viewer.picture && viewer.sound ? "Picture and sound" : viewer.picture ? "Picture" : "Sound";
   const state = viewer.state && receiverWords[viewer.state];
