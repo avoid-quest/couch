@@ -17,6 +17,7 @@ import { radioProgrammesQuery } from "@/api/radio";
 import { useStationSave } from "@/sections/home/on-air";
 import { markWatched, removeFromContinue, undoProgressAction } from "@/api/progress";
 import { itemTarget, useHomeAction } from "@/sections/home/AddToHome";
+import { marksWatched } from "@/sections/home/history-menu";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
 import { PageHeader } from "@/components/PageHeader";
@@ -366,7 +367,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         more={[
           ...homeAction(itemTarget(item)),
           ...browserActions(item.url, item.title),
-          ...(item.collection
+          ...(marksWatched(item)
             ? [
                 {
                   label: item.watched ? "Mark as unwatched" : "Mark as watched",

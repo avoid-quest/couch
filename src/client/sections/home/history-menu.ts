@@ -15,8 +15,21 @@ import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { failed } from "@/toasts";
 import type { PlayOn } from "../../../shared/protocol";
+import { providerForUrl, type ProviderId } from "../../../shared/providers";
 import type { HistoryItem } from "../../../shared/viewing";
 import { itemTarget, useHomeAction } from "./AddToHome";
+
+// Sources whose lists are series of episodes; a playlist, an album or a show's mixes play in their own order.
+const series: (ProviderId | undefined)[] = [
+  "streamingcommunity",
+  "animeunity",
+  "animesaturn",
+  "movies123",
+  "raiplay",
+];
+/** Whether Mark as watched applies: only a series' episode, so its series' Play goes on to the next one. */
+export const marksWatched = (item: Pick<HistoryItem, "collection" | "url">) =>
+  !!item.collection && !!item.url && series.includes(providerForUrl(item.url));
 
 /**
  * A played item's menu, on Home and in Saved's Played. `press` is what the item's press does, so the menu doesn't
@@ -112,7 +125,7 @@ export function useHistoryMenu() {
           ]
         : []),
       ...browserActions(item.url, item.title),
-      ...(item.collection
+      ...(marksWatched(item)
         ? [
             {
               label: item.watched ? "Mark as unwatched" : "Mark as watched",
