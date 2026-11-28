@@ -41,6 +41,9 @@ export type ProviderPage = {
   item?: ProviderItem;
   items: ProviderItem[];
   nextCursor?: string;
+  /** A list in pages oldest first (a long anime's episodes): the page before this one, and the last, newest page. */
+  previousCursor?: string;
+  lastCursor?: string;
   title?: string;
   thumbnail?: string;
   description?: string;
