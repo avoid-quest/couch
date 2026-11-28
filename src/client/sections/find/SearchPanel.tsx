@@ -140,10 +140,14 @@ function SearchRoom({ thumbnail }: { thumbnail?: string }) {
 
 /**
  * On the TV the page's first verb (the hero's Play, a list's Play all) takes the focus once it shows and can be pressed,
- * unless the person already pressed something here.
+ * unless the person already pressed something since what it shows (`shows`: the search, the link) began.
  */
-export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean) {
+export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean, shows: string) {
   const pressed = useRef(false);
+  // Before the focus below, so a search that shows its verb at once still takes it.
+  useLayoutEffect(() => {
+    pressed.current = false;
+  }, [shows]);
   useEffect(() => {
     const press = () => {
       pressed.current = true;
@@ -161,8 +165,7 @@ export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean
   }, [ready]);
 }
 
-/** The query or the list, set large in the display face. */
-// With no query yet, the page's heading still names it, for screen readers alone.
+/** The query or the list, set large in the display face; with no query yet, a heading named for screen readers alone. */
 function SearchTitle({ title }: { title: string }) {
   return (
     <div className="search-title @container">
@@ -253,7 +256,7 @@ export function SearchPanel(props: Props) {
   const top = useTopHit(`${resultsKey}:${kind ?? "all"}`, relevant, query, waiting, !!lit);
   const litHit = relevant.find((hit) => hit.id === lit) ?? top;
   // The focus freezes the hero, so it waits for the quick sources a stronger match could still come from.
-  useFirstVerb(panel, !!top && !top.primary.disabled && !waiting);
+  useFirstVerb(panel, !!top && !top.primary.disabled && !waiting, resultsKey);
   const [expanded, setExpanded] = useState<{ key: string; sources: string[] }>({
     key: resultsKey,
     sources: [],
@@ -1008,7 +1011,7 @@ function PastedList({
   const disabled = !props.connected || pending || !props.onCommand;
   const limit = listLimit(list.count);
   const root = useRef<HTMLElement>(null);
-  useFirstVerb(root, !disabled && props.canPlay);
+  useFirstVerb(root, !disabled && props.canPlay, url);
   return (
     <section
       ref={root}

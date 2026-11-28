@@ -81,7 +81,7 @@ export function PastedLink({
   const navigation = useDetailNavigation();
   const disabled = !props.connected || pending;
   const root = useRef<HTMLElement>(null);
-  useFirstVerb(root, !!station && !disabled && props.canPlay);
+  useFirstVerb(root, !!station && !disabled && props.canPlay, url);
   return (
     <section ref={root} className="max-w-3xl space-y-4">
       <h1 className="sr-only">{hostname + pathname}</h1>
