@@ -121,7 +121,8 @@ export function WhereList({
   const many = whole && listed > crowded;
   const summary = counts(rows);
   const offered = many && summary.some((item) => item.filter === filter) ? filter : null;
-  const { playing, rest } = arrange(rows, kept, offered, many ? query : "");
+  // The rows, folds and "No devices match" all show what Find and its filters leave.
+  const { playing, rest, offline } = arrange(rows, kept, offered, many ? query : "");
   const shown = [...playing, ...rest];
   const mine = rows.find((row) => row.mine);
   const playback = state.playbacks?.find((item) => item.id === state.playback);
@@ -130,11 +131,7 @@ export function WhereList({
   const top = [...first, ...shown.filter((row) => row.output && !row.mine && !folded(row))];
   const others = shown.filter((row) => !row.output && !row.mine && !folded(row));
   const small = rows.filter((row) => !folded(row)).length <= 4;
-  const privately = rows.filter((row) => folded(row) === "private");
-  const offline = rows.filter((row) => folded(row) === "offline");
-  const matches = (row: Row) =>
-    (!offered || shown.includes(row)) &&
-    (!query || row.device.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const privately = shown.filter((row) => folded(row) === "private");
   const sole = soleSound(rows);
   const sounds = sounding(state, connected);
   const audioOnly = !!playback?.audioOnly;
@@ -160,9 +157,30 @@ export function WhereList({
         : "Not on any device. Turn one on below."}
     </p>
   );
+  const find = many && (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-pressed={finding || !!offered || !!query}
+      aria-label="Find a device"
+      title="Find a device"
+      onClick={() => {
+        const next = !(finding || offered || query);
+        setFinding(next);
+        if (!next) {
+          setFilter(null);
+          setQuery("");
+        }
+      }}
+      className="size-7 aria-pressed:bg-(--fill-2)"
+    >
+      <Search aria-hidden="true" className="size-4" />
+    </Button>
+  );
   const handle = fixed ? (
-    <div className="flex h-10 shrink-0 items-center justify-between text-meta">
-      <span className="font-semibold text-muted-foreground">{heading}</span>
+    <div className="flex h-10 shrink-0 items-center gap-1 text-meta">
+      <span className="min-w-0 flex-1 font-semibold text-muted-foreground">{heading}</span>
+      {find}
       <span className="text-subtle-foreground">
         {count} of {rows.length} devices
       </span>
@@ -177,26 +195,7 @@ export function WhereList({
       >
         {heading}
       </button>
-      {many && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-pressed={finding || !!offered || !!query}
-          aria-label="Find a device"
-          title="Find a device"
-          onClick={() => {
-            const next = !(finding || offered || query);
-            setFinding(next);
-            if (!next) {
-              setFilter(null);
-              setQuery("");
-            }
-          }}
-          className="size-7 aria-pressed:bg-(--fill-2)"
-        >
-          <Search aria-hidden="true" className="size-4" />
-        </Button>
-      )}
+      {find}
       <button
         type="button"
         aria-label={open ? "Show fewer devices" : "Show all devices"}
@@ -284,25 +283,30 @@ export function WhereList({
           )}
           <Folds
             folds={[
-              { label: "Private now", names: offlineNames(privately.filter(matches)) },
-              { label: "Offline", names: offlineNames(offline.filter(matches)) },
+              { label: "Private now", names: offlineNames(privately) },
+              { label: "Offline", names: offlineNames(offline) },
             ]}
           />
-          {many && !top.length && !others.length && (offered || query) && (
-            <p role="status" className="pt-2 text-meta text-subtle-foreground">
-              No devices match.{" "}
-              <button
-                type="button"
-                className="text-muted-foreground underline underline-offset-4"
-                onClick={() => {
-                  setFilter(null);
-                  setQuery("");
-                }}
-              >
-                Clear
-              </button>
-            </p>
-          )}
+          {many &&
+            !top.length &&
+            !others.length &&
+            !privately.length &&
+            !offline.length &&
+            (offered || query) && (
+              <p role="status" className="pt-2 text-meta text-subtle-foreground">
+                No devices match.{" "}
+                <button
+                  type="button"
+                  className="text-muted-foreground underline underline-offset-4"
+                  onClick={() => {
+                    setFilter(null);
+                    setQuery("");
+                  }}
+                >
+                  Clear
+                </button>
+              </p>
+            )}
           {!extra && (
             <Advanced state={state} connected={connected} run={run} inSync={inSync} rows={rows} />
           )}
