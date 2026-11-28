@@ -124,7 +124,8 @@ export function createSession(
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
-  // A Play still loading its list holds a reservation that Stop, Next or another Play ends; Autoplay keeps it.
+  // A Play still loading its list holds a reservation that Stop, Next, another Play or a profile reset ends; Autoplay
+  // keeps it.
   let reservation = 0;
   let expiry: MediaSource["expiry"];
   // Subtitle files added while this item plays; they move with it.
@@ -1301,6 +1302,7 @@ export function createSession(
       state.preferences = preferences;
       if (reset) {
         playIntent++;
+        reservation++;
         cancelContinuation();
         continuation = null;
         state.progressError = null;

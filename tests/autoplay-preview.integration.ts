@@ -215,6 +215,9 @@ test("a Play waiting for its list outlasts Autoplay moving on, and Stop or Next 
     const stopped = session.reservePlay();
     session.command({ type: "stop" });
     assert.throws(() => session.playNewEntries([entry("late")], { intent: stopped }), /canceled/);
+    const reset = session.reservePlay();
+    session.viewing(state!.activeProfile, state!.preferences, true);
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: reset }), /canceled/);
     session.command({ type: "enqueue", entry: entry("again"), playNow: true });
     const skipped = session.reservePlay();
     session.command({ type: "next", playbackId: state!.player.playbackId! });
