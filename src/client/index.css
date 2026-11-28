@@ -243,6 +243,11 @@
   outline: 2px solid var(--foreground);
   outline-offset: 2px;
 }
+/* A Mixer key keeps its lit, white or locked face under focus, which its ring marks instead (MixerKeys.tsx). */
+[data-mixer-key]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  background: revert-layer;
+  color: revert-layer;
+}
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] {
   scale: 1.75;

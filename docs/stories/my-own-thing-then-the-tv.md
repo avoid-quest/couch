@@ -7,11 +7,12 @@ phone or laptop meanwhile, and later move it to the TV.
 
 ## Journey
 
-1. On an item, **Play on…** → my device (marked **This device**). The TV keeps
-   playing its own thing. Or I choose each device's picture and sound there,
-   then **Play**; the line beside it says what stops, pauses or keeps playing.
-2. While more than one thing plays, the player's **on {device}** lists them all.
-   I pick the one I control. **Play** and **Play on** control what they start.
+1. On an item, **Play on…**: my device (marked **This device**) is chosen, and
+   I can choose each device's picture and sound, or a group, then **Play**.
+   The line beside it says what stops, pauses or keeps playing; the TV keeps
+   playing its own thing.
+2. While more than one thing plays, the player's **on {device}** lists them all,
+   as do the tabs at the top of **Where it plays**. I pick the one I control. **Play** and **Play on** control what they start.
 3. Later, in my player's **Where it plays**, the TV's row → **Move here**.
 4. My Playback, with its position and Up next, moves to the TV; my device stops.
 5. **Stop** stops only what I control. Then I control what still plays on my

@@ -1,13 +1,22 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from "react";
 import { Check, Lock, Minus, Pencil, Plus, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
-import type { Row } from "@/session/where-it-plays";
+import type { Choice, ChoiceRow, Row } from "@/session/where-it-plays";
 import {
   applySteps,
   channelNames,
+  groupChoice,
   groupStatus,
   listed,
   membersOf,
@@ -74,33 +83,102 @@ function useCanSave() {
 }
 
 /**
- * The Mixer's Groups line: a chip per group, ✓ while it plays as saved and "5 of 6" while only part of it can; then,
- * for the host and admins, Save as group. Opening a chip shows what applying it would change, before anything does.
+ * The Groups line: "Groups", a chip per group (✓ while it plays as saved, "5 of 6" while only part of it can, the open
+ * one inverted), then, for the host and admins, Save as group; the last group action's outcome and Undo under it.
  */
-export function GroupChips({
-  state,
+function GroupLine({
+  chips,
   connected,
-  rows,
+  onSave,
+  outcome,
+  undoing,
+  onUndo,
+  lineRef,
 }: {
-  state: ClientSessionState;
+  chips: {
+    group: MixerGroup;
+    on: boolean;
+    part?: string;
+    open?: boolean;
+    onClick: () => void;
+  }[];
   connected: boolean;
-  rows: Row[];
+  onSave?: () => void;
+  outcome: Outcome | null;
+  undoing: boolean;
+  onUndo: (outcome: Outcome) => void;
+  lineRef?: Ref<HTMLDivElement>;
 }) {
+  return (
+    <>
+      <div
+        ref={lineRef}
+        data-nav-row
+        role="group"
+        aria-label="Groups"
+        className="flex flex-wrap items-center gap-1.5 pb-2.5"
+      >
+        <span aria-hidden="true" className="mr-1 text-meta text-muted-foreground">
+          Groups
+        </span>
+        {chips.map(({ group, on, part, open, onClick }) => (
+          <Button
+            key={group.id}
+            data-group={group.id}
+            variant="secondary"
+            size="sm"
+            aria-expanded={open}
+            onClick={onClick}
+            className="font-semibold aria-expanded:bg-foreground aria-expanded:text-background aria-expanded:[&_.text-muted-foreground]:text-background/70"
+          >
+            {on && <Check aria-hidden="true" />}
+            {group.name}
+            {part && <span className="font-normal text-muted-foreground tabular-nums">{part}</span>}
+          </Button>
+        ))}
+        {onSave && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!connected}
+            onClick={onSave}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Plus aria-hidden="true" />
+            Save as group
+          </Button>
+        )}
+      </div>
+      {outcome && (
+        <div data-nav-row className="flex min-h-10 items-center gap-3 pb-2">
+          <p role="status" className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
+            {outcome.text}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            autoFocus
+            disabled={!connected || undoing}
+            onClick={() => onUndo(outcome)}
+          >
+            Undo
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The scope's outcome with its Undo, which puts back what changed and returns focus to the chip it came from. */
+function useUndo(chips: RefObject<HTMLDivElement | null>, rows: Row[]) {
   const scope = useContext(Groups);
   const gate = useContext(SessionGateContext);
-  const canSave = useCanSave();
-  const [opened, setOpened] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
-  const chips = useRef<HTMLDivElement>(null);
-  const groups = state.groups ?? [];
-  if (!scope || (!groups.length && !canSave)) return null;
-  const { edit, outcome, say } = scope;
-  const open = groups.find((group) => group.id === opened);
   const undo = async (current: Outcome) => {
     setUndoing(true);
     try {
       await current.undo(rows);
-      say(null);
+      scope?.say(null);
       // Focus goes back where it came from rather than to the top of a TV's Sheet.
       const chip =
         chips.current?.querySelector<HTMLElement>(`[data-group="${current.group}"]`) ??
@@ -112,71 +190,59 @@ export function GroupChips({
       setUndoing(false);
     }
   };
+  return { undoing, undo: (current: Outcome) => void undo(current) };
+}
+
+/**
+ * The Mixer's Groups line. Opening a chip shows what applying it to this playback (`title`) would change, before
+ * anything does.
+ */
+export function GroupChips({
+  state,
+  connected,
+  rows,
+  title,
+}: {
+  state: ClientSessionState;
+  connected: boolean;
+  rows: Row[];
+  title?: string | null;
+}) {
+  const scope = useContext(Groups);
+  const canSave = useCanSave();
+  const [opened, setOpened] = useState<string | null>(null);
+  const chips = useRef<HTMLDivElement>(null);
+  const { undoing, undo } = useUndo(chips, rows);
+  const groups = state.groups ?? [];
+  if (!scope || (!groups.length && !canSave)) return null;
+  const { edit, outcome, say } = scope;
+  const open = groups.find((group) => group.id === opened);
   return (
-    <div className="grid gap-2 pb-2">
-      <div
-        ref={chips}
-        data-nav-row
-        role="group"
-        aria-label="Groups"
-        className="flex flex-wrap items-center gap-1.5"
-      >
-        {groups.map((group) => {
-          const status = groupStatus(planGroup(group, rows, state));
-          return (
-            <Button
-              key={group.id}
-              data-group={group.id}
-              variant="secondary"
-              size="sm"
-              aria-expanded={group.id === opened}
-              onClick={() => {
-                say(null);
-                setOpened(group.id === opened ? null : group.id);
-              }}
-            >
-              {status.on && <Check aria-hidden="true" />}
-              {group.name}
-              {status.part && (
-                <span className="text-muted-foreground tabular-nums">{status.part}</span>
-              )}
-            </Button>
-          );
-        })}
-        {canSave && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!connected}
-            onClick={() => edit({ name: "", members: membersOf(rows) })}
-          >
-            <Plus aria-hidden="true" />
-            Save as group
-          </Button>
-        )}
-      </div>
-      {outcome && (
-        <div data-nav-row className="flex min-h-10 items-center gap-3">
-          <p role="status" className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
-            {outcome.text}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            autoFocus
-            disabled={!connected || undoing}
-            onClick={() => void undo(outcome)}
-          >
-            Undo
-          </Button>
-        </div>
-      )}
+    <div className="grid">
+      <GroupLine
+        lineRef={chips}
+        connected={connected}
+        outcome={outcome}
+        undoing={undoing}
+        onUndo={undo}
+        onSave={canSave ? () => edit({ name: "", members: membersOf(rows) }) : undefined}
+        chips={groups.map((group) => ({
+          group,
+          ...groupStatus(planGroup(group, rows, state)),
+          open: group.id === opened,
+          onClick: () => {
+            say(null);
+            setOpened(group.id === opened ? null : group.id);
+          },
+        }))}
+      />
       {open && (
         <GroupPreview
           key={open.id}
           group={open}
           plan={planGroup(open, rows, state)}
           rows={rows}
+          title={title}
           playbackId={state.player.playbackId}
           connected={connected}
           onEdit={canSave ? () => edit(open) : undefined}
@@ -187,6 +253,68 @@ export function GroupChips({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Choose where it plays' Groups line: a chip fills the choice with what the group asks that each device can play now,
+ * and says what it left out; nothing plays until Play. Save as group saves the choice as it stands.
+ */
+export function ChoiceGroups({
+  state,
+  connected,
+  rows,
+  choice,
+  onChoose,
+}: {
+  state: ClientSessionState;
+  connected: boolean;
+  rows: ChoiceRow[];
+  choice: Choice;
+  onChoose: (choice: Choice, left: string[]) => void;
+}) {
+  const scope = useContext(Groups);
+  const canSave = useCanSave();
+  const chips = useRef<HTMLDivElement>(null);
+  const { undoing, undo } = useUndo(chips, []);
+  const groups = state.groups ?? [];
+  if (!scope || (!groups.length && !canSave)) return null;
+  const same = (one: Choice, two: Choice) =>
+    Object.keys(one).length === Object.keys(two).length &&
+    Object.entries(one).every(
+      ([id, chosen]) => two[id]?.picture === chosen.picture && two[id]?.sound === chosen.sound,
+    );
+  return (
+    <GroupLine
+      lineRef={chips}
+      connected={connected}
+      outcome={scope.outcome}
+      undoing={undoing}
+      onUndo={undo}
+      onSave={
+        canSave
+          ? () =>
+              scope.edit({
+                name: "",
+                members: Object.entries(choice).map(([deviceId, chosen]) => ({
+                  deviceId,
+                  ...chosen,
+                })),
+              })
+          : undefined
+      }
+      chips={groups.map((group) => {
+        const filled = groupChoice(group, rows);
+        return {
+          group,
+          on: Object.keys(filled.choice).length > 0 && same(filled.choice, choice),
+          onClick: () => {
+            scope.say(null);
+            onChoose(filled.choice, filled.left);
+          },
+        };
+      })}
+    />
   );
 }
 
@@ -209,6 +337,7 @@ function GroupPreview({
   group,
   plan,
   rows,
+  title,
   playbackId,
   connected,
   onEdit,
@@ -217,6 +346,7 @@ function GroupPreview({
   group: MixerGroup;
   plan: Plan;
   rows: Row[];
+  title?: string | null;
   playbackId: string | null;
   connected: boolean;
   onEdit?: () => void;
@@ -310,9 +440,12 @@ function GroupPreview({
     });
   };
   return (
-    <section aria-label={group.name} className="grid gap-2 border-y py-3">
+    <section
+      aria-label={group.name}
+      className="mb-3 grid gap-2 rounded-lg bg-secondary px-3.5 pt-2.5 pb-3.5"
+    >
       <div data-nav-row className="flex min-h-10 items-center gap-2">
-        <h3 className="min-w-0 flex-1 text-base font-medium [overflow-wrap:anywhere]">
+        <h3 className="min-w-0 flex-1 font-heading text-body font-semibold [overflow-wrap:anywhere]">
           {group.name}
         </h3>
         {onEdit && (
@@ -328,8 +461,9 @@ function GroupPreview({
           size="sm"
           disabled={!connected || !count || busy || !playbackId}
           onClick={() => void apply()}
+          className="max-w-full"
         >
-          Apply
+          <span className="truncate">{title ? `Apply to ${title}` : "Apply"}</span>
         </Button>
         <span role="status" className="text-sm text-muted-foreground">
           {outcome}

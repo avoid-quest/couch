@@ -1,45 +1,40 @@
 import {
-  createContext,
   useContext,
-  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  Ellipsis,
-  Monitor,
-  MonitorOff,
-  SlidersVertical,
-  Volume2,
-  VolumeOff,
-  X,
-} from "lucide-react";
+import { Time } from "@videojs/react";
+import { SlidersVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
-import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Slider } from "@/components/ui/slider";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
-import { RangeControl } from "@/components/RangeControl";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import { CompressorControls } from "@/components/CompressorControls";
-import { LiveParticipation, PlaybackVolume, toolPanel } from "@/components/PlaybackTransport";
+import {
+  LiveParticipation,
+  PlaybackTimeline,
+  PlaybackTransport,
+  PlaybackVolume,
+  toolPanel,
+} from "@/components/PlaybackTransport";
+import {
+  busyWith,
+  MixerColumns,
+  MixerHeader,
+  programmeStyle,
+  useProgrammeColours,
+  whyLocked,
+  type Channel,
+} from "@/components/MixerKeys";
 import { livePlayback } from "@/session/playback-controls";
 import { cn } from "@/lib/utils";
-import { Level } from "@/components/Level";
 import { sounding } from "@/playback-status";
 import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
@@ -55,16 +50,16 @@ import {
   orderOf,
   picker,
   reopens,
-  rowLevel,
   soleSound,
-  soundActions,
-  type Control,
   type Filter,
   type Order,
   type Row,
 } from "@/session/where-it-plays";
-import type { Action } from "../../../shared/protocol";
+import { isRadio } from "../../../shared/radio";
+import type { Action, PlaybackSummary } from "../../../shared/protocol";
 import { GroupChips, GroupsScope } from "./MixerGroups";
+import { deviceRow, SyncScope, tvRow } from "./MixerRows";
+import { ShellContext } from "./shell-context";
 
 type Props = {
   state: ClientSessionState;
@@ -84,12 +79,12 @@ export const subscribeDesktop = (onChange: () => void) => {
 export const isDesktop = () => window.matchMedia(desktopQuery).matches;
 
 /**
- * Where it plays: the mixer for one Couch's devices, its own button in the now-playing bar and the player band.
- * The Volume, the counts, then every device's row, the playback's first. The rules are the model's (session/where-it-plays.ts).
+ * Where it plays: the Mixer for one Couch's devices, its own button in the now-playing bar and the player band.
+ * Its playback's title, the playbacks to choose between, the groups, then every device's row, the playback's first,
+ * and the transport at its foot. The rules are the model's (session/where-it-plays.ts).
  */
 export function WhereItPlays(props: Props & { className?: string; label?: string }) {
-  // A new playback starts closed, with its own order.
-  return <Panel key={props.state.playback} {...props} />;
+  return <Panel {...props} />;
 }
 
 // From the band or the bar its Popover opens above the whole row, clear of the timeline, as their menus do (toolPanel).
@@ -123,6 +118,20 @@ function Panel({
     order: orderOf(rows),
     side: (tv || desktop ? "popover" : "bottom") as Side,
   });
+  // A new playback starts closed, with its own order, unless the Mixer's own tabs chose it: then it stays open on it.
+  const [shown, setShown] = useState(state.playback);
+  const [picked, setPicked] = useState<string | null>(null);
+  if (shown !== state.playback) {
+    setShown(state.playback);
+    setPicked(null);
+    setFilter(null);
+    setQuery("");
+    if (picked && picked === state.playback) setView(fresh());
+    else {
+      setOpened(false);
+      setView(null);
+    }
+  }
   if (open && !view) setView(fresh());
   const side = view?.side ?? fresh().side;
   const change = (next: boolean) => {
@@ -147,7 +156,19 @@ function Panel({
       {label}
     </Button>
   );
-  const body = (close?: ReactNode) => (
+  const closeButton = (
+    <Button
+      variant="ghost"
+      size="icon-lg"
+      className="-mr-2.5 size-11 shrink-0"
+      aria-label="Close"
+      title="Close"
+      onClick={() => change(false)}
+    >
+      <X aria-hidden="true" />
+    </Button>
+  );
+  const body = (close: ReactNode) => (
     <GroupsScope state={state} connected={connected} close={close}>
       <Mixer
         state={state}
@@ -159,6 +180,7 @@ function Panel({
         query={query}
         onFilter={setFilter}
         onQuery={setQuery}
+        onPick={setPicked}
         close={close}
       />
     </GroupsScope>
@@ -177,15 +199,15 @@ function Panel({
     return (
       <Popover open={open} onOpenChange={change}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        {/* The rows scroll under the first line, so the panel keeps one surface rather than a sticky line painted over it. */}
+        {/* The rows scroll between the title and the transport, so both stay put on one surface. */}
         {open && (
           <PopoverContent
             {...toolPanel(button.current)}
             aria-label="Where it plays"
             onOpenAutoFocus={focusFirst}
-            className="max-h-[min(40rem,calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem))] w-[min(32rem,calc(100vw-2rem))] gap-0 overflow-hidden p-3"
+            className="max-h-[min(48rem,calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem))] w-[min(36rem,calc(100vw-2rem))] gap-0 overflow-hidden px-4 pt-4 pb-3"
           >
-            <SyncScope>{body()}</SyncScope>
+            <SyncScope>{body(closeButton)}</SyncScope>
           </PopoverContent>
         )}
       </Popover>
@@ -198,24 +220,12 @@ function Panel({
         aria-describedby={undefined}
         onOpenAutoFocus={focusFirst}
         showCloseButton={false}
-        className="max-h-[85dvh] items-center gap-0 overflow-y-auto px-(--gutter) pb-8"
+        className="max-h-[92dvh] items-center gap-0 overflow-hidden px-(--gutter) pt-4 pb-4"
       >
         <SheetTitle className="sr-only">Where it plays</SheetTitle>
         <SyncScope>
-          <div className="grid w-full max-w-3xl bg-inherit">
-            {body(
-              <SheetClose asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className="-mr-2.5 size-11 shrink-0"
-                  aria-label="Close"
-                  title="Close"
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </SheetClose>,
-            )}
+          <div className="flex min-h-0 w-full max-w-3xl flex-1 flex-col bg-inherit">
+            {body(closeButton)}
           </div>
         </SyncScope>
       </SheetContent>
@@ -230,13 +240,114 @@ type MixerProps = Props & {
   query?: string;
   onFilter?: (filter: Filter | null) => void;
   onQuery?: (query: string) => void;
-  close?: ReactNode;
+  onPick?: (playbackId: string) => void;
+  close: ReactNode;
+};
+
+/** "Living room TV and this device", in a tab's second line. */
+const whereNames = (state: ClientSessionState, playback: PlaybackSummary) => {
+  const names = playback.outputs.map((output) =>
+    output.deviceId === deviceId()
+      ? "this device"
+      : (state.devices?.find((device) => device.id === output.deviceId)?.name ?? "a device"),
+  );
+  const where = names.length
+    ? new Intl.ListFormat("en", { type: "conjunction" }).format(names)
+    : "Not on any device";
+  return playback.status === "paused" ? `Paused, ${where}` : where;
 };
 
 /**
- * The panel's content, without hooks, so tests walk its controls by label without a DOM: the Volume (or, for a
- * shared source waiting for receivers, "Choose where {title} plays"), In sync where it applies, the counts, the groups,
- * then the rows, the playback's devices first and the rest after a hairline, offline ones folded into one line.
+ * One tab per playback this device may control, while there are several: its picture, title and where it plays, the
+ * one the Mixer changes outlined in its colour. Choosing one makes it the playback this window controls.
+ */
+function PlaybackTabs({
+  state,
+  connected,
+  run,
+  colour,
+  onPick,
+}: Props & {
+  colour: (id: string) => string | undefined;
+  onPick?: (playbackId: string) => void;
+}) {
+  const shell = useContext(ShellContext);
+  const playbacks =
+    state.playbacks?.filter(
+      (playback) => playback.id === state.playback || (playback.running && !playback.private),
+    ) ?? [];
+  if (playbacks.length < 2) return null;
+  return (
+    <div
+      data-nav-row
+      role="group"
+      aria-label="Playing now"
+      className="flex shrink-0 gap-2 pb-3 max-sm:flex-col"
+    >
+      {playbacks.map((playback) => (
+        <button
+          key={playback.id}
+          type="button"
+          aria-pressed={playback.id === state.playback}
+          disabled={!connected}
+          onClick={() => {
+            if (playback.id === state.playback) return;
+            onPick?.(playback.id);
+            // The shell's own picker keeps the page, as the player's "on {device}" does.
+            if (shell) void shell.selectPlayback(playback.id);
+            else void run({ type: "selectPlayback", playbackId: playback.id });
+          }}
+          style={{ "--tab": colour(playback.id) } as CSSProperties}
+          className="flex min-w-0 flex-1 basis-0 items-center gap-2.5 rounded-lg py-1.5 pr-3 pl-1.5 text-left text-muted-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-accent disabled:opacity-50 aria-pressed:bg-[color-mix(in_oklab,var(--tab)_22%,transparent)] aria-pressed:text-foreground aria-pressed:shadow-[inset_0_0_0_1.5px_color-mix(in_oklab,var(--tab)_70%,white)] max-sm:basis-auto"
+        >
+          <MediaArtwork
+            thumbnail={playback.thumbnail}
+            title={playback.title ?? ""}
+            className="aspect-video h-9 w-auto max-w-16 shrink-0 rounded-md object-cover [&:is(img)]:aspect-auto"
+          />
+          <span className="grid min-w-0">
+            <span className="truncate text-meta font-semibold">{playback.title}</span>
+            <span className="truncate text-caption text-muted-foreground">
+              {whereNames(state, playback)}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The Mixer's foot: the timeline, then Play/Pause, Next, Stop, the Volume and the time, as at the player's foot. */
+function MixerTransport({ state, connected, run }: Props) {
+  const current = state.queue.find((entry) => entry.id === state.currentEntryId);
+  const timed = !!current && !current.endless && !isRadio(current) && !!current.duration;
+  return (
+    // Play/Pause leads as a round white key and Stop wears its own fill, as at the player's foot.
+    <div className="-mx-4 grid shrink-0 gap-1 border-t px-4 pt-2 [&_[aria-label=Stop]]:bg-secondary [&_[data-play-button]]:mr-1 [&_[data-play-button]]:size-11 [&_[data-play-button]]:bg-foreground [&_[data-play-button]]:text-background [&_[data-play-button]_svg]:opacity-100 [&_[data-time-labels]]:hidden">
+      <PlaybackTimeline state={state} connected={connected} />
+      <div data-nav-row className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <PlaybackTransport state={state} connected={connected} run={run} quiet />
+        <PlaybackVolume
+          state={state}
+          connected={connected}
+          run={run}
+          showValue={false}
+          className="max-w-44 min-w-32 flex-1"
+        />
+        {timed && (
+          <span className="text-meta whitespace-nowrap text-muted-foreground tabular-nums">
+            <Time.Value type="current" /> / <Time.Value type="duration" />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The panel's content: the title, the playbacks' tabs, then (scrolling) a shared source's "Choose where {title}
+ * plays", the groups, the column heads and the rows, the playback's devices first and the rest after a hairline,
+ * offline ones folded into one line, In sync and the Compressor; the transport stays at the foot.
  */
 function Mixer({
   state,
@@ -248,15 +359,35 @@ function Mixer({
   query = "",
   onFilter,
   onQuery,
+  onPick,
   close,
 }: MixerProps) {
+  const colours = useProgrammeColours(state.playbacks);
+  const [why, setWhy] = useState<{ id: string; channel: Channel } | null>(null);
+  const playback = state.playbacks?.find((item) => item.id === state.playback);
+  const current = state.queue.find((entry) => entry.id === state.currentEntryId);
+  const header = (
+    <>
+      <MixerHeader
+        heading="Where it plays"
+        title={current?.title ?? playback?.title}
+        thumbnail={playback?.thumbnail ?? current?.thumbnail}
+        close={close}
+      />
+      <PlaybackTabs
+        state={state}
+        connected={connected}
+        run={run}
+        colour={colours}
+        onPick={onPick}
+      />
+    </>
+  );
   if (livePlayback(state)) {
     return (
-      <div className="grid gap-3">
-        <div data-nav-row className="flex items-center gap-2">
-          <PlaybackVolume state={state} connected={connected} run={run} />
-          {close}
-        </div>
+      <div className="grid gap-3" style={programmeStyle(colours(state.playback))}>
+        {header}
+        <PlaybackVolume state={state} connected={connected} run={run} />
         <LiveParticipation state={state} connected={connected} run={run} />
       </div>
     );
@@ -267,7 +398,7 @@ function Mixer({
     many = arrange(rows, order).listed > crowded;
   const offered = many && summary.some((item) => item.filter === filter) ? filter : null;
   const { playing, rest, offline } = arrange(rows, order, offered, many ? query : "");
-  // One device sounding: the Volume above is its level, so its row doesn't repeat the fader.
+  // One device sounding: the Volume at the foot is its level, so its row doesn't repeat the fader.
   const sole = soleSound(rows);
   const sounds = sounding(state, connected);
   const canCompress =
@@ -279,39 +410,46 @@ function Mixer({
         ((!output.picture || sharing?.video) && (!output.sound || sharing?.audio))
       );
     });
+  const whyOf = (item: Row) => {
+    if (why?.id !== item.device.id) return undefined;
+    const reason = item[why.channel].reason;
+    return (
+      reason && { text: whyLocked(item.device, why.channel, reason), offline: reason === "Offline" }
+    );
+  };
+  const shared = {
+    connected,
+    run,
+    playing: sounds,
+    dot: (item: Row) => {
+      const busy = !item.output && busyWith(state.playbacks, item.device.id, state.playback);
+      return busy && item.status.includes("Playing") ? colours(busy.id) : undefined;
+    },
+    onWhy: (item: Row, channel: Channel) =>
+      setWhy((was) =>
+        was?.id === item.device.id && was.channel === channel
+          ? null
+          : { id: item.device.id, channel },
+      ),
+  };
   const row = (item: Row) =>
     tv
-      ? tvRow({ row: item, connected, run, playing: sounds })
-      : deviceRow({ row: item, connected, run, fader: item.device.id !== sole, playing: sounds });
+      ? tvRow({ ...shared, row: item, why: whyOf(item) })
+      : deviceRow({ ...shared, row: item, fader: item.device.id !== sole, why: whyOf(item) });
   return (
-    <>
-      {/* The first line, and with the counts and search, what stays put while a long list scrolls: in a Sheet it sticks
-        over the rows on the Sheet's own ground; a Popover scrolls only its rows, under it. */}
-      <div className={cn("grid shrink-0 gap-1 pb-2", close && "sticky top-0 z-10 bg-inherit pt-2")}>
-        <div data-nav-row className="flex min-h-11 items-center gap-2">
-          {choose ? (
-            <p className="min-w-0 flex-1 text-base [overflow-wrap:anywhere]">{choose}</p>
-          ) : (
-            <PlaybackVolume state={state} connected={connected} run={run} className="-ml-2.5" />
-          )}
-          {/* Close, or the "…" column's room, so the numbers line up. */}
-          {close ?? <span aria-hidden="true" className="w-11 shrink-0 max-sm:hidden" />}
-        </div>
-        {inSync !== undefined && (
-          <div data-nav-row className="flex min-h-11 items-center justify-between gap-4">
-            <Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">
-              In sync
-            </Label>
-            <Switch
-              id="where-it-plays-in-sync"
-              checked={inSync}
-              disabled={!connected}
-              onCheckedChange={(on) => void run({ type: "inSync", inSync: on })}
-            />
-          </div>
-        )}
-        {summary.length > 0 &&
-          (many ? (
+    <div className="flex min-h-0 flex-1 flex-col" style={programmeStyle(colours(state.playback))}>
+      {header}
+      {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
+      <div className="-mx-4 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3">
+        {choose && <p className="pb-3 text-body [overflow-wrap:anywhere]">{choose}</p>}
+        <GroupChips
+          state={state}
+          connected={connected}
+          rows={rows}
+          title={playback?.title ?? current?.title}
+        />
+        {many && (
+          <div className="grid gap-1 pb-2">
             <ToggleGroup
               data-nav-row
               type="single"
@@ -331,43 +469,18 @@ function Mixer({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-          ) : (
-            <p className="text-sm text-muted-foreground tabular-nums">
-              {summary.map((item) => `${item.label} ${item.count}`).join(", ")}
-            </p>
-          ))}
-        {many && (
-          <div data-nav-row className="flex pt-1">
-            <FilterInput
-              label="Find a device"
-              placeholder="Find a device"
-              value={query}
-              onChange={(value) => onQuery?.(value)}
-              className="sm:max-w-none"
-            />
+            <div data-nav-row className="flex pt-1">
+              <FilterInput
+                label="Find a device"
+                placeholder="Find a device"
+                value={query}
+                onChange={(value) => onQuery?.(value)}
+                className="sm:max-w-none"
+              />
+            </div>
           </div>
         )}
-      </div>
-      {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
-      <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
-        <GroupChips state={state} connected={connected} rows={rows} />
-        {state.compressor && state.player.playbackId && (
-          <CompressorControls
-            key={state.playback}
-            settings={state.compressor}
-            playbackId={state.player.playbackId}
-            run={run}
-            unavailable={
-              !connected
-                ? "Reconnect to change the compressor."
-                : !canCompress
-                  ? "This playback is private."
-                  : state.queue.find((entry) => entry.id === state.currentEntryId)?.liveSourceId
-                    ? "Unavailable for live sharing."
-                    : undefined
-            }
-          />
-        )}
+        <MixerColumns volume />
         {playing.length > 0 && (
           <ul aria-label="Playing" className="grid">
             {playing.map(row)}
@@ -376,13 +489,13 @@ function Mixer({
         {rest.length > 0 && (
           <ul
             aria-label="Not playing"
-            className={cn("grid", playing.length > 0 && "mt-2 border-t pt-2")}
+            className={cn("grid", playing.length > 0 && "mt-1.5 border-t pt-1.5")}
           >
             {rest.map(row)}
           </ul>
         )}
         {offline.length > 0 && (
-          <p className="mt-2 border-t pt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          <p className="mt-1.5 border-t pt-2.5 text-meta text-muted-foreground [overflow-wrap:anywhere]">
             Offline: {offlineNames(offline)}
           </p>
         )}
@@ -407,422 +520,42 @@ function Mixer({
             </Button>
           </div>
         )}
-      </div>
-    </>
-  );
-}
-
-/** A row's change, with the unmute its sound brings (soundActions), each in turn until Core refuses one. */
-const send = async (run: Props["run"], row: Row, action: Action) => {
-  for (const next of soundActions(row, action)) if (!(await run(next))) return false;
-  return true;
-};
-
-/** A device's name, with the level while its sound is in the playback (rowLevel). */
-const deviceName = (row: Row, playing: boolean) => {
-  const level = rowLevel(row, playing);
-  return (
-    <span data-output-name className="flex items-baseline gap-2 text-base [overflow-wrap:anywhere]">
-      {row.device.name}
-      {level && <Level moving={level === "moving"} className="text-xs" />}
-    </span>
-  );
-};
-const statusLine = (row: Row) =>
-  row.status && (
-    <span
-      id={`where-it-plays-${row.device.id}`}
-      data-output-status
-      className={cn(
-        "text-sm [overflow-wrap:anywhere]",
-        row.failed ? "text-destructive" : "text-muted-foreground",
-      )}
-    >
-      {row.status}
-    </span>
-  );
-
-/**
- * A device's row, the same at every scale: its name and any exception, its Picture and Sound toggles, its fader and
- * number while its sound is on and another device's sounds too (Move here instead while it isn't in), and "…" while Sync applies. On phones the fader takes a second line.
- * Called rather than rendered, so tests can walk its controls without a DOM.
- */
-function deviceRow({
-  row,
-  connected,
-  run,
-  fader = true,
-  playing = false,
-}: {
-  row: Row;
-  connected: boolean;
-  run: Props["run"];
-  fader?: boolean;
-  playing?: boolean;
-}) {
-  const { device, output, picture, sound, level, move } = row;
-  const toggle = (
-    channel: typeof picture,
-    label: string,
-    on: ReactNode,
-    off: ReactNode,
-    name: string,
-  ) => (
-    <Toggle
-      aria-label={`${device.name} ${label}`}
-      title={channel.reason ?? name}
-      pressed={channel.on}
-      disabled={!connected || !channel.enabled}
-      onPressedChange={() => void send(run, row, channel.action)}
-      className="size-11 data-[state=off]:text-muted-foreground data-[state=on]:bg-transparent"
-    >
-      {channel.on ? on : off}
-    </Toggle>
-  );
-  return (
-    <li
-      key={device.id}
-      data-nav-row
-      data-device={device.id}
-      className="grid grid-cols-[minmax(0,1fr)_auto_auto_5.5rem] items-center gap-x-1 py-1 sm:grid-cols-[minmax(min(100%,10rem),1fr)_auto_auto_minmax(5rem,11rem)_2.75rem]"
-    >
-      <span className="grid min-w-0 py-1">
-        {deviceName(row, playing)}
-        {statusLine(row)}
-      </span>
-      {toggle(
-        picture,
-        "picture",
-        <Monitor aria-hidden="true" />,
-        <MonitorOff aria-hidden="true" />,
-        "Picture",
-      )}
-      {toggle(
-        sound,
-        "sound",
-        <Volume2 aria-hidden="true" />,
-        <VolumeOff aria-hidden="true" />,
-        "Sound",
-      )}
-      {output && level.sound && fader && (
-        <div
-          data-volume
-          className="col-span-full row-start-2 flex min-h-11 min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-4 sm:row-start-1"
-        >
-          <RangeControl
-            label={`${device.name} volume`}
-            value={level.value}
-            max={100}
-            disabled={!connected || !level.enabled}
-            onCommit={(value) =>
-              send(run, row, { type: "output", deviceId: device.id, level: value })
-            }
-          />
-          <span className="w-[3ch] shrink-0 text-right tabular-nums">
-            {Math.round(level.value)}
-          </span>
-        </div>
-      )}
-      {!output && move && (
-        <Button
-          variant="ghost"
-          aria-label={`Move here: ${device.name}`}
-          title={move.reason}
-          disabled={!connected || !move.enabled}
-          onClick={() => void run({ type: "solo", deviceId: device.id })}
-          className="col-start-4 row-start-1 -mr-2.5 justify-self-end sm:mr-0 sm:justify-self-start"
-        >
-          Move here
-        </Button>
-      )}
-      {row.sync && (
-        <Delay
-          id={device.id}
-          label={`${device.name} sync`}
-          delay={row.sync.delay}
-          disabled={!connected}
-          onCommit={(delay) => void run({ type: "output", deviceId: device.id, delay })}
-        />
-      )}
-      {output && row.sync && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              className="col-start-4 row-start-1 -mr-2.5 size-11 justify-self-end sm:col-start-5"
-              aria-label={`Options for ${device.name}`}
-              title="Options"
-              disabled={!connected}
-            >
-              <Ellipsis aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <Options id={device.id} sync="Sync…" />
-        </DropdownMenu>
-      )}
-    </li>
-  );
-}
-
-/**
- * On a TV a row is one focus stop: Left and Right move its level by 5 at once (no OK to take the arrows), OK opens
- * its options with Picture and Sound, and Back closes the panel. Called rather than rendered, as deviceRow is.
- */
-function tvRow({
-  row,
-  connected,
-  run,
-  playing = false,
-}: {
-  row: Row;
-  connected: boolean;
-  run: Props["run"];
-  playing?: boolean;
-}) {
-  const { device, picture, sound, level } = row;
-  const step = (by: number) => {
-    if (connected && level.enabled && level.sound)
-      void send(run, row, {
-        type: "output",
-        deviceId: device.id,
-        level: Math.max(0, Math.min(100, level.value + by)),
-      });
-  };
-  return (
-    <li key={device.id} data-nav-row data-device={device.id} className="grid">
-      <DropdownMenu>
-        {/* A horizontal slider outside a Volume, so Left/Right reach it and Up/Down move on (navigation.ts). */}
-        <DropdownMenuTrigger asChild disabled={!connected}>
-          <div
-            data-device-row
-            role="slider"
-            tabIndex={connected ? 0 : -1}
-            aria-disabled={!connected}
-            aria-label={device.name}
-            aria-describedby={row.status ? `where-it-plays-${device.id}` : undefined}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={level.value}
-            aria-valuetext={level.sound ? `${Math.round(level.value)} percent` : "No sound"}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-                event.preventDefault();
-                step(event.key === "ArrowLeft" ? -5 : 5);
-              }
-            }}
-            className="-mx-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto_minmax(0,11rem)_3ch_auto] items-center gap-x-3 px-2.5 py-2 outline-none aria-disabled:opacity-50"
-          >
-            <span className="grid min-w-0">
-              {deviceName(row, playing)}
-              {statusLine(row)}
-            </span>
-            {picture.on ? (
-              <Monitor aria-hidden="true" className="size-5" />
-            ) : (
-              <MonitorOff aria-hidden="true" className="size-5 opacity-50" />
+        {(inSync !== undefined || (state.compressor && state.player.playbackId)) && (
+          <div className="mt-2.5 border-t pt-1">
+            {inSync !== undefined && (
+              <div data-nav-row className="flex min-h-11 items-center justify-between gap-4">
+                <Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">
+                  In sync
+                </Label>
+                <Switch
+                  id="where-it-plays-in-sync"
+                  checked={inSync}
+                  disabled={!connected}
+                  onCheckedChange={(on) => void run({ type: "inSync", inSync: on })}
+                />
+              </div>
             )}
-            {sound.on ? (
-              <Volume2 aria-hidden="true" className="size-5" />
-            ) : (
-              <VolumeOff aria-hidden="true" className="size-5 opacity-50" />
-            )}
-            {level.sound ? (
-              <Progress
-                value={level.value}
-                aria-hidden="true"
-                className="bg-current/20 [&_[data-slot=progress-indicator]]:bg-current"
+            {state.compressor && state.player.playbackId && (
+              <CompressorControls
+                key={state.playback}
+                settings={state.compressor}
+                playbackId={state.player.playbackId}
+                run={run}
+                unavailable={
+                  !connected
+                    ? "Reconnect to change the compressor."
+                    : !canCompress
+                      ? "This playback is private."
+                      : current?.liveSourceId
+                        ? "Unavailable for live sharing."
+                        : undefined
+                }
               />
-            ) : (
-              <span />
             )}
-            <span className="text-right tabular-nums">
-              {level.sound ? Math.round(level.value) : ""}
-            </span>
-            {/* OK opens its options, as a tile's held OK does; the "…" says so without being a stop of its own. */}
-            <Ellipsis aria-hidden="true" className="size-5 text-muted-foreground" />
           </div>
-        </DropdownMenuTrigger>
-        <Options id={device.id} sync={row.sync && "Sync…"}>
-          {channelItems({ row, connected, run })}
-        </Options>
-      </DropdownMenu>
-      {row.sync && (
-        <Delay
-          id={device.id}
-          label={`${device.name} sync`}
-          delay={row.sync.delay}
-          disabled={!connected}
-          onCommit={(delay) => void run({ type: "output", deviceId: device.id, delay })}
-        />
-      )}
-    </li>
-  );
-}
-
-/** A TV row's Picture and Sound, which its OK opens, then Move here when permitted. Its sound is its Sound and fader's. */
-function channelItems({
-  row,
-  connected,
-  run,
-}: {
-  row: Row;
-  connected: boolean;
-  run: Props["run"];
-}) {
-  const { device, picture, sound } = row;
-  return (
-    <>
-      <DropdownMenuCheckboxItem
-        aria-label={`${device.name} picture`}
-        checked={picture.on}
-        disabled={!connected || !picture.enabled}
-        onCheckedChange={() => void send(run, row, picture.action)}
-      >
-        Picture
-        <Why {...picture} />
-      </DropdownMenuCheckboxItem>
-      <DropdownMenuCheckboxItem
-        aria-label={`${device.name} sound`}
-        checked={sound.on}
-        disabled={!connected || !sound.enabled}
-        onCheckedChange={() => void send(run, row, sound.action)}
-      >
-        Sound
-        <Why {...sound} />
-      </DropdownMenuCheckboxItem>
-      {row.move && (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            aria-label={`Move here: ${device.name}`}
-            disabled={!connected || !row.move.enabled}
-            onSelect={() => void run({ type: "solo", deviceId: device.id })}
-          >
-            Move here
-            <Why {...row.move} />
-          </DropdownMenuItem>
-        </>
-      )}
-    </>
-  );
-}
-
-// The Sync line a row's "Sync…" revealed. Local to the open panel, so closing it hides the line again.
-const RevealedSync = createContext<{ id: string | null; reveal: (id: string | null) => void }>({
-  id: null,
-  reveal: () => {},
-});
-function SyncScope({ children }: { children: ReactNode }) {
-  const [id, reveal] = useState<string | null>(null);
-  return <RevealedSync value={{ id, reveal }}>{children}</RevealedSync>;
-}
-
-// A row's options (a TV row's Picture and Sound), then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its slider
-// rather than back to what opened the menu. The items stay children, so tests walk them without a DOM.
-function Options({ id, sync, children }: { id: string; sync?: string; children?: ReactNode }) {
-  const { reveal } = useContext(RevealedSync);
-  const picked = useRef(false);
-  return (
-    <DropdownMenuContent
-      align="end"
-      onCloseAutoFocus={(event) => {
-        if (!picked.current) return;
-        picked.current = false;
-        event.preventDefault();
-        document.querySelector<HTMLElement>(`[data-sync-line="${id}"] [role="slider"]`)?.focus();
-      }}
-    >
-      {children}
-      {sync && (
-        <>
-          {children && <DropdownMenuSeparator />}
-          <DropdownMenuItem
-            className="pl-8"
-            onSelect={() => {
-              picked.current = true;
-              reveal(id);
-            }}
-          >
-            {sync}
-          </DropdownMenuItem>
-        </>
-      )}
-    </DropdownMenuContent>
-  );
-}
-
-/** A disabled menu item's one-word reason, at its end. */
-const Why = ({ reason }: Control) =>
-  reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
-
-// A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other devices:
-// Sendspin's static delay, 0–500 ms, to the picture too where another device shows one. It applies only while the
-// device plays in sync, and few people touch it, so a row shows it only while it isn't 0, or once "…" revealed it.
-// Its slider is horizontal and outside a Volume, so on the TV Left/Right move it at once, as a row's level.
-function Delay({
-  id,
-  label,
-  delay,
-  disabled,
-  onCommit,
-}: {
-  id: string;
-  label: string;
-  delay: number;
-  disabled: boolean;
-  onCommit: (delay: number) => void;
-}) {
-  const revealed = useContext(RevealedSync);
-  const [draft, setDraft] = useState<number | null>(null);
-  useEffect(() => {
-    if (disabled) setDraft(null);
-  }, [disabled]);
-  const value = draft ?? delay;
-  // A line taken to 0 while its slider is in use stays until focus leaves it, as a revealed one would.
-  const shown = revealed.id === id || draft !== null;
-  const hides = shown && !delay;
-  // Back or Esc on a revealed slider still at 0 hides it, with focus back on the row's options, rather than closing
-  // the panel. Radix listens on the document, so this listens on the window first.
-  useEffect(() => {
-    if (!hides) return;
-    const hide = (event: KeyboardEvent) => {
-      const slider =
-        event.target instanceof HTMLElement
-          ? event.target.closest(`[data-sync-line="${id}"] [role="slider"]`)
-          : null;
-      if (event.key !== "Escape" || event.defaultPrevented || !slider) return;
-      event.preventDefault();
-      event.stopPropagation();
-      slider.closest("li")?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
-      revealed.reveal(null);
-    };
-    window.addEventListener("keydown", hide, true);
-    return () => window.removeEventListener("keydown", hide, true);
-  }, [hides, id]);
-  if (!delay && !shown) return null;
-  return (
-    <div
-      data-sync-line={id}
-      className="col-span-full flex min-h-11 min-w-0 items-center gap-3 pb-1"
-    >
-      <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-        Sync {value} ms earlier
-      </span>
-      <Slider
-        aria-label={label}
-        aria-valuetext={`${value} milliseconds earlier`}
-        value={[value]}
-        min={0}
-        max={500}
-        step={10}
-        disabled={disabled}
-        onValueChange={([next]) => setDraft(next!)}
-        onValueCommit={([next]) => {
-          if (!disabled) onCommit(next!);
-        }}
-        onBlur={() => setDraft(null)}
-      />
+        )}
+      </div>
+      <MixerTransport state={state} connected={connected} run={run} />
     </div>
   );
 }

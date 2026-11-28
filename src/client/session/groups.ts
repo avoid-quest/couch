@@ -1,5 +1,12 @@
 import type { ClientSessionState } from "./session";
-import { leaveAction, soundActions, type OutputAction, type Row } from "./where-it-plays";
+import {
+  leaveAction,
+  soundActions,
+  type Choice,
+  type ChoiceRow,
+  type OutputAction,
+  type Row,
+} from "./where-it-plays";
 import type { GroupMember, MixerGroup } from "../../shared/mixer-groups";
 
 // What applying a Group to the playback in view would change, from the Mixer's own rows (where-it-plays.ts): a group
@@ -159,3 +166,25 @@ export const membersOf = (rows: Row[]): GroupMember[] =>
   rows
     .filter((row) => row.picture.on || row.sound.on)
     .map((row) => ({ deviceId: row.device.id, picture: row.picture.on, sound: row.sound.on }));
+
+/**
+ * A group as Choose where it plays' choice: each member's channels its row can play now, and the rest it leaves out
+ * ("Bedroom TV sound (offline)"). What the item lacks is no one's to leave out, so it isn't said.
+ */
+export function groupChoice(group: MixerGroup, rows: ChoiceRow[]) {
+  const choice: Choice = {},
+    left: string[] = [];
+  for (const member of group.members) {
+    const row = rows.find((item) => item.device.id === member.deviceId);
+    if (!row) continue;
+    const picture = member.picture && row.picture.enabled,
+      sound = member.sound && row.sound.enabled;
+    if (picture || sound) choice[member.deviceId] = { picture, sound };
+    for (const channel of ["picture", "sound"] as const) {
+      const reason = row[channel].reason;
+      if (member[channel] && reason && reason !== "No picture" && reason !== "No sound")
+        left.push(`${row.device.name} ${channel} (${reason.toLowerCase()})`);
+    }
+  }
+  return { choice, left };
+}
