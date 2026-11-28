@@ -224,3 +224,35 @@ test("a Play waiting for its list outlasts Autoplay moving on, and Stop or Next 
     store.close();
   }
 });
+
+test("a list read in parts extends the Autoplay it started, and nothing that replaced it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("parts");
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    () => {},
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    assert.equal(session.extendContinuation("second", [entry("third")]), true);
+    assert.deepEqual(
+      playback.playbackContinuation()?.entries.map((item) => item.id),
+      ["second", "third"],
+    );
+    session.playNewEntries([entry("other")], {
+      continuation: { title: "Other", entries: [entry("after")] },
+    });
+    assert.equal(session.extendContinuation("third", [entry("late")]), false);
+    assert.deepEqual(
+      session.state.autoplay?.upcoming.map((item) => item.id),
+      ["after"],
+    );
+  } finally {
+    session.close();
+    store.close();
+  }
+});

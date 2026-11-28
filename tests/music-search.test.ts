@@ -624,7 +624,7 @@ test("A Bandcamp fan's page lists its items, pages with its token, and Play all 
   calls.length = 0;
   const queued = await fans.load("https://bandcamp.com/fan");
   // Play all reads the later pages too, many releases per request.
-  expect(calls[1]?.at(-1)).toEndWith("&count=100");
+  expect(calls.some((args) => args.at(-1)?.endsWith("&count=100"))).toBe(true);
   expect(queued.items.map((item) => [item.title, item.url, item.collection?.index])).toEqual([
     ["first 1", "https://label.bandcamp.com/track/first-song-1", 0],
     ["first 2", "https://label.bandcamp.com/track/first-song-2", 1],
@@ -633,4 +633,61 @@ test("A Bandcamp fan's page lists its items, pages with its token, and Play all 
     ["second 1", "https://label.bandcamp.com/track/second-song-1", 0],
     ["second 2", "https://label.bandcamp.com/track/second-song-2", 1],
   ]);
+  // Play all starts on the first page's albums; the rest follows, short of 500 with an album unread.
+  const started = await fans.start("https://bandcamp.com/fan");
+  expect(started.items.map((item) => item.title)).toEqual(["first 1", "first 2", "single & co"]);
+  const more = await started.more;
+  expect(more?.items.map((item) => item.title)).toEqual(["older & co", "second 1", "second 2"]);
+  expect(more?.short).toBe(true);
+});
+
+test("Play all on a Bandcamp fan's list reads a spare release in place of an album that fails", async () => {
+  const release = (slug: string, tracks: number) => ({
+    tralbum_type: "a",
+    item_url: `https://label.bandcamp.com/album/${slug}`,
+    item_title: slug,
+    num_streamable_tracks: tracks,
+  });
+  const first = Object.fromEntries(
+    Array.from({ length: 8 }, (_, index) => [`a${index}`, release(`head-${index}`, 1)]),
+  );
+  const blob = {
+    fan_data: { fan_id: 1, name: "Fan" },
+    collection_data: { item_count: 11, last_token: "1:a" },
+    item_cache: { collection: first },
+  };
+  const fans = createBandcampFans(async (args) => {
+    const url = args.at(-1)!;
+    if (url === "https://bandcamp.com/fan")
+      return JSON.stringify({
+        couch_bandcamp_page: `<div id="pagedata" data-blob="${JSON.stringify(blob).replaceAll('"', "&quot;")}"></div>`,
+      });
+    if (url.startsWith("https://bandcamp.com/api/"))
+      return JSON.stringify({
+        couch_bandcamp_page: JSON.stringify({
+          items: [release("gone", 250), release("long", 250), release("spare", 250)],
+          more_available: false,
+        }),
+      });
+    const albums = args.slice(args.indexOf("--") + 1);
+    if (albums.some((album) => album.endsWith("/gone"))) throw new ExtractionError("Gone.");
+    return albums
+      .map((album) => {
+        const count = album.includes("/head-") ? 1 : 250;
+        return JSON.stringify({
+          webpage_url: album,
+          entries: Array.from({ length: count }, (_, n) => ({
+            url: `${album.replace("/album/", "/track/")}-${n}`,
+            title: `${album.split("/").at(-1)} ${n}`,
+          })),
+        });
+      })
+      .join("\n");
+  });
+  const page = await fans.start("https://bandcamp.com/fan");
+  expect(page.items).toHaveLength(8);
+  const more = await page.more;
+  expect(more?.items).toHaveLength(492);
+  expect(more?.items.at(-1)?.title).toBe("spare 241");
+  expect(more?.short).toBe(false);
 });

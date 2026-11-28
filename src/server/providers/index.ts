@@ -26,7 +26,12 @@ import { animeSaturnPageUrl } from "../../shared/animesaturn";
 import { animeUnityPageUrl } from "../../shared/animeunity";
 import { movies123PageUrl } from "../../shared/movies123";
 import { loadBandcampAlbum } from "./bandcamp";
-import { browseBandcampFan, loadBandcampFan } from "./bandcamp-fans";
+import {
+  browseBandcampFan,
+  loadBandcampFan,
+  startBandcampFan,
+  type FanListRest,
+} from "./bandcamp-fans";
 import { bandcampFanUrl } from "../../shared/providers";
 import { loadRaiPlayProgramme } from "./raiplay";
 import { loadYouTubePlaylist } from "./youtube";
@@ -178,6 +183,16 @@ export async function loadProviderList(
   const items = page.items.filter((item) => item.kind === "media");
   if (!items.length) throw new ProviderError("This Twitch list has no supported media.", 404);
   return { ...page, items };
+}
+
+/** Play all's list as soon as it can start: a Bandcamp fan's comes with its first albums, and `more` for the rest. */
+export function startProviderList(
+  provider: ProviderId,
+  url: string,
+  signal?: AbortSignal,
+): Promise<ProviderPage & { more?: Promise<FanListRest> }> {
+  if (provider === "bandcamp" && bandcampFanUrl(url)) return startBandcampFan(url, signal);
+  return loadProviderList(provider, url, signal);
 }
 
 export function createProviders({

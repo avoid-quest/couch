@@ -424,7 +424,8 @@ export function useSession(
             activity &&
             activity.id !== previous?.activity?.id &&
             ((activity.kind === "sharing-stopped" && activity.actor.deviceId !== deviceId()) ||
-              (activity.kind === "listener-removed" && activity.target === deviceId()))
+              (activity.target === deviceId() &&
+                (activity.kind === "listener-removed" || activity.kind === "list-short")))
           )
             notice(activity.text);
           baseline = true;

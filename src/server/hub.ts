@@ -81,8 +81,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { playbackPreviewResponse } from "./playback-preview";
 import { hlsPreview } from "./hls-preview";
 import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
-import { createProviders } from "./providers";
-import { loadProviderList } from "./providers";
+import { createProviders, loadProviderList, startProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { artworkResponse } from "./artwork";
 import { createPassThrough } from "./pass-through";
@@ -3875,7 +3874,11 @@ export async function createHub(options: HubOptions) {
   ): Promise<void> | undefined => {
     type Intake =
       | { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string }
-      | { entries: QueueEntry[]; title: string };
+      | {
+          entries: QueueEntry[];
+          title: string;
+          more?: Promise<{ entries: QueueEntry[]; short: boolean }>;
+        };
     const actor = playedBy?.deviceId ?? hostId(),
       authenticated = authorize;
     authorize = () => {
@@ -3918,13 +3921,26 @@ export async function createHub(options: HubOptions) {
         ...(!title ? { inspectUrl: item.url } : {}),
       };
     };
+    // Play all starts as soon as the list's first part is read; Queue all waits for the whole list.
     const list = async (
       provider: ProviderId,
       url: string,
       quality?: VideoQuality,
+      playNow?: boolean,
     ): Promise<Intake> => {
-      const page = await loadProviderList(provider, url, shutdown.signal);
-      return { entries: providerListEntries(page, quality), title: page.title || "Playlist" };
+      const { more, ...page }: Awaited<ReturnType<typeof startProviderList>> = playNow
+        ? await startProviderList(provider, url, shutdown.signal)
+        : await loadProviderList(provider, url, shutdown.signal);
+      const rest = more?.then(({ items, short }) => ({
+        entries: providerListEntries({ items }, quality),
+        short,
+      }));
+      rest?.catch(() => {}); // Read on only when Play all starts.
+      return {
+        entries: providerListEntries(page, quality),
+        title: page.title || "Playlist",
+        ...(rest ? { more: rest } : {}),
+      };
     };
     let prepare: () => Intake | null | Promise<Intake | null>;
     switch (action.type) {
@@ -3935,7 +3951,7 @@ export async function createHub(options: HubOptions) {
         prepare =
           action.shape === "atom"
             ? () => web({ ...action, entryId: crypto.randomUUID() })
-            : () => list(action.provider, action.url, action.quality);
+            : () => list(action.provider, action.url, action.quality, action.playNow);
         break;
       case "enqueueRadio":
         prepare = () => {
@@ -4091,6 +4107,18 @@ export async function createHub(options: HubOptions) {
             playedBy,
             continuation: { title: prepared.title, entries: entries.slice(1) },
           });
+          void prepared.more
+            ?.then(({ entries: later, short }) => {
+              if (!session.extendContinuation(entries.at(-1)!.id, later) || !short) return;
+              const total = entries.length + later.length;
+              session.notice(
+                playedBy ?? playbackActor(null)!,
+                `Playing ${total} tracks from ${prepared.title}; the rest stay on its page`,
+                "list-short",
+                actor,
+              );
+            })
+            .catch(() => {});
         } else {
           // A list longer than Up next's room queues what fits; a full Up next still refuses it.
           const room = 500 - stateOf(playback).queue.length;

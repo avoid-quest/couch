@@ -22,6 +22,27 @@ const albumGroup = 8;
 // yt-dlp runs three extractions at once for all of Core; a fan list takes two, so playback and searches always keep
 // one and Bandcamp sees no burst.
 const albumLanes = 2;
+// Releases read past those that fill the list by Bandcamp's counts, so an album that fails to read is replaced.
+const spareReleases = 4;
+/** The rest of a fan's list, after its first albums, and whether it ends under 500 tracks while the fan has more. */
+export type FanListRest = { items: ProviderItem[]; short: boolean };
+
+/** The releases up to the first group of albums: they play while the rest is read. */
+function headOf(releases: Release[]) {
+  let albums = 0;
+  const end = releases.findIndex(
+    (release) => release.item.kind === "collection" && ++albums > albumGroup,
+  );
+  return end === -1 ? releases : releases.slice(0, end);
+}
+
+/** How many releases fill the list by Bandcamp's track counts, with the spares; all of them when they don't. */
+function wanted(listed: Release[]) {
+  let tracks = 0;
+  let index = 0;
+  while (index < listed.length && tracks < maxTracks) tracks += listed[index++]!.tracks;
+  return tracks < maxTracks ? Infinity : index + spareReleases;
+}
 
 /** Runs tasks so that at most `count` are underway at once, the rest in the order they came. */
 function lanes(count: number) {
@@ -277,57 +298,91 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
     return new Map(read.flatMap((tracks) => [...tracks]));
   }
 
+  /** Each release's tracks: a track as it is, an album's as read, none for one that wasn't. */
+  const expand = (chosen: Release[], tracks: Map<string, ProviderItem[]>) =>
+    chosen.flatMap(({ item }) => (item.kind === "media" ? [item] : (tracks.get(item.url) ?? [])));
+  const albumsOf = (chosen: Release[]) =>
+    chosen.flatMap(({ item }) => (item.kind === "collection" ? [item] : []));
+
+  /** Albums' tracks, read a group at a time in the two lanes. */
+  async function read(albums: ProviderItem[], signal: AbortSignal) {
+    const groups = Array.from({ length: Math.ceil(albums.length / albumGroup) }, (_, index) =>
+      albums.slice(index * albumGroup, (index + 1) * albumGroup),
+    );
+    return new Map(
+      (await Promise.all(groups.map((albums) => group(albums, signal)))).flatMap((read) => [
+        ...read,
+      ]),
+    );
+  }
+
   /**
-   * Play all: the tracks of the fan's list, newest first, each album's in order, up to 500. The list pages until its
-   * releases hold 500 tracks; whatever is read when the deadline passes is what plays.
+   * Play all: the tracks of the fan's list, newest first, each album's in order, up to 500. The first page's first
+   * albums come at once, so the list starts playing in seconds; `more` pages through the list and reads the albums
+   * that fill it, and says whether the list is `short` (under 500 tracks while the fan has more). Whatever is read
+   * when the deadline passes is what plays.
    */
-  async function load(url: string, signal?: AbortSignal): Promise<ProviderPage> {
+  async function start(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<ProviderPage & { more?: Promise<FanListRest> }> {
     const fan = bandcampFanUrl(url);
     if (!fan) throw new ProviderError("Enter a Bandcamp fan's collection or wishlist link.", 400);
     const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(loadTime)]);
     const first = await firstPage(run, fan, deadline);
-    const listed = [...first.releases];
-    const count = () => listed.reduce((total, release) => total + release.tracks, 0);
-    for (let cursor = first.nextCursor; cursor && count() < maxTracks;) {
-      let page;
-      try {
-        page = await nextPage(run, fan, cursor, loadCount, deadline);
-      } catch (error) {
-        // A later page that fails or comes too late ends the list where it is.
-        signal?.throwIfAborted();
-        if (deadline.aborted || error instanceof ProviderError) break;
-        throw error;
+    const head = headOf(first.releases);
+    const headRead = read(albumsOf(head), deadline);
+    const rest = (async () => {
+      const listed = [...first.releases];
+      let cursor = first.nextCursor;
+      while (cursor && listed.length < wanted(listed)) {
+        let page;
+        try {
+          page = await lane(() => nextPage(run, fan, cursor!, loadCount, deadline));
+        } catch (error) {
+          // A later page that fails or comes too late ends the list where it is.
+          signal?.throwIfAborted();
+          if (deadline.aborted || error instanceof ProviderError) break;
+          throw error;
+        }
+        if (!page.releases.length) break;
+        listed.push(...page.releases);
+        cursor = page.nextCursor;
       }
-      if (!page.releases.length) break;
-      listed.push(...page.releases);
-      cursor = page.nextCursor;
-    }
-    // Only the releases that fill the list: Bandcamp says how many tracks each album streams.
-    const chosen: ProviderItem[] = [];
-    for (let tracks = 0, index = 0; tracks < maxTracks && index < listed.length; index++) {
-      chosen.push(listed[index]!.item);
-      tracks += listed[index]!.tracks;
-    }
-    const albums = chosen.filter((item) => item.kind === "collection");
-    const groups = Array.from({ length: Math.ceil(albums.length / albumGroup) }, (_, index) =>
-      albums.slice(index * albumGroup, (index + 1) * albumGroup),
-    );
-    const tracks = new Map(
-      (await Promise.all(groups.map((albums) => group(albums, deadline)))).flatMap((read) => [
-        ...read,
-      ]),
-    );
+      const chosen = listed.slice(head.length, wanted(listed));
+      // The first albums take the lanes first, even when one of them is read again on its own.
+      await headRead.catch(() => {});
+      const tracks = await read(albumsOf(chosen), deadline);
+      signal?.throwIfAborted();
+      return { chosen, tracks, unread: !!cursor || head.length + chosen.length < listed.length };
+    })();
+    rest.catch(() => {}); // Awaited through `more`, unless reading the first albums fails first.
+    const headTracks = await headRead;
     signal?.throwIfAborted();
-    const items = chosen
-      .flatMap((item) => (item.kind === "media" ? [item] : (tracks.get(item.url) ?? [])))
-      .slice(0, maxTracks);
-    if (!items.length) throw new ProviderError("This Bandcamp fan page has no public tracks.");
-    return { title: first.title, items };
+    const items = expand(head, headTracks).slice(0, maxTracks);
+    const more = rest.then(({ chosen, tracks, unread }) => {
+      const later = expand(chosen, tracks).slice(0, maxTracks - items.length);
+      const missed = [...albumsOf(head), ...albumsOf(chosen)].some(
+        (album) => !headTracks.has(album.url) && !tracks.has(album.url),
+      );
+      return { items: later, short: items.length + later.length < maxTracks && (unread || missed) };
+    });
+    if (items.length) return { title: first.title, items, more };
+    const { items: later } = await more;
+    if (!later.length) throw new ProviderError("This Bandcamp fan page has no public tracks.");
+    return { title: first.title, items: later };
   }
 
-  return { browse, load };
+  /** The whole list at once, for Queue all and saved lists. */
+  async function load(url: string, signal?: AbortSignal): Promise<ProviderPage> {
+    const { more, ...page } = await start(url, signal);
+    return more ? { ...page, items: [...page.items, ...(await more).items] } : page;
+  }
+
+  return { browse, start, load };
 }
 
 const fans = createBandcampFans();
 export const browseBandcampFan = fans.browse;
+export const startBandcampFan = fans.start;
 export const loadBandcampFan = fans.load;

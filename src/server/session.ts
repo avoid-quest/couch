@@ -1426,6 +1426,23 @@ export function createSession(
       send({ type: "addSubtitle", playbackId, ...subtitle });
     },
     playNewEntries,
+    // A list read in parts adds its later part to the Autoplay its first part started, while that Autoplay still
+    // ends where the first part did (`lastEntryId`).
+    extendContinuation(lastEntryId: string, entries: QueueEntry[]) {
+      if (!admitted() || !continuation) return false;
+      if ((continuation.entries.at(-1)?.id ?? state.currentEntryId) !== lastEntryId) return false;
+      const extended = { ...continuation, entries: [...continuation.entries, ...entries] };
+      try {
+        store.savePlaybackContinuation(extended);
+      } catch {
+        state.queueError = STORAGE_ERROR("Autoplay");
+        broadcast();
+        return false;
+      }
+      continuation = extended;
+      broadcast();
+      return true;
+    },
     reservePlay() {
       available();
       qualityResolution?.abort();
