@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { usePlayOn } from "@/components/PlayOn";
 import { toolPanel } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
 import type { LiveSharing } from "@/session/live";
@@ -721,45 +720,31 @@ function Audience({
 }
 
 /**
- * Choose where it plays, for a share nobody plays yet: Play on's devices but this one, which never plays its own share;
- * it plays at once on the one chosen.
+ * Choose where it plays, for a share nobody plays yet: Play on the device that shares, which never plays its own share,
+ * so Core waits in Where it plays and nothing starts until a picture or a sound is chosen there.
  */
 function ChooseWhere({ sharing, icon = false }: { sharing: LiveSharing; icon?: boolean }) {
   const { run, connected } = useSessionGate();
-  const { devices } = usePlayOn();
   const label = "Choose where it plays";
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant={icon ? "ghost" : "secondary"}
-          size={icon ? "icon" : "sm"}
-          className={icon ? "-mr-1.5 -mt-1 size-8" : "rounded-full"}
-          disabled={!connected}
-          aria-label={label}
-          title={label}
-        >
-          <SlidersVertical aria-hidden="true" />
-          {!icon && label}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent data-tv-local-only align="start" className="max-w-80">
-        <DropdownMenuLabel>Play on</DropdownMenuLabel>
-        {devices
-          .filter((device) => device.id !== sharing.source.deviceId)
-          .map((device) => (
-            <DropdownMenuItem
-              key={device.id}
-              className="break-words"
-              onSelect={() =>
-                void run({ type: "playLive", sourceId: sharing.source.id, deviceId: device.id })
-              }
-            >
-              {device.name}
-            </DropdownMenuItem>
-          ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      variant={icon ? "ghost" : "secondary"}
+      size={icon ? "icon" : "sm"}
+      className={icon ? "-mr-1.5 -mt-1 size-8" : "rounded-full"}
+      disabled={!connected}
+      aria-label={label}
+      title={label}
+      onClick={() =>
+        void run({
+          type: "playLive",
+          sourceId: sharing.source.id,
+          deviceId: sharing.source.deviceId,
+        })
+      }
+    >
+      <SlidersVertical aria-hidden="true" />
+      {!icon && label}
+    </Button>
   );
 }
 
