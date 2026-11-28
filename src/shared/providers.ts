@@ -332,9 +332,13 @@ function builtInLink(value: string): LinkTarget | undefined {
   const provider = providerForUrl(value);
   if (!provider) return;
   const path = new URL(value).pathname.replace(/\/$/, "");
-  // Twitch pages list only channels and categories; a VOD plays as a webpage.
+  // Twitch pages list only channels and categories; a VOD or a clip plays as a webpage.
   if (provider === "twitch")
-    return path.startsWith("/videos/") ? undefined : { provider, shape: "page" };
+    return path.startsWith("/videos/") ||
+      /\/clip\//.test(path) ||
+      new URL(value).hostname === "clips.twitch.tv"
+      ? undefined
+      : { provider, shape: "page" };
   if (provider === "spotify") {
     const link = spotifyLink(value);
     return link && { provider, shape: link.kind === "track" ? "atom" : "playlist" };

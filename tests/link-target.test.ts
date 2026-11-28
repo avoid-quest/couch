@@ -37,6 +37,8 @@ test("a pasted link classifies from its URL alone", () => {
     ["https://bandcamp.com/umbertopasinetti/wishlist", { provider: "bandcamp", shape: "playlist" }],
     ["https://bandcamp.com/discover", undefined],
     ["https://www.twitch.tv/videos/1990742383", undefined],
+    ["https://clips.twitch.tv/AmazonianPluckyTofuKappaPride", undefined],
+    ["https://www.twitch.tv/monstercat/clip/AmazonianPluckyTofuKappaPride", undefined],
     ["https://www.twitch.tv/monstercat", { provider: "twitch", shape: "page" }],
     [
       "https://open.spotify.com/intl-it/album/4aawyAB9vmqN3uQ7FjRGTy",
