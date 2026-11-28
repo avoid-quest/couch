@@ -192,13 +192,22 @@ export function useMediaSession() {
     !!state?.outputs?.some(
       (output) => output.deviceId === deviceId() && (output.picture || output.sound),
     );
-  const hold = !playbackId
-    ? null
-    : !here && (!couchApp || couchApp.tvPresentation)
+  // An item this device hears by itself plays through the player's own element, which Chromium already shows; the
+  // compressor, like synced sound, plays it through Web Audio.
+  const summary = state?.playbacks?.find((playback) => playback.id === state.playback);
+  const ownElement =
+    !listening &&
+    summary?.delivery === "direct" &&
+    !state?.compressor?.enabled &&
+    !!state?.outputs?.some((output) => output.deviceId === deviceId() && output.sound);
+  const hold =
+    !playbackId || ownElement
       ? null
-      : listening || playing
-        ? "playing"
-        : "paused";
+      : !here && (!couchApp || couchApp.tvPresentation)
+        ? null
+        : listening || playing
+          ? "playing"
+          : "paused";
   useEffect(() => holdNowPlaying(hold), [hold]);
   useEffect(() => () => holdNowPlaying(null), []);
   useEffect(() => {

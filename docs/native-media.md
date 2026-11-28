@@ -10,8 +10,10 @@ the series) and artwork, playback state and position, and play, pause, stop,
 next and seek handlers that run the existing session actions. Chromium maps it
 to macOS Now Playing, the Windows media controls and Linux MPRIS, but only while
 one of the page's media elements holds sound. Synced sound and Live play through
-Web Audio, which drops out as soon as it pauses, so a silent element holds the
-page's place and follows Play and Pause. It runs on a Device that plays the
+Web Audio, which drops out as soon as it pauses, so a silent element at volume 0
+(no audio stream, so the computer can still sleep) holds the page's place and
+follows Play and Pause. An item this Device hears through the player's own
+element, without the compressor, needs none. It runs on a Device that plays the
 Playback and in the desktop app, which also shows a Playback its window controls
 on another Device; a phone or a browser tab that only controls doesn't claim the
 system's audio. A station or a share reports a zero-length position, as Chromium
