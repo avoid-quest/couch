@@ -209,7 +209,8 @@ export function HomePage() {
   const past = history.data?.items ?? [];
   // One programme can be in history twice, under each form of link it played from (a share's ?si=, a moved catalogue):
   // the same known media is one programme, its latest; an item whose media isn't known stays itself.
-  const identityOf = (url?: string) => (url && mediaIdentity(url)) || undefined;
+  const identityOf = (url?: string) =>
+    (url && mediaIdentity(providerMediaPage(url) ?? url)) || undefined;
   const unfinished = past.filter(
     (item, index) =>
       item.position > 0 &&
@@ -219,7 +220,7 @@ export function HomePage() {
   );
   const playingMedia = current && past.find((item) => item.queueEntryId === current.id)?.mediaId;
   const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
-  const playingIdentity = identityOf(currentUrl && providerMediaPage(currentUrl));
+  const playingIdentity = identityOf(currentUrl);
   const isPlaying = (item: HistoryItem) =>
     item.mediaId === playingMedia ||
     (!!playingIdentity && identityOf(item.url) === playingIdentity);

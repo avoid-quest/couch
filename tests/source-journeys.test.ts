@@ -106,9 +106,10 @@ test("a link shared with extras plays the same media; another clip with the same
   expect(playing("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42&si=share")).toBe(clip);
   expect(playing("https://youtu.be/dQw4w9WgXcQ?si=share")).toBe(clip);
   expect(playing("https://www.youtube.com/watch?v=9bZkp7q19f0")).not.toBe(clip);
-  expect(playing("https://streamingcommunityz.rip/it/watch/42?e=10&ref=x")).toBe(
-    playing("https://streamingcommunityz.rip/it/watch/42?e=10"),
-  );
+  // Only YouTube's extras are known to be harmless: a private SoundCloud link never becomes its public page.
+  expect(
+    providerMediaPage("https://soundcloud.com/artist/track?secret_token=s-example"),
+  ).toBeUndefined();
   expect(playing("https://example.com/trailer.mp4")).toBeUndefined();
 });
 
