@@ -1,6 +1,15 @@
 import { app } from "electron";
 import * as Sentry from "@sentry/electron/main";
 import { sentryDsn, sentryOptions, setReportingEnabled } from "../src/shared/sentry";
+import { reportAppErrors } from "./diagnostics";
+
+// Main's handled failures (Core exits, updates, page loads) are otherwise only in its log.
+reportAppErrors((component, message) =>
+  Sentry.captureMessage(message, { level: "error", tags: { component } }),
+);
+
+// Main exits right after Core stops; the report about it leaves first, for at most 2 s.
+export const flushReports = () => Sentry.flush(2000);
 
 export function setDesktopReporting(enabled: boolean) {
   setReportingEnabled(Sentry.getClient(), enabled, startDesktopMonitoring);
@@ -29,6 +38,8 @@ function startDesktopMonitoring() {
           ].includes(i.name),
       ),
       Sentry.nodeContextIntegration({ device: false, culture: false, cloudResource: false }),
+      // A failure that repeats on a timer (the TV's playback report every 5 s) files once.
+      Sentry.dedupeIntegration(),
     ],
   });
   if (app.isReady()) return;

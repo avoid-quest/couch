@@ -33,10 +33,10 @@ import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
-import { diagnosticHost, logAppError } from "./diagnostics";
+import { appDiagnostic, diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
 import { createLiveAudio } from "./live-audio";
-import { setDesktopReporting } from "./sentry";
+import { flushReports, setDesktopReporting } from "./sentry";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
 
@@ -279,12 +279,14 @@ function startCore() {
         if (current.stopping || quitting) return;
         // An unexpected stop ends the app, like the Tauri host did; the TV's service restarts it.
         logAppError("main", `Couch Core exited with code ${code}`);
-        if (!tv)
-          dialog.showErrorBox(
-            "Couch stopped",
-            `Couch stopped unexpectedly (code ${code}). Open Couch again.`,
-          );
-        app.exit(1);
+        void flushReports().finally(() => {
+          if (!tv)
+            dialog.showErrorBox(
+              "Couch stopped",
+              `Couch stopped unexpectedly (code ${code}). Open Couch again.`,
+            );
+          app.exit(1);
+        });
       });
     }),
   };
@@ -444,9 +446,13 @@ async function load(newConnection = false) {
     } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
       renderer?.unreachable();
-      logAppError(
-        "main",
-        `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`,
+      // Another Couch being asleep is no Couch failure, and its name or address stays here.
+      console.error(
+        appDiagnostic(
+          "main",
+          "error",
+          `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`,
+        ),
       );
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
@@ -720,8 +726,11 @@ function createWindow() {
   });
   const contents = window.webContents;
   renderer?.watch(contents);
+  // Only a document load resets playback: did-start-loading also fires on in-app page changes.
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
-    if (mainFrame && !inPlace) capture.clear();
+    if (!mainFrame || inPlace) return;
+    capture.clear();
+    updatePlayback = "loading";
   });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
@@ -730,14 +739,17 @@ function createWindow() {
       logAppError("renderer", `host=${diagnosticHost(contents.mainFrame.url)}: ${details.message}`);
     }
   });
-  contents.on("did-start-loading", () => {
-    updatePlayback = "loading";
-  });
   // A page that dies, usually out of memory on a long session, loads again, at most 3 times a minute.
   let gone: number[] = [];
   contents.on("render-process-gone", (_event, { reason }) => {
     updatePlayback = "unavailable";
-    logAppError("main", `Couch's page stopped: ${reason}`);
+    // Sentry's Electron SDK reports an abnormal exit itself; crashes and memory come from minidumps, which are off.
+    if (
+      ["crashed", "oom", "memory-eviction"].includes(reason) ||
+      (reason === "killed" && !quitting)
+    )
+      logAppError("main", `Couch's page stopped: ${reason}`);
+    else console.error(appDiagnostic("main", "error", `Couch's page stopped: ${reason}`));
     gone = [...gone.filter((at) => Date.now() - at < 60_000), Date.now()];
     if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
   });

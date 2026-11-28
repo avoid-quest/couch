@@ -270,7 +270,17 @@ export function UpdateReview({ targets }: { targets: UpdateCenterTarget[] }) {
         <div className="flex flex-wrap items-center gap-2">
           {confirmation ? (
             <>
-              <Button disabled={disabled} onClick={() => void update(confirmation, true)}>
+              <Button
+                disabled={disabled}
+                // A batch the prompt interrupted continues with the apps that haven't updated yet.
+                onClick={() => {
+                  const remaining = confirmation.filter((id) =>
+                    ready.some((target) => target.id === id),
+                  );
+                  if (remaining.length) void update(remaining, true);
+                  else setConfirmation(null);
+                }}
+              >
                 Stop playback and update
               </Button>
               <Button variant="ghost" onClick={() => setConfirmation(null)}>

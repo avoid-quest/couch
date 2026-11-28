@@ -27,7 +27,7 @@ index f7c2965929a773ff54ac3124eec7a023e13ef1c9..5b18c3b308b530dad03cb649734e0af7
                  }
              }
 diff --git a/out/NsisUpdater.js b/out/NsisUpdater.js
-index 6fb70b4275a59741d28aecc389c2736909130a3e..3e4d23a294a03cbfe613bc2f7315242f4eaf361e 100644
+index 6fb70b4275a59741d28aecc389c2736909130a3e..fe1d52ab3f975d51edef3c007094a98e19bcc54b 100644
 --- a/out/NsisUpdater.js
 +++ b/out/NsisUpdater.js
 @@ -15,6 +15,26 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
@@ -57,7 +57,7 @@ index 6fb70b4275a59741d28aecc389c2736909130a3e..3e4d23a294a03cbfe613bc2f7315242f
      /**
       * The verifyUpdateCodeSignature. You can pass [win-verify-signature](https://github.com/beyondkmp/win-verify-trust) or another custom verify function: ` (publisherName: string[], path: string) => Promise<string | null>`.
       * The default verify function uses [windowsExecutableCodeSignatureVerifier](https://github.com/electron-userland/electron-builder/blob/master/packages/electron-updater/src/windowsExecutableCodeSignatureVerifier.ts)
-@@ -121,29 +141,37 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
+@@ -121,29 +141,40 @@ class NsisUpdater extends BaseUpdater_1.BaseUpdater {
              args.push(`--package-file=${packagePath}`);
          }
          const callUsingElevation = () => {
@@ -96,7 +96,10 @@ index 6fb70b4275a59741d28aecc389c2736909130a3e..3e4d23a294a03cbfe613bc2f7315242f
 +                this._logger.info(`Cannot run installer: error code: ${errorCode}, error message: "${e.message}"`);
 +                if (errorCode === "UNKNOWN" || errorCode === "EACCES") {
 +                    this._logger.info("Retrying installer launch using elevate.exe");
-+                    return callUsingElevation();
++                    // Keep why the direct launch failed: UNKNOWN is Windows refusing the installer itself.
++                    return callUsingElevation().catch(error => {
++                        throw Object.assign(error, { code: errorCode });
++                    });
 +                }
 +                if (errorCode === "ENOENT") {
 +                    this._logger.info("Retrying installer launch using electron.shell.openPath");

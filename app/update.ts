@@ -1,7 +1,8 @@
 import { app, Notification } from "electron";
 import updater from "electron-updater";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   isUpdateChannel,
@@ -13,6 +14,13 @@ import {
   type UpdateOutcome,
   type UpdateState,
 } from "../src/shared/updates";
+import {
+  appUpdateLeftOver,
+  discardAppUpdate,
+  downloadAppUpdate,
+  findAppUpdate,
+  swapAppOnExit,
+} from "./app-update";
 import { appDiagnostic, logAppError } from "./diagnostics";
 
 const every = 4 * 60 * 60 * 1000;
@@ -35,6 +43,7 @@ type Options = {
 // Checks at start and every 4 hours on the chosen channel, the build's own by
 // default. electron-updater downloads and installs, through Squirrel.Mac on
 // macOS, which takes only builds signed like the running one (docs/ci.md).
+// Windows replaces only app.asar when a release allows it (app-update.ts).
 // The TV runs as an account that can't install packages: root's
 // couch-update.timer installs overnight while nothing plays, and Restart to
 // update starts couch-update@<version>.service (docs/native-tv.md).
@@ -44,7 +53,8 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   autoUpdater.logger = {
     info: (message) => console.log(appDiagnostic("update", "info", message)),
     warn: (message) => console.warn(appDiagnostic("update", "warning", message)),
-    error: (message) => logAppError("update", message),
+    // The catch below reports a failed update once; this also logs recovered ones (differential downloads).
+    error: (message) => console.error(appDiagnostic("update", "error", message)),
   };
   // Keep a ready installer until it is used; a replacement download clears
   // electron-updater's pending cache even when that download fails.
@@ -56,6 +66,17 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   try {
     saved = readFileSync(channelPath, "utf8").trim();
   } catch {}
+  const windows = process.platform === "win32" && !tv;
+  // The version whose app.asar waits in resources/app.next.
+  let appOnly: string | null = null;
+  if (windows && app.isPackaged && appUpdateLeftOver()) {
+    logAppError("update", "The last update didn't install.");
+    try {
+      discardAppUpdate();
+    } catch (error) {
+      logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+    }
+  }
   let state: UpdateState = {
     version: app.getVersion(),
     channel: isUpdateChannel(saved) ? saved : own,
@@ -81,6 +102,15 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   // On the TV, the root script's last run, read at each check and when it
   // changes. A failed run for the release being installed ends Installing….
   let installing = 0;
+  // The last installer outcome reported, kept beside the channel: a rollback restarts this
+  // Couch before it writes its outcome, so only a saved mark tells a new outcome from an old one.
+  const reportedPath = `${channelPath}-reported`;
+  let reportedOutcome = 0;
+  try {
+    reportedOutcome = Number(readFileSync(reportedPath, "utf8")) || 0;
+  } catch {
+    /* None reported yet. */
+  }
   const automatic = async () => {
     const active = await promisify(execFile)("systemctl", [
       "is-active",
@@ -91,11 +121,24 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
       () => false,
     );
     const last = lastOutcome();
+    const unsuccessful = last?.outcome === "failed" || last?.outcome === "rolled-back";
     const failed =
       state.status === "installing" &&
       last?.version === state.available &&
       last.at >= installing &&
-      (last.outcome === "failed" || last.outcome === "rolled-back");
+      unsuccessful;
+    if (last && unsuccessful && last.at > reportedOutcome) {
+      reportedOutcome = last.at;
+      try {
+        writeFileSync(reportedPath, String(last.at));
+      } catch {
+        /* Reported again after a restart, at worst. */
+      }
+      logAppError(
+        "update",
+        `${last.version ? `Couch ${last.version}` : "The update"} didn't install: ${last.error ?? last.outcome}`,
+      );
+    }
     set({
       automatic: { installed: units.every((unit) => existsSync(unit)), active, last },
       ...(failed && {
@@ -120,11 +163,71 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     }).show();
   };
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
-  autoUpdater.on("update-downloaded", ({ version }) => ready(version));
-  autoUpdater.on("error", () => {
-    if (state.status === "installing")
-      set({ status: "ready", error: "Couldn't install the update. Try again later." });
+  // The installer electron-updater runs at Quit, whatever Settings shows meanwhile.
+  let staged: string | null = null;
+  autoUpdater.on("update-downloaded", ({ version }) => {
+    staged = version;
+    // electron-updater registers its quit-time install right after this event. Arming it
+    // only now on Windows means a replaced or failed download never installs the old one.
+    if (windows) autoUpdater.autoInstallOnAppQuit = true;
+    ready(version);
   });
+  // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
+  // the launch fails with UNKNOWN, which the patched updater keeps through its elevation
+  // retry. Only someone at this computer can install that release, so it stops counting
+  // as ready, across restarts too.
+  const blockedError =
+    "Windows blocked the update. Download Couch from couch.avoid.quest/download and install it.";
+  const blockedPath = join(dirname(channelPath), "update-blocked");
+  let blocked: string | null = null;
+  try {
+    blocked = readFileSync(blockedPath, "utf8").trim();
+    // That release installed after all, so a later return to it shouldn't stay refused.
+    if (blocked === app.getVersion()) {
+      blocked = null;
+      rmSync(blockedPath);
+    }
+  } catch {}
+  // Every updater failure arrives here, an install or Squirrel staging only here. run()'s catch skips these.
+  const reported = new WeakSet<Error>();
+  autoUpdater.on("error", (error: Error & { code?: string }) => {
+    if (!noRelease(error) && !reported.has(error)) {
+      reported.add(error);
+      logAppError("update", `Update failed: ${error.message}`);
+    }
+    if (state.status !== "installing") return;
+    if (!windows || error.code !== "UNKNOWN")
+      return set({ status: "ready", error: "Couldn't install the update. Try again later." });
+    remember(state.available!);
+    autoUpdater.autoInstallOnAppQuit = false;
+    set({ status: "error", available: null, error: blockedError });
+  });
+  const remember = (version: string) => {
+    blocked = version;
+    try {
+      writeFileSync(blockedPath, version);
+    } catch (error) {
+      logAppError("update", `Couldn't remember the blocked update: ${(error as Error).message}`);
+    }
+  };
+  // An app-only update also installs when Couch quits.
+  let swapping: Promise<void> | null = null;
+  const swap = (relaunch: boolean) =>
+    (swapping ??= swapAppOnExit(relaunch).catch((error) => {
+      swapping = null;
+      throw error;
+    }));
+  if (windows)
+    app.on("quit", (_event, code) => {
+      if (code !== 0) return;
+      if (appOnly)
+        return void swap(false).catch((error) =>
+          logAppError("update", `Couldn't start the update: ${error.message}`),
+        );
+      // electron-updater starts the installer as Couch exits, too late to hear a refusal.
+      // If Couch then starts on this version again, that release counts as refused.
+      if (staged && autoUpdater.autoInstallOnAppQuit) remember(staged);
+    });
 
   async function install(expected: string, delay: number, interrupt = false) {
     if (state.status !== "ready" || state.available !== expected)
@@ -146,13 +249,25 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
         error:
           error instanceof Error ? error.message : "Couldn't install the update. Try again later.",
       });
-      logAppError("update", `Couldn't install the update: ${error.message}`);
+      const failure = `Couldn't install the update: ${error.message}`;
+      if (error.message === UPDATE_INTERRUPTS_PLAYBACK || reported.has(error))
+        console.error(appDiagnostic("update", "error", failure));
+      else logAppError("update", failure);
     });
   }
 
   async function finishInstall(version: string, delay: number, interrupt: boolean) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     if (!interrupt && (await playing?.())) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
+    if (appOnly === version) {
+      await swap(true).catch((error) => {
+        logAppError("update", `Couldn't start the update: ${error.message}`);
+        const failure = new Error("Couldn't install the update. Try again later.");
+        reported.add(failure);
+        throw failure;
+      });
+      return app.quit();
+    }
     if (!tv) return autoUpdater.quitAndInstall(true, true);
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", [
@@ -182,15 +297,27 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
       set({ checkedAt: Date.now() });
       if (waiting && !tv) ready(waiting);
       else if (!found) return set({ status: "up-to-date", available: null });
+      else if (found.version === blocked)
+        return set({ status: "error", available: null, error: blockedError });
       else if (!tv) {
         set({ status: "downloading", available: found.version, progress: 0 });
-        // Updates install on quit only if this is on when their download finishes.
-        autoUpdater.autoInstallOnAppQuit = true;
-        await autoUpdater.downloadUpdate();
+        const manifest = windows ? await findAppUpdate(found.version) : null;
+        if (manifest) {
+          autoUpdater.autoInstallOnAppQuit = false;
+          await downloadAppUpdate(manifest);
+          appOnly = found.version;
+          ready(found.version);
+        } else {
+          // Updates install on quit only if this is on when their download finishes.
+          autoUpdater.autoInstallOnAppQuit = !windows;
+          await autoUpdater.downloadUpdate();
+        }
       } else ready(found.version);
     } catch (error) {
-      logAppError("update", `Update failed: ${error instanceof Error ? error.message : error}`);
-      const code = (error as { code?: string }).code ?? "";
+      const failure = `Update failed: ${error instanceof Error ? error.message : error}`;
+      if (noRelease(error) || (error instanceof Error && reported.has(error)))
+        console.error(appDiagnostic("update", "error", failure));
+      else logAppError("update", failure);
       // An update downloaded earlier still installs.
       set({
         status: waiting ? "ready" : "error",
@@ -199,7 +326,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
         error:
           state.status === "downloading"
             ? "Couldn't download the update. Try again later."
-            : /LATEST_VERSION_NOT_FOUND|NO_PUBLISHED_VERSIONS|CHANNEL_FILE_NOT_FOUND/.test(code)
+            : noRelease(error)
               ? "No release on this channel yet."
               : "Couldn't check for updates. Try again later.",
       });
@@ -223,6 +350,15 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     writeFileSync(channelPath, channel);
     // Squirrel.Mac still installs an update it staged; the next check corrects the channel.
     autoUpdater.autoInstallOnAppQuit = false;
+    // The new channel is saved, so the old channel's update must not install even if its file stays.
+    const pending = appOnly;
+    appOnly = null;
+    if (pending)
+      try {
+        discardAppUpdate();
+      } catch (error) {
+        logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+      }
     follow(channel);
     set({ channel, status: "checking", available: null, progress: null, error: null });
     void check();
@@ -243,6 +379,12 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     },
   };
 }
+
+// Couch already says "No release on this channel yet." for these.
+const noRelease = (error: unknown) =>
+  /LATEST_VERSION_NOT_FOUND|NO_PUBLISHED_VERSIONS|CHANNEL_FILE_NOT_FOUND/.test(
+    (error as { code?: string } | null)?.code ?? "",
+  );
 
 // KEY=value lines from the TV's update script; null when absent or garbled.
 function lastOutcome(): UpdateOutcome | null {

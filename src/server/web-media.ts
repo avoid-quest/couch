@@ -1,9 +1,15 @@
 import { mediaCreator } from "./media-creator";
 import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
-import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
+import type { ExternalSubtitle, VideoQuality, VideoQualityLabels } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { ExtractionError, resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import {
+  ExtractionError,
+  resolveWithYtDlp,
+  runYtDlp,
+  UnavailableError,
+  type YtDlpOptions,
+} from "./yt-dlp";
 import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
@@ -41,6 +47,7 @@ export type WebMediaSource = {
   hlsSelection?: { video: string; audio: string; bandwidth: number };
   // The tallest variant a live HLS master may offer this Device (the chosen quality).
   hlsMaxHeight?: number;
+  videoQualities?: VideoQualityLabels;
   audioOnly?: boolean;
   hls?: boolean;
   subtitles?: ExternalSubtitle[];
@@ -111,7 +118,7 @@ function headers(value: unknown): Record<string, string> {
 
 function selectedSource(info: Metadata): string {
   if (info.has_drm === true)
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
   if (
     info.protocol !== undefined &&
     !["http", "https", "m3u8", "m3u8_native"].includes(String(info.protocol))
@@ -181,12 +188,12 @@ async function rejectDrm(info: Metadata, signal?: AbortSignal) {
       playlist,
     )
   )
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
 }
 
 export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
   if (info.has_drm === true)
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (
     !Array.isArray(selected) ||
@@ -243,7 +250,11 @@ export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSo
           audio: audioSource,
           bandwidth: Number.isSafeInteger(bandwidth) && bandwidth > 0 ? bandwidth : 1,
         };
-      } else subtitles = [];
+      } else {
+        subtitles = [];
+        // The chosen variant's height caps the master, as for one selected stream (StreamingCommunity).
+        if (typeof video.height === "number" && video.height > 0) hlsMaxHeight = video.height;
+      }
       source = mediaUrl(video.manifest_url);
       audioSource = undefined;
     }
@@ -326,8 +337,9 @@ function sourceSubtitles(info: Metadata, preferred: string): ExternalSubtitle[] 
     .slice(0, 16);
 }
 
-// Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
-const playable = "[protocol!*=dash]";
+// Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it)
+// or a websocket stream (TwitCasting's ws-main).
+const playable = "[protocol!*=dash][protocol!=websocket_frag]";
 
 function formatSelector(
   quality: VideoQuality,
@@ -337,7 +349,12 @@ function formatSelector(
 ): string {
   if (!["best", "1080p", "720p", "480p"].includes(quality))
     throw new Error("Choose an available video quality.");
-  const filter = youtube || quality === "best" ? "" : `[height<=?${quality.slice(0, -1)}]`;
+  // Off YouTube a site's language ranks before size, so only formats under the cap compete first;
+  // the same branches unfiltered play the closest above it.
+  const capped = (branches: (filter: string) => string) =>
+    youtube || quality === "best"
+      ? branches("")
+      : `${branches(`[height<=?${quality.slice(0, -1)}]`)}/${branches("")}`;
   // YouTube labels its DASH MP4 files as HTTPS. WebKit cannot play those video
   // files natively, even with H.264; HLS and progressive MP4 remain eligible.
   const transport = youtube && !vp9 ? `${playable}[container!=?mp4_dash]` : playable;
@@ -345,10 +362,12 @@ function formatSelector(
     pictureOnly = output?.picture && !output.sound;
   if (!youtube || vp9)
     return soundOnly
-      ? `ba${transport}/b${filter}${transport}`
-      : pictureOnly
-        ? `bv${filter}${transport}/b${filter}${transport}`
-        : `bv*${filter}${transport}+ba${transport}/b${filter}${transport}`;
+      ? `ba${transport}/${capped((filter) => `b${filter}${transport}`)}`
+      : capped((filter) =>
+          pictureOnly
+            ? `bv${filter}${transport}/b${filter}${transport}`
+            : `bv*${filter}${transport}+ba${transport}/b${filter}${transport}`,
+        );
   // Filter every branch, including muxed fallback and separate audio. A codec preference
   // can still select an incompatible stream when no H.264/AAC format exists.
   const codecs = "[vcodec~='^(avc1|h264|none$)'][acodec~='^(mp4a|aac|none$)']";
@@ -357,12 +376,87 @@ function formatSelector(
   const hls = "ba[protocol^=m3u8][acodec~=?'^(mp4a|aac|none$)']";
   const aac = `ba${playable}${codecs}`;
   const sound = `(${hls}[language_preference>=10]/${aac}[language_preference>=10]/${hls}/${aac})`;
-  const muxed = `b${filter}${transport}${codecs}`;
+  const muxed = `b${transport}${codecs}`;
   return soundOnly
     ? `${sound}/${muxed}`
     : pictureOnly
-      ? `bv${filter}${transport}${codecs}/${muxed}`
-      : `bv*${filter}${transport}${codecs}+${sound}/${muxed}`;
+      ? `bv${transport}${codecs}/${muxed}`
+      : `bv*${transport}${codecs}+${sound}/${muxed}`;
+}
+
+// A format's size as a quality cap counts it: YouTube caps the smaller side, for portrait Shorts.
+function formatSize(format: Metadata, youtube: boolean) {
+  const height = Number(format.height);
+  const width = Number(format.width);
+  const size = youtube && width > 0 ? Math.min(width, height) : height;
+  return size > 0 ? size : undefined;
+}
+const sizeLabel = (size: number, fps: number) => `${size}p${fps > 30 ? Math.round(fps) : ""}`;
+
+// What each choice plays, named as sources name them (Twitch's 720p60). The current choice is the
+// format yt-dlp selected; another is the tallest of the item's formats under its cap, or else the
+// smallest above it, at its highest frame rate. Off YouTube only the formats yt-dlp ranks first by
+// extractor preference and language count, and Best follows yt-dlp's default order: quality, then
+// the smaller side, named by its height. A Device without VP9 reaches only H.264, and a video-only
+// format needs a separate sound. Undefined when no format has a known size.
+export function videoQualities(
+  info: Metadata,
+  youtube: boolean,
+  vp9: boolean,
+  current: Exclude<VideoQuality, "auto">,
+): VideoQualityLabels | undefined {
+  const all = (Array.isArray(info.formats) ? info.formats : []).filter(object);
+  const sound = all.some((format) => format.vcodec === "none" && format.acodec !== "none");
+  const formats = all.flatMap((format) => {
+    const protocol = String(format.protocol);
+    if (format.vcodec === "none" || protocol.includes("dash") || protocol === "websocket_frag")
+      return [];
+    if (!sound && format.acodec === "none") return [];
+    if (
+      youtube &&
+      !vp9 &&
+      (!/^(avc1|h264)/.test(String(format.vcodec)) || format.container === "mp4_dash")
+    )
+      return [];
+    const size = formatSize(format, youtube);
+    const rank = youtube
+      ? []
+      : [format.preference, format.language_preference, format.quality].map((value) =>
+          typeof value === "number" ? value : -1,
+        );
+    // yt-dlp's res: the smaller of the known sides.
+    const res = Math.min(...[format.height, format.width].map(Number).filter((side) => side > 0));
+    return size ? [{ size, res, fps: Number(format.fps) || 0, rank }] : [];
+  });
+  if (!formats.length) return undefined;
+  const after = (a: number[], b: number[]) => b.map((value, i) => value - a[i]!).find(Boolean) ?? 0;
+  const labels: VideoQualityLabels = {};
+  for (const choice of ["best", "1080p", "720p", "480p"] as const) {
+    const best = choice === "best";
+    const cap = best ? Infinity : Number(choice.slice(0, -1));
+    // A cap ranks before quality, so only Best counts it.
+    const rank = (format: (typeof formats)[number]) =>
+      best ? format.rank : format.rank.slice(0, 2);
+    const under = formats.filter((format) => format.size <= cap);
+    const eligible = under.length ? under : formats;
+    const top = rank(eligible.toSorted((a, b) => after(rank(a), rank(b)))[0]!);
+    let ranked = eligible.filter((format) => !after(rank(format), top));
+    if (best && !youtube) {
+      const res = Math.max(...ranked.map((format) => format.res));
+      ranked = ranked.filter((format) => format.res === res);
+    }
+    const sizes = ranked.map((format) => format.size);
+    const size = under.length ? Math.max(...sizes) : Math.min(...sizes);
+    const fps = Math.max(...ranked.filter((format) => format.size === size).map((f) => f.fps));
+    labels[choice] = sizeLabel(size, fps);
+  }
+  const selected = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(
+    (stream): stream is Metadata => object(stream) && stream.vcodec !== "none",
+  );
+  const size = selected && formatSize(selected, youtube);
+  if (selected && size) labels[current] = sizeLabel(size, Number(selected.fps) || 0);
+  else delete labels[current];
+  return labels;
 }
 
 // The track's own name and cover from Spotify; the stream from its YouTube match.
@@ -414,17 +508,22 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const played = new URL(direct?.url ?? source).hostname;
     const youtube =
       played === "youtu.be" || played === "youtube.com" || played.endsWith(".youtube.com");
-    // yt-dlp's res uses the smaller dimension, including portrait Shorts.
-    const resolution = selectedQuality === "best" ? "res" : `res:${selectedQuality.slice(0, -1)}`;
+    // A cap sorts by the closest size: the tallest at most the cap, else the smallest above it. yt-dlp's
+    // res is the smaller side, so YouTube caps portrait Shorts by width; other sites cap the height.
+    const cap = selectedQuality === "best" ? "" : `:${selectedQuality.slice(0, -1)}`;
     // Fresh YouTube URLs can answer 403 before they are usable. Let yt-dlp check
     // downloadability before Core hands the selected streams to a player.
     const selection = youtube
       ? [
           "--check-formats",
           "--format-sort",
-          `${resolution},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`,
+          `res${cap},fps,${vp9 ? "vcodec:vp9" : "vcodec:h264,acodec:aac"}`,
         ]
-      : [];
+      : // Elsewhere a site's language still ranks first; its quality (Twitch's Source is 10) only
+        // breaks ties at one height. Best keeps yt-dlp's default order whole.
+        cap
+        ? ["--format-sort", `lang,height${cap}`]
+        : [];
     // Bandcamp also offers free downloads: its best audio can be ALAC or AIFF,
     // which Chromium can't play. Keep browser-compatible lossless formats eligible.
     const format =
@@ -458,19 +557,6 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       plugin ?? (youtube ? "youtube" : undefined) ?? providerForUrl(source) ?? "other",
       async (extracted) => {
         const info = parseInfo(extracted);
-        // res:<cap> falls back ABOVE the cap if nothing smaller exists. Keep Couch's
-        // maximum instead; formats with no known dimensions remain eligible.
-        if (youtube && selectedQuality !== "best") {
-          const selected = Array.isArray(info.requested_formats) ? info.requested_formats : [info];
-          for (const stream of selected) {
-            if (!object(stream) || stream.vcodec === "none") continue;
-            const dimensions = [stream.width, stream.height].filter(
-              (size): size is number => typeof size === "number" && size > 0,
-            );
-            if (dimensions.length && Math.min(...dimensions) > Number(selectedQuality.slice(0, -1)))
-              throw new ExtractionError("This website offers no format Couch can play yet.");
-          }
-        }
         if (info._has_drm === true) await rejectDrm(info, signal);
         const media = parseMedia(info, subtitleLanguage);
         // Audio selected for an output does not make a video item intrinsically
@@ -482,6 +568,16 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
               info.formats.every((format) => object(format) && format.vcodec === "none")) ||
             undefined;
         media.publicNetwork = true;
+        const labels = media.audioOnly
+          ? undefined
+          : videoQualities(info, youtube, vp9, selectedQuality);
+        // A capped HLS master adapts below its cap, so each choice names its ceiling.
+        if (labels)
+          media.videoQualities = media.hlsMaxHeight
+            ? Object.fromEntries(
+                Object.entries(labels).map(([choice, label]) => [choice, `Up to ${label}`]),
+              )
+            : labels;
         if (direct) {
           media.metadata = { ...media.metadata, ...direct.metadata };
           media.preview = media.metadata.endless ? undefined : (direct.preview ?? media.preview);

@@ -526,6 +526,10 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
     const decoder = (hls = new Hls({
       startPosition: begin(command) ?? -1,
       liveDurationInfinity: true,
+      // A "not smooth" decode guess bars every level above 30 fps for good (Twitch's 720p60 and 1080p60).
+      // Late fragments step the level down, and dropped frames cap it.
+      useMediaCapabilities: false,
+      capLevelOnFPSDrop: true,
       enableCEA708Captions: !command.subtitles?.length,
       ...(following ? { maxLiveSyncPlaybackRate: 1 } : {}),
     }));

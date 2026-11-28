@@ -127,10 +127,15 @@ off. A browser keeps its own preference per Couch origin. Turning it off stops
 new reports.
 
 Sentry receives exception messages, stack frames, the Couch release, runtime
-and OS versions, and generic startup logs. Sampled traces include route names,
-timings and performance details such as memory, processor count or connection
-speed. Couch redacts recognizable credentials and paths from error messages.
-Free-text errors can still contain private details, including a media hostname.
+and OS versions, and generic startup logs. The app also reports the failures it
+handles: a playback that fails on any device it hosts, with the media's
+hostname but not the device's name, and Main's own errors, such as Core
+stopping or an update that fails. Reports leave out network addresses, and
+answers a website gives on purpose (offline, region, sign-in, removed, DRM).
+Sampled traces include route names, timings and performance details such as
+memory, processor count or connection speed. Couch redacts recognizable
+credentials and paths from error messages. Free-text errors can still contain
+private details, including a media hostname.
 
 Request bodies, cookies, request headers and URL query values are excluded
 from reports. Session Replay, screenshots, native crash dumps and breadcrumbs

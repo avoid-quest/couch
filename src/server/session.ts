@@ -47,6 +47,7 @@ export type MediaSource = {
   hls?: boolean;
   hlsSelection?: WebMediaSource["hlsSelection"];
   hlsMaxHeight?: number;
+  videoQualities?: WebMediaSource["videoQualities"];
   source: string;
   audioSource?: string;
   startPosition?: number;
@@ -629,6 +630,7 @@ export function createSession(
           renewal: _renewal,
           headers: _headers,
           publicNetwork: _publicNetwork,
+          videoQualities: _videoQualities,
           ...media
         } = fresh as MediaSource & { headers?: Record<string, string> };
         webRecovery = null;
@@ -761,6 +763,7 @@ export function createSession(
     activePlayIntent = ++playIntent;
     webRecovery = null;
     state.webRetry = null;
+    state.videoQualities = null;
     expiry = undefined;
     pendingPause = null;
     webRetried = false;
@@ -828,10 +831,12 @@ export function createSession(
         radio,
         subtitleWarning: warning,
         expiry: sourceExpiry,
+        videoQualities,
         ...media
       }: MediaSource) => {
         if (!admitted() || state.player.playbackId !== playbackId) return;
         audioOnly = sourceAudioOnly === true;
+        state.videoQualities = videoQualities ?? null;
         authorize();
         subtitleWarning = warning ?? null;
         expiry = sourceExpiry;
@@ -938,6 +943,7 @@ export function createSession(
         expiry: sourceExpiry,
         subtitleWarning: warning,
         startPosition: _startPosition,
+        videoQualities,
         ...media
       } = fresh;
       resolution?.abort();
@@ -951,6 +957,7 @@ export function createSession(
       expiry = sourceExpiry;
       pendingPause = paused;
       subtitleWarning = warning ?? null;
+      state.videoQualities = videoQualities ?? null;
       state.player = {
         ...previous,
         playbackId,
@@ -1015,6 +1022,7 @@ export function createSession(
     audioOnly = false;
     webRecovery = null;
     state.webRetry = null;
+    state.videoQualities = null;
     expiry = undefined;
     webRetried = false;
     pendingPause = null;
@@ -1204,11 +1212,24 @@ export function createSession(
       state.radioProgramme = programme;
       broadcast();
     },
+    // A screen joining a Playback that had only sound names the picture's choices, for the
+    // load it was prepared for. Sound only leaves the current choice without a name.
+    pictureQualities(playbackId: string, labels: MediaSource["videoQualities"]) {
+      const quality = state.queue.find((item) => item.id === state.currentEntryId)?.quality;
+      const current = !quality || quality === "auto" ? "1080p" : quality;
+      if (!labels || state.player.playbackId !== playbackId || state.videoQualities?.[current])
+        return false;
+      state.videoQualities = labels;
+      return true;
+    },
     // The newest tab of an output Device took over, or an output came back online: the current
     // item loads there where it is (#644 Tabs, Offline).
     // held: the pause it had before this Device's tab reported, unless a Play or Pause came since.
     reload(
-      media?: Pick<MediaSource, "source" | "audioSource" | "hls" | "mpegts" | "mpv">,
+      media?: Pick<
+        MediaSource,
+        "source" | "audioSource" | "hls" | "mpegts" | "mpv" | "videoQualities"
+      >,
       retry = false,
       held?: { paused: boolean; pauses: number },
     ) {
@@ -1231,7 +1252,16 @@ export function createSession(
         );
         state.playedBy = progressContext.playedBy ? { ...progressContext.playedBy } : undefined;
       }
-      const { startPosition: _start, ...command } = { ...loaded, ...media };
+      // A fresh preparation names its own choices: picture restored after sound only has sizes again.
+      if (media) state.videoQualities = media.videoQualities ?? null;
+      const {
+        startPosition: _start,
+        videoQualities: _videoQualities,
+        ...command
+      } = {
+        ...loaded,
+        ...media,
+      };
       send({
         ...command,
         ...(live ? {} : { startPosition: position }),

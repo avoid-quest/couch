@@ -230,8 +230,12 @@ export type SessionState = {
   radioRetry?: RadioRetry | null;
   radioProgramme?: RadioProgramme | null;
   webRetry?: { paused: boolean } | null;
+  // What each quality choice plays of the current item, as its source names it ("1080p60"). A choice
+  // without a label plays a format of unknown size; null when the source names no heights.
+  videoQualities?: VideoQualityLabels | null;
   systemAudio?: SoundRouteState;
 };
+export type VideoQualityLabels = Partial<Record<Exclude<VideoQuality, "auto">, string>>;
 
 // The Couch as this window sees it, whichever Playback it looks at.
 type CouchState = Pick<

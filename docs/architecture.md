@@ -97,7 +97,15 @@ tab it chose (the newest one). The Device fetches the source itself:
   into HLS with FFmpeg, copying its packets (`ts-repack.ts`), and every screen
   and Core's sound read that playlist. The app preloads hls.js while idle.
 - VP9-capable Devices prefer VP9 and Opus; others need H.264 and AAC. YouTube
-  quality caps the smaller dimension, so portrait Shorts work.
+  quality caps the smaller dimension, so portrait Shorts work. A cap plays the
+  tallest format at or under the cap in the site's preferred language (a site's
+  quality only breaks a tie at one size); otherwise the closest size above it.
+  Best keeps yt-dlp's own order. The player's Quality names the current choice by the
+  format yt-dlp selected and the others by the format they reach among the
+  item's formats (`videoQualities` in `web-media.ts`, for example 1080p60 or
+  720p; "Up to 1080p60" on a capped HLS master). Choices that reach the same one
+  show once, as the strictest; an item whose formats name no size offers no
+  choice.
 - In the app, Main caps googlevideo's open-ended `Range` requests at 10 MB,
   because YouTube sends those at about playback speed.
 - A browser that needs a gesture plays muted and shows "Tap to hear".
@@ -145,7 +153,9 @@ except on Android and iOS, where it keeps the official player ([Live audio](live
   jump; native HLS pictures follow only play and pause.
 - Web media on HLS, except YouTube's checked formats, plays its master: each Device
   adapts to its link, capped at the chosen quality, and Core decodes an audio-only
-  rendition when there is one.
+  rendition when there is one. hls.js's MediaCapabilities check is off, since its
+  "not smooth" guess bars every level above 30 fps (Twitch's 720p60 and 1080p60);
+  its dropped-frames cap is on, so a Device that can't decode a level steps down.
 - Clock agreement doesn't measure physical alignment: test real speakers and use
   the per-device delay where hardware adds latency.
 - Shutdown waits for the audio worker and its encoders, with a three-second
