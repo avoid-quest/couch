@@ -147,8 +147,9 @@ and the fan has more, the Device that pressed Play all says how many play.
 
 Sets (`/<user>/sets/<set>`) and profiles (`/<user>`) list through yt-dlp's
 `--flat-playlist`. A set's page lists only its first tracks in full;
-`vendor/soundcloud` completes the rest with the same `tracks?ids=` request upstream
-makes for private sets, so every entry has its public page, title and length.
+`vendor/soundcloud` completes the rest that `--playlist-items` asks for with the same
+`tracks?ids=` request upstream makes for private sets, so every entry listed has its
+public page, title and length.
 
 ## Spotify
 

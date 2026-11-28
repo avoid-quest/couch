@@ -1,5 +1,5 @@
 from yt_dlp.extractor.soundcloud import SoundcloudIE, SoundcloudSearchIE, SoundcloudSetIE
-from yt_dlp.utils import float_or_none, str_or_none
+from yt_dlp.utils import PlaylistEntries, float_or_none, str_or_none
 from yt_dlp.utils.traversal import traverse_obj
 
 
@@ -16,11 +16,35 @@ class _CouchSoundcloudSearchIE(SoundcloudSearchIE, plugin_name='couch'):
 # A set's page lists only its first tracks in full; the rest are bare IDs, which
 # upstream lists as API links without titles. Complete them with the same
 # `tracks?ids=` request upstream makes for private sets (at most 50 IDs each), so
-# a flat listing names every track and links its public page.
+# a flat listing names every track and links its public page. Only the tracks
+# `--playlist-items` asks for are completed, so each page of a set asks for its own.
 class _CouchSoundcloudSetIE(SoundcloudSetIE, plugin_name='couch'):
+    def _requested(self, count):
+        spec = self.get_param('playlist_items')
+        if not spec:
+            return set(range(count))
+        chosen = set()
+        # PlaylistEntries' reading: 1-based, the end included, negative from the end.
+        for part in PlaylistEntries.parse_playlist_items(spec):
+            if isinstance(part, int):
+                part = slice(part, part)
+            step = part.step or 1
+            if part.start is None:
+                start = 0 if step > 0 else count - 1
+            else:
+                start = part.start - 1 if part.start >= 0 else count + part.start
+            if part.stop is None or part.stop == float('inf'):
+                stop = count if step > 0 else -1
+            else:
+                stop = int(part.stop - 1 if part.stop >= 0 else count + part.stop) + (1 if step > 0 else -1)
+            chosen.update(index for index in range(start, stop, step) if 0 <= index < count)
+        return chosen
+
     def _extract_set(self, playlist, token=None):
         tracks = playlist.get('tracks') or []
-        missing = [str(t['id']) for t in tracks if not t.get('permalink_url') and t.get('id')]
+        requested = self._requested(len(tracks))
+        missing = [str(t['id']) for index, t in enumerate(tracks)
+                   if index in requested and not t.get('permalink_url') and t.get('id')]
         full = {str(t.get('id')): t for t in tracks if t.get('permalink_url')}
         for start in range(0, len(missing), 50):
             query = {'ids': ','.join(missing[start:start + 50]), 'playlistId': str(playlist['id'])}
