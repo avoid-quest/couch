@@ -212,6 +212,14 @@ function searchHit(value: unknown): ProviderItem | null {
   };
 }
 
+// A re-release is another ID with the same title, byline and length: it reads as the same row, so it shows once.
+const sameRow = (a: ProviderItem, b: ProviderItem) =>
+  a.url === b.url ||
+  (a.kind === b.kind &&
+    a.title === b.title &&
+    a.subtitle === b.subtitle &&
+    Math.abs((a.duration ?? 0) - (b.duration ?? 0)) <= 5);
+
 export function createSpotifyCatalog(
   request: typeof fetch = publicFetch,
   searchYouTube: typeof browseYouTube = browseYouTube,
@@ -261,7 +269,7 @@ export function createSpotifyCatalog(
     ]
       .map(searchHit)
       .filter((item): item is ProviderItem => item !== null)
-      .filter((item, index, all) => all.findIndex((other) => other.url === item.url) === index);
+      .filter((item, index, all) => all.findIndex((other) => sameRow(other, item)) === index);
     return { title: "Spotify", items };
   }
 
