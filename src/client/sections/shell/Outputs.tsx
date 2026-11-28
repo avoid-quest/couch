@@ -16,8 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
-import { useStationShow } from "@/sections/home/on-air";
 import { CompressorControls } from "@/components/CompressorControls";
 import {
   LiveParticipation,
@@ -61,7 +59,7 @@ import { isRadio } from "../../../shared/radio";
 import type { Action, PlaybackSummary } from "../../../shared/protocol";
 import { GroupChips, GroupsScope } from "./MixerGroups";
 import { deviceRow, SyncScope, tvRow } from "./MixerRows";
-import { ShellContext } from "./shell-context";
+import { RoomStyle, ShellContext } from "./shell-context";
 
 type Props = {
   state: ClientSessionState;
@@ -193,12 +191,8 @@ function Panel({ state, connected, run, className, label, children }: Props & Tr
       />
     </GroupsScope>
   );
-  // A lit panel in its playback's colours, from the picture the side player shows: brighter while it plays (index.css,
-  // .lit-panel).
-  const programme = useStationShow();
-  const entry = state.queue.find((item) => item.id === state.currentEntryId);
-  const light = useArtworkLight(programme?.artworkUrl || entry?.thumbnail);
-  const lit = roomStyle(light, state.player.status === "playing" ? 1 : 0.3);
+  // A lit panel in the room's light, which its playback's picture gives, as the side player is (index.css, .lit-panel).
+  const lit = useContext(RoomStyle);
   // It opens on the first device on the TV, else on the Volume, never on a control that changes where it plays.
   const focusFirst = (event: Event) => {
     const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(

@@ -75,7 +75,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { dismiss, failed, waitingForTap } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
-import { ShellContext } from "./shell-context";
+import { RoomStyle, ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
 import { TvPairing } from "./TvPairing";
@@ -776,121 +776,126 @@ function ShellChrome({ children }: PropsWithChildren) {
       data-light={room.state}
     >
       <RoomLight picture={room.picture} />
-      <main id="main" className="flex flex-1 flex-col">
-        {tvPresentation && paired && (
-          <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
-        )}
-        {tvPresentation && state?.appearance && (
-          <TvAppearancePreview
-            appearance={state.appearance}
-            credentials={credentials}
-            connected={connected}
-          />
-        )}
-        <div
-          className="tv-browser flex flex-1 flex-col"
-          data-tv-navigation-scope={tvPresentation ? "" : undefined}
-        >
-          <span role="status" className="sr-only">
-            {statusLabel}
-          </span>
-          {/* One header on every screen, the TV's: the Couch switch at the left (the TV names itself there),
+      <RoomStyle value={room.style}>
+        <main id="main" className="flex flex-1 flex-col">
+          {tvPresentation && paired && (
+            <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
+          )}
+          {tvPresentation && state?.appearance && (
+            <TvAppearancePreview
+              appearance={state.appearance}
+              credentials={credentials}
+              connected={connected}
+            />
+          )}
+          <div
+            className="tv-browser flex flex-1 flex-col"
+            data-tv-navigation-scope={tvPresentation ? "" : undefined}
+          >
+            <span role="status" className="sr-only">
+              {statusLabel}
+            </span>
+            {/* One header on every screen, the TV's: the Couch switch at the left (the TV names itself there),
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. Unpaired there is none: the pairing page stands alone. */}
-          {paired && (
-            <header
-              ref={header}
-              hidden={onPlayer}
-              className="app-header room-ground drag-region @container/header sticky top-0 z-30 shrink-0"
-            >
-              <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
-                {/* On a phone the open search takes the whole row. */}
-                <div className="app-header-couch flex min-w-0 items-center">
-                  {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
-                  {tvPresentation ? (
-                    <span className="flex min-w-0 items-center gap-2 font-display text-lg font-semibold tracking-tight [font-stretch:118%]">
-                      <CouchMark connected={connected} />
-                      <span className="truncate">{tvName}</span>
-                    </span>
-                  ) : (
-                    <CouchSwitch
-                      key={pathname}
-                      credentials={credentials}
-                      connected={connected}
-                      status={statusLabel}
-                      installationName={installationName}
-                      onShortcuts={
-                        section !== "Remote"
-                          ? (opener) => {
-                              shortcutsOpener.current = opener;
-                              setShortcutsOpen(true);
-                            }
-                          : undefined
-                      }
-                    />
+            {paired && (
+              <header
+                ref={header}
+                hidden={onPlayer}
+                className="app-header room-ground drag-region @container/header sticky top-0 z-30 shrink-0"
+              >
+                <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
+                  {/* On a phone the open search takes the whole row. */}
+                  <div className="app-header-couch flex min-w-0 items-center">
+                    {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
+                    {tvPresentation ? (
+                      <span className="flex min-w-0 items-center gap-2 font-display text-lg font-semibold tracking-tight [font-stretch:118%]">
+                        <CouchMark connected={connected} />
+                        <span className="truncate">{tvName}</span>
+                      </span>
+                    ) : (
+                      <CouchSwitch
+                        key={pathname}
+                        credentials={credentials}
+                        connected={connected}
+                        status={statusLabel}
+                        installationName={installationName}
+                        onShortcuts={
+                          section !== "Remote"
+                            ? (opener) => {
+                                shortcutsOpener.current = opener;
+                                setShortcutsOpen(true);
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                  {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
+                  <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
+                  {/* Share keeps a compact entry slot. Its active capsule occupies its own grid row, so neither it nor
+                  variable status text can move or resize navigation and search. HeaderSearch stays mounted. */}
+                  <ShareControl />
+                  <HeaderSearch className="app-header-search w-full" />
+                  {tvPresentation && (
+                    <DigitalClock className="app-header-tools text-muted-foreground" />
                   )}
                 </div>
-                {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-                <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
-                {/* Share keeps a compact entry slot. Its active capsule occupies its own grid row, so neither it nor
-                  variable status text can move or resize navigation and search. HeaderSearch stays mounted. */}
-                <ShareControl />
-                <HeaderSearch className="app-header-search w-full" />
-                {tvPresentation && (
-                  <DigitalClock className="app-header-tools text-muted-foreground" />
-                )}
-              </div>
-              {/* The whole app's one status place, inside the measured header: nothing over the page's content. */}
-              <div
-                data-app-status
-                className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden"
-              >
-                <ConnectionStatus />
-                {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (
-                  <UpdateCue />
-                )}
-              </div>
-            </header>
-          )}
-          {sidePlayer && nowPlayingView}
-          <AppPage>
-            {!paired ? (
-              <PairingPage status={<ConnectionStatus />} />
-            ) : (
-              <>
-                {!tvPresentation && section !== "Remote" && (
-                  <KeyboardShortcuts
-                    open={shortcutsOpen}
-                    onOpenChange={setShortcutsOpen}
-                    openerRef={shortcutsOpener}
-                  />
-                )}
-                {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. */}
+                {/* The whole app's one status place, inside the measured header: nothing over the page's content. */}
                 <div
-                  className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}
+                  data-app-status
+                  className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden"
                 >
-                  {children}
+                  <ConnectionStatus />
+                  {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (
+                    <UpdateCue />
+                  )}
                 </div>
-              </>
+              </header>
             )}
-          </AppPage>
-          {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
+            {sidePlayer && nowPlayingView}
+            <AppPage>
+              {!paired ? (
+                <PairingPage status={<ConnectionStatus />} />
+              ) : (
+                <>
+                  {!tvPresentation && section !== "Remote" && (
+                    <KeyboardShortcuts
+                      open={shortcutsOpen}
+                      onOpenChange={setShortcutsOpen}
+                      openerRef={shortcutsOpener}
+                    />
+                  )}
+                  {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. */}
+                  <div
+                    className={cn(
+                      "isolate min-w-0 flex-1",
+                      !onPlayer && "px-(--gutter) pt-8 pb-12",
+                    )}
+                  >
+                    {children}
+                  </div>
+                </>
+              )}
+            </AppPage>
+            {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
               the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
-          {paired && (
-            <div
-              ref={footer}
-              className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
-            >
-              {nowPlaying && !sidePlayer && nowPlayingView}
-              <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
-            </div>
-          )}
-          {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
-          <Toaster tvPresentation={tvPresentation} />
-          {paired && <AddToHomePanel />}
-        </div>
-      </main>
+            {paired && (
+              <div
+                ref={footer}
+                className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
+              >
+                {nowPlaying && !sidePlayer && nowPlayingView}
+                <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
+              </div>
+            )}
+            {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
+            <Toaster tvPresentation={tvPresentation} />
+            {paired && <AddToHomePanel />}
+          </div>
+        </main>
+      </RoomStyle>
     </div>
   );
 }
