@@ -126,8 +126,7 @@ export function parseUpdateOutcome(text: string): UpdateOutcome | null {
   const fields = Object.fromEntries(
     [...text.matchAll(/^(\w+)=(.*)$/gm)].map(([, key, value]) => [key, value]),
   );
-  // The TV's GNU `date -u +%FT%TZ` names the zone "UTC", not "Z".
-  const at = Date.parse((fields.at ?? "").replace(/UTC$/, "Z"));
+  const at = Date.parse(fields.at ?? "");
   if (!isOutcome(fields.outcome) || !isTime(at)) return null;
   return {
     version: isUpdateVersion(fields.version) ? fields.version : null,

@@ -134,7 +134,10 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
       } catch {
         /* Reported again after a restart, at worst. */
       }
-      logAppError("update", `Couch ${last.version} didn't install: ${last.error ?? last.outcome}`);
+      logAppError(
+        "update",
+        `${last.version ? `Couch ${last.version}` : "The update"} didn't install: ${last.error ?? last.outcome}`,
+      );
     }
     set({
       automatic: { installed: units.every((unit) => existsSync(unit)), active, last },
