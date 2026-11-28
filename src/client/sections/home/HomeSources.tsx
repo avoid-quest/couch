@@ -334,7 +334,7 @@ export function BrowseLine({ options, first = false }: { options: ReactNode; fir
         })}
       </ul>
       {/* On the doors' title line. */}
-      <div className="flex shrink-0 items-start pt-1.5 pl-1">{options}</div>
+      <div className="flex shrink-0 items-start border-l pt-1.5 pl-1">{options}</div>
     </section>
   );
 }
