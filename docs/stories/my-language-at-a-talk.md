@@ -1,20 +1,11 @@
 # Pick my language at a talk
 
-Status: idea · Scenes: live event
+Status: idea
 
-At a talk with interpreters, each guest picks the language they want and hears
-that channel in their headphones.
+At a talk with interpreters, Yusuf joins the Couch on his phone, picks English
+and hears the interpreter in his headphones, while the person beside him hears
+Italian.
 
-## Journey
+## Good to know
 
-1. The organiser shares several inputs or channels, one per language.
-2. Guests join and choose their language.
-
-## Done when
-
-- Several Live sources run at once, labelled by language.
-- A guest switches language without leaving.
-
-## Known issues
-
-- Couch shares one Live input at a time.
+- Couch shares one live audio input at a time.

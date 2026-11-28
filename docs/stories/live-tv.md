@@ -1,29 +1,13 @@
 # Live TV
 
-Status: preview · Scenes: home
+Status: preview
 
-The house has a Live TV playlist. Anyone picks a channel on the TV and sees
-what's on now and next.
+Laura added the house's channel list once, in **Settings → Sources → Live TV**.
+Now her dad opens **Live TV** on the TV, types `news` in **Filter channels**,
+sees what's on now and next, and taps **Play**.
 
-## Journey
+## Good to know
 
-1. An admin: **Settings → Sources → Live TV → Add source**: **Name**, **M3U
-   URL**, and an **XMLTV URL** for the guide.
-2. Anyone: Home → **Live TV**, **Group** or **Filter channels**.
-3. **Play** or **Play on** a channel; each shows what's on now and next.
-
-## Done when
-
-- A playlist's channels appear grouped, with now and next from the guide.
-- Channels play on the TV and other devices that support their codecs.
-- Channels only the Couch computer can decode play there, through mpv.
-
-## Demo
-
-Needs: the TV (or the HDMI display). Content: an M3U playlist with an XMLTV
-guide.
-
-## Known issues
-
-- No full guide grid, catch-up or recording.
-- mpv channels play only on the Couch computer, never on phones or in groups.
+- There's no full guide, catch-up or recording.
+- Some channels play only on the Couch computer itself, not on phones or with
+  other devices.

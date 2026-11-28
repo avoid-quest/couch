@@ -19,7 +19,7 @@ free and open source, one of the projects of [avoid.quest](https://avoid.quest).
 - **A gig in everyone's ears**: the sound desk's mix on the audience's phones,
   close to live.
 
-Each of these is a [story](docs/stories/README.md) with its journey and what
+Each of these is a [story](docs/stories/README.md): a short scene, and what
 works today. Sources: YouTube, Twitch, RaiPlay, Bandcamp, SoundCloud, film and
 series catalogues, radio, Live TV playlists, and links from other sites yt-dlp
 supports ([what plays where](docs/usage.md#what-plays-where)).

@@ -1,32 +1,14 @@
 # Late film, quiet house
 
-Status: preview · Scenes: home, personal
+Status: preview
 
-It's late and the house is asleep. The film plays on the TV; its sound goes to
-my phone and headphones, and explosions don't jump out over the dialogue.
+It's midnight and the house is asleep. Nico plays a film on the TV, opens
+**Where it plays**, turns on his phone's **Sound** and turns off the TV's, and
+listens in his headphones. The voices run a little late, so he uses **Sync…**
+to bring them earlier, and turns on **Compressor** so the explosions don't
+drown out the dialogue.
 
-## Journey
+## Good to know
 
-1. Play the film on the TV.
-2. Open the player → **Where it plays**: keep the TV's **Picture**, turn on this
-   phone's **Sound**, turn off the TV's **Sound**.
-3. Connect headphones to the phone as usual.
-4. If the sound runs late: the phone's **Options → Sync…** → **Sync … ms
-   earlier**.
-5. Turn on **Compressor**; **Advanced** offers threshold, ratio, attack,
-   release, knee and output gain.
-
-## Done when
-
-- Picture on one device and sound on another stay together.
-- A late receiver can be pulled earlier (0–500 ms), and keeps that setting.
-- The Compressor lowers loud peaks for this Playback and can be turned off.
-
-## Demo
-
-Needs: the TV (or the HDMI display) and a phone with headphones. Content: a film
-with quiet dialogue and loud scenes.
-
-## Known issues
-
-- Lip-sync and the Compressor's effect haven't been checked by ear.
+- Nobody has yet checked by ear that lips match or how the **Compressor**
+  sounds.
