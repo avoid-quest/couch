@@ -173,7 +173,7 @@ export function ChoiceGroups({
   connected: boolean;
   rows: ChoiceRow[];
   choice: Choice;
-  onChoose: (choice: Choice, left: string[]) => void;
+  onChoose: (choice: Choice, left: string[], group: string) => void;
 }) {
   const [opened, setOpened] = useState<string | null>(null);
   const chips = useRef<HTMLDivElement>(null);
@@ -201,7 +201,7 @@ export function ChoiceGroups({
             const filled = groupChoice(open, rows);
             chips.current?.querySelector<HTMLElement>(`[data-group="${open.id}"]`)?.focus();
             setOpened(null);
-            onChoose(filled.choice, filled.left);
+            onChoose(filled.choice, filled.left, open.name);
           }}
         />
       )}

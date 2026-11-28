@@ -10,7 +10,9 @@ import type { ClientSessionState } from "@/session/session";
 import { useSessionGate } from "@/session/session-context";
 import { choiceRows, offlineNames } from "@/session/where-it-plays";
 import { Folds, GuestRow } from "@/sections/shell/DeskRows";
+import { said } from "@/sections/shell/GroupEditor";
 import { ChoiceGroups } from "@/sections/shell/MixerGroups";
+import { listed } from "@/session/groups";
 import { viewerLine, type Viewer } from "./share";
 
 // The share's desk, on the device that shares (SharePlayer.tsx): its rows are who watches or listens and how, with the
@@ -27,7 +29,7 @@ export function ShareTargets({
   state: ClientSessionState;
   sharing: LiveSharing;
 }) {
-  const { run, connected } = useSessionGate();
+  const { run, command, takeWithUndo, setError, connected } = useSessionGate();
   const source = sharing.source;
   const rows = choiceRows(state, { here: deviceId(), audioOnly: !source.video }).filter(
     (row) => row.device.id !== source.deviceId,
@@ -58,10 +60,31 @@ export function ShareTargets({
               : rows.map((row) => ({ ...row, sound: { enabled: false, reason: "No sound" } }))
           }
           choice={{}}
-          onChoose={async (choice) => {
-            // One device at a time: the first starts the share's playback and the others join it.
-            for (const [id, { picture, sound }] of Object.entries(choice))
-              if (!(await play(id, picture, sound))) return;
+          onChoose={async (choice, left, group) => {
+            setError(null);
+            // One device at a time: the first starts the share's playback and the others join it. As Apply does, it
+            // says what it did with an Undo that puts it back.
+            const entries = Object.entries(choice);
+            await takeWithUndo(
+              async () => {
+                for (const [index, [id, { picture, sound }]] of entries.entries())
+                  try {
+                    await command({
+                      type: "playLive",
+                      sourceId: source.id,
+                      deviceId: id,
+                      picture,
+                      sound,
+                    });
+                  } catch (error) {
+                    setError(said(error));
+                    return index > 0;
+                  }
+                return entries.length > 0;
+              },
+              `${group} applied${left.length ? `, except ${listed(left)}` : ""}.`,
+              true,
+            );
           }}
         />
         <h4 className="flex h-9 items-end border-t pb-1.5 text-caption text-subtle-foreground">
