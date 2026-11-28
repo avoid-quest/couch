@@ -67,6 +67,17 @@ export function PastedLink({
       if (!signal.aborted) setPending(false);
     }
   }
+  // One press plays the station once, as one press sends the link once.
+  async function playStation(radio: NonNullable<typeof station>) {
+    if (pending || !lifetime.current) return;
+    const signal = lifetime.current.signal;
+    setPending(true);
+    try {
+      if ((await shell.enqueueRadio(radio, true)) && !signal.aborted) onDone();
+    } finally {
+      if (!signal.aborted) setPending(false);
+    }
+  }
   const navigation = useDetailNavigation();
   const disabled = !props.connected || pending;
   const root = useRef<HTMLElement>(null);
@@ -107,7 +118,7 @@ export function PastedLink({
           <Button
             data-page-first
             disabled={disabled || !props.canPlay}
-            onClick={() => void shell.enqueueRadio(station, true).then((ok) => ok && onDone())}
+            onClick={() => void playStation(station)}
           >
             Play {station.name}
           </Button>
