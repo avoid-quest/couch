@@ -33,6 +33,19 @@ export const tracedApiPaths = new Set([
   "/api/ws",
 ]);
 
+// Full form, or compressed with "::". Times and FFmpeg's [0:a] have neither. Node appends :port.
+const ipv6 =
+  "(?:(?:[\\da-f]{1,4}:){7}[\\da-f]{1,4}|[\\da-f]{1,4}(?::[\\da-f]{1,4})*::(?:[\\da-f]{1,4}(?::[\\da-f]{1,4})*)?|::[\\da-f]{1,4}(?::[\\da-f]{1,4})*)(?:%\\w+)?";
+const address = new RegExp(
+  `(?:::ffff:)?\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b|\\[${ipv6}\\]|(?<![\\w:])${ipv6}(?::\\d{1,5})?(?![\\w:])`,
+  "gi",
+);
+
+// A report keeps a media host's name but never a device's or another Couch's network address.
+// Addresses go before redact, whose hardware-address rule would leave an IPv6 prefix behind.
+export const scrub = (value: unknown) =>
+  redact(String(value instanceof Error ? value.message : value).replace(address, "[address]"));
+
 function spanRoute(value: string) {
   return value.replace(/(^|\s)((?:https?:\/\/|\/).*)/i, (_match, prefix: string, url: string) => {
     const path =
@@ -55,9 +68,9 @@ export const sentryOptions = {
   sendClientReports: false,
   beforeSend<T extends Pick<ErrorEvent, "request" | "message" | "exception">>(event: T) {
     delete event.request;
-    if (event.message) event.message = redact(event.message);
+    if (event.message) event.message = scrub(event.message);
     for (const error of event.exception?.values ?? []) {
-      if (error.value) error.value = redact(error.value);
+      if (error.value) error.value = scrub(error.value);
     }
     return event;
   },

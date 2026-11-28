@@ -12,6 +12,8 @@ import { createPublicMediaProxy } from "./public-media-proxy";
 
 // Only fixed, public messages from the extractor may cross the catalog boundary.
 export class ExtractionError extends Error {}
+// The website answered that this item can't play here (offline, region, sign-in, DRM, removed): not a Couch failure.
+export class UnavailableError extends ExtractionError {}
 
 export type YtDlpOptions = {
   signal?: AbortSignal;
@@ -69,27 +71,27 @@ async function readOutput(stream: Readable, limit: number, kill: () => void): Pr
 
 function extractionError(stderr: string): ExtractionError {
   if (/\bDRM\b|digital rights/i.test(stderr))
-    return new ExtractionError("This item requires DRM playback, which is not supported.");
+    return new UnavailableError("This item requires DRM playback, which is not supported.");
   if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr))
-    return new ExtractionError("This isn't available in your region.");
+    return new UnavailableError("This isn't available in your region.");
   if (
     /sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(
       stderr,
     )
   )
-    return new ExtractionError(
+    return new UnavailableError(
       "This website requires an account or browser session. Website sign-in is not supported yet.",
     );
   if (/Requested format is not available/i.test(stderr))
     return new ExtractionError("This website offers no format Couch can play yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr))
-    return new ExtractionError("This live stream is offline or has not started yet.");
+    return new UnavailableError("This live stream is offline or has not started yet.");
   if (
     /\bvideo (?:is unavailable|unavailable|has been removed|does not exist)\b|This live stream recording is not available\./i.test(
       stderr,
     )
   )
-    return new ExtractionError("This video is unavailable or was removed.");
+    return new UnavailableError("This video is unavailable or was removed.");
   return new ExtractionError("Couldn't open this page. It may be unsupported.");
 }
 

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
-import { appDiagnostic } from "../app/diagnostics";
+import * as Sentry from "@sentry/node";
+import { appDiagnostic, logAppError, reportAppErrors } from "../app/diagnostics";
 import { redact } from "../packaging/tv/redact.js";
+import { logPlaybackError } from "../src/server/playback-log";
 import { sentryOptions } from "../src/shared/sentry";
 
 test("Sentry spans keep route timings without the device address or pairing link", () => {
@@ -142,4 +144,87 @@ test("prefixed credential keys and PINs, quoted values with spaces, home paths a
     expect(line).not.toContain("synthetic");
     expect(line).not.toContain("AA_BB");
   }
+});
+
+test("Main reports its own errors to Sentry redacted, and leaves the page's to the page", () => {
+  const reports: string[] = [];
+  reportAppErrors((component, message) => reports.push(`${component}: ${message}`));
+  const error = console.error;
+  console.error = () => {};
+  try {
+    logAppError("update", "Couldn't download https://cdn.example/couch.zip?token=synthetic");
+    logAppError("renderer", "host=localhost: Uncaught Error: synthetic");
+  } finally {
+    console.error = error;
+    reportAppErrors(undefined);
+  }
+  expect(reports).toEqual(["update: Couldn't download cdn.example"]);
+});
+
+test("Sentry reports drop device and Couch network addresses but keep media hosts", () => {
+  const cases: [string, string][] = [
+    [
+      "Couldn't reach Couch host=10.10.2.96: refused by [fe80::1] for video-edge.example",
+      "Couldn't reach Couch host=[address]: refused by [address] for video-edge.example",
+    ],
+    [
+      "connect ECONNREFUSED fd12:3456::7:8096, EHOSTUNREACH fe80::1c2b:3a4d%en0",
+      "connect ECONNREFUSED [address], EHOSTUNREACH [address]",
+    ],
+    [
+      "connect ECONNREFUSED 2a02:1210:5c3e:9a00:1c2b:3aff:fe4d:5e6f:8096 via fd12:3456:aa:bb:cc:dd:ee:ff",
+      "connect ECONNREFUSED [address] via [address]",
+    ],
+    [
+      "[in#0/hls @ 0x7f8b] Error opening input [0:a] at 12:34:56, type video/mp4",
+      "[in#0/hls @ 0x7f8b] Error opening input [0:a] at 12:34:56, type video/mp4",
+    ],
+    ["Decoder [aac] failed: open '/Users/someone/x.mp4'", "Decoder [aac] failed: open [path]"],
+    [
+      "connect ECONNREFUSED fe80::1:32400 or ::1:56065 or ::ffff:192.168.1.20:32400",
+      "connect ECONNREFUSED [address] or [address] or [address]:32400",
+    ],
+    ["connect ECONNREFUSED fe80::aa:bb:cc:dd:ee:01:32400", "connect ECONNREFUSED [address]"],
+    ["Error opening input file C:/Users/someone/Videos/a.mkv.", "Error opening input file [path]"],
+    ["Error opening input file file:/Users/someone/a.mp4.", "Error opening input file file:[path]"],
+    ["open '/Users/someone/Movies/Cut short (2024)/a.mk", "open '[path]"],
+    ["HTTP/1.1 403 for video/mp4", "HTTP/1.1 403 for video/mp4"],
+  ];
+  for (const [message, reported] of cases)
+    expect(sentryOptions.beforeSend({ message }).message).toBe(reported);
+});
+
+test("a reported playback failure names neither the device nor a network address", async () => {
+  const sent: string[] = [];
+  Sentry.init({
+    ...sentryOptions,
+    dsn: "https://public@sentry.example/1",
+    defaultIntegrations: false,
+    transport: () => ({
+      send: async (envelope) => {
+        sent.push(JSON.stringify(envelope));
+        return {};
+      },
+      flush: async () => true,
+    }),
+  });
+  const log = console.log;
+  console.log = () => {};
+  try {
+    logPlaybackError(
+      "playback-1",
+      "on Living room TV",
+      "web:http://192.168.1.27/stream?sig=private-signature",
+      "Alice's iPad can't play this format. Refused by http://192.168.1.27/stream?sig=private-signature",
+    );
+    logPlaybackError("playback-1", "on Couch", undefined, "Couch couldn't prepare this picture.");
+    await Sentry.flush(1000);
+  } finally {
+    console.log = log;
+    await Sentry.close();
+  }
+  expect(sent).toHaveLength(2);
+  expect(sent[0]).toContain("This device can't play this format. Refused by [address]");
+  expect(sent[1]).toContain("Couch couldn't prepare this picture.");
+  expect(sent[0]).not.toMatch(/Living room|Alice|192\.168|private-signature/);
 });
