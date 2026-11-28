@@ -21,8 +21,13 @@ import type {
 import { playbackLanguages } from "../../../playback-languages";
 import { playbackSpeeds } from "../../../../shared/playback-default";
 
+// Original is the empty language code, which a choice can't carry as its value.
+const original = "original";
+const choiceValue = (code: string) => code || original;
+const languageCode = (value: string) => (value === original ? "" : value);
+
 const languages = [
-  { value: "", label: "Original" },
+  { value: original, label: "Original" },
   { value: "it", label: "Italiano" },
   { value: "en", label: "English" },
 ];
@@ -65,13 +70,13 @@ export function PlaybackPreferences({
       <ChoiceGroup
         label={label}
         variant="segmented"
-        value={value}
+        value={choiceValue(value)}
         options={choices}
         disabled={disabled}
-        onValueChange={(code) => apply(pick(code))}
+        onValueChange={(choice) => apply(pick(languageCode(choice)))}
       />
       <Select
-        value={choices.some((choice) => choice.value === value) ? "more" : value}
+        value={choices.some((choice) => choice.value === choiceValue(value)) ? "more" : value}
         disabled={disabled}
         onValueChange={(code) => apply(pick(code))}
       >
@@ -83,7 +88,7 @@ export function PlaybackPreferences({
             More languages
           </SelectItem>
           {playbackLanguages(value)
-            .filter((item) => !choices.some((choice) => choice.value === item.code))
+            .filter((item) => !choices.some((choice) => choice.value === choiceValue(item.code)))
             .map((item) => (
               <SelectItem key={item.code} value={item.code}>
                 {item.name}
