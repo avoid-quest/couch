@@ -189,18 +189,18 @@ export function searchRelevance(query: string, typing = false) {
     strong: (hit: Pick<SearchHit, "title">) => strength(hit.title) >= 2,
     strength,
     /**
-     * Whether the query is the hit's artist and its whole title, in either order ("miles davis kind of blue"). The artist
-     * is its creator, else its byline's first name (a Spotify album's "Miles Davis").
+     * Whether the query is the hit's artist and its whole title, in either order ("miles davis kind of blue", "the band
+     * the weight"). The artist is its creator, else its byline's first name (a Spotify album's "Miles Davis").
      */
     credited: (hit: Pick<SearchHit, "title" | "creator" | "meta">) => {
       const artist = searchWords(hit.creator?.title ?? hit.meta?.split(/ · |, /)[0] ?? "");
-      if (!artist.length || !artist.every((part) => words.includes(part))) return false;
-      const rest = words.filter((word) => !artist.includes(word));
-      const parts = searchWords(hit.title);
+      const title = searchWords(hit.title);
+      const reads = (parts: string[]) =>
+        parts.length === words.length && parts.every((part, index) => matches(part, words[index]!));
       return (
-        !!rest.length &&
-        parts.length === rest.length &&
-        rest.every((word, index) => matches(parts[index]!, word))
+        !!artist.length &&
+        !!title.length &&
+        (reads([...artist, ...title]) || reads([...title, ...artist]))
       );
     },
   };

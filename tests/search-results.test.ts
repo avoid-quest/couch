@@ -152,6 +152,11 @@ test("the searched artist's own album is credited, and their name alone or someo
       creator: { title: "Ale", url: "https://soundcloud.com/ale" },
     }),
   ).toBe(false);
+  // The artist and the title can share a word.
+  const band = { title: "The Band", url: "https://open.spotify.com/artist/b" };
+  expect(
+    searchRelevance("the band the weight").credited({ title: "The Weight", creator: band }),
+  ).toBe(true);
 });
 
 test("a known host pasted without its scheme is its https link, and words never are", () => {
