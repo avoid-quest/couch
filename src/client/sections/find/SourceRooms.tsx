@@ -78,7 +78,6 @@ export function RaiPlayRoom({
   url: string;
   context?: MediaCollection;
 }) {
-  useRoomScope({ source: "RaiPlay" });
   const room = page?.room;
   useSeededPages("raiplay", [room?.lead, ...(room?.shelves ?? [])]);
   const shelves = room?.shelves.filter((shelf) => shelf.item) ?? [];
@@ -139,7 +138,6 @@ export function AToZRoom({
   url: string;
   context?: MediaCollection;
 }) {
-  useRoomScope({ source: "RaiPlay" });
   const letters = page?.letters ?? [];
   const items = page?.items ?? [];
   let start = 0;
@@ -266,7 +264,6 @@ const twitchLive = "https://www.twitch.tv/directory/all";
  * three most watched categories' channels.
  */
 export function TwitchRoom({ onNow }: { onNow?: ProviderItem[] }) {
-  useRoomScope({ source: "Twitch" });
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const categories = useQuery({
@@ -384,7 +381,6 @@ function SavedChannels({ items }: { items: ProviderItem[] }) {
  */
 export function CatalogueRoomHead({ provider, doors }: { provider: ProviderId; doors: Door[] }) {
   const name = providerNames[provider];
-  useRoomScope({ source: name });
   return (
     <div className="grid gap-5">
       <RoomLight />

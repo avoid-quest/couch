@@ -53,6 +53,23 @@ export function useRoomScope(scope: SearchScope | null) {
   }, [key]);
 }
 
+// The sources whose front page is a room: on any of their pages the header's field keeps their scope.
+const roomSources: ProviderId[] = [
+  "raiplay",
+  "twitch",
+  "streamingcommunity",
+  "movies123",
+  "animesaturn",
+  "animeunity",
+];
+export const sourceScope = (provider: ProviderId): SearchScope | null =>
+  roomSources.includes(provider) ? { source: providerNames[provider] } : null;
+/** The room of a search's source, where clearing a search narrowed to it goes back to. */
+export function scopeRoom(scope: SearchScope) {
+  const provider = roomSources.find((provider) => providerNames[provider] === scope.source);
+  return provider && collectionLocation({ provider, url: "" });
+}
+
 /** The room is lit by its lead's picture while nothing plays, as search's results are by the top one (RoomLight.tsx). */
 export function RoomLight({ thumbnail }: { thumbnail?: string }) {
   useRoomLead(thumbnail);

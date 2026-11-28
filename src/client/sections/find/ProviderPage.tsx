@@ -39,6 +39,7 @@ import { pageSection, type ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 import { addToHome } from "@/sections/home/AddToHome";
 import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
+import { sourceScope, useRoomScope } from "./Room";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
@@ -68,6 +69,7 @@ function CollectionPage({
   search: ReturnType<typeof readCollectionSearch>;
 }) {
   const { credentials, available, openProvider, current, playHistory, section } = useShell();
+  useRoomScope(sourceScope(provider));
   const { connected, run, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const cursor = search.cursors.at(-1);
