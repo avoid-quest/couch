@@ -410,6 +410,15 @@ export function HeaderSearch({ className }: { className?: string }) {
               type(event.currentTarget.value);
             }}
             onKeyDown={(event) => {
+              // While an IME composes, its keys finish the text: Enter (Shift+Enter too) never submits or queues.
+              if (
+                event.nativeEvent.isComposing ||
+                composing.current ||
+                event.nativeEvent.keyCode === 229
+              ) {
+                if (event.key === "Enter") event.preventDefault();
+                return;
+              }
               // The keys take the palette's selection back from the pointer (index.css: cmdk).
               list.current?.removeAttribute("data-pointer");
               const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
@@ -441,14 +450,6 @@ export function HeaderSearch({ className }: { className?: string }) {
                 return;
               }
               if (event.key === "Enter") {
-                if (
-                  event.nativeEvent.isComposing ||
-                  composing.current ||
-                  event.nativeEvent.keyCode === 229
-                ) {
-                  event.preventDefault();
-                  return;
-                }
                 // Closed, Enter submits without the Search button, as Type on TV does; the TV's OK opens the palette instead.
                 // Open, it does the selected row (the palette's own Enter), or submits while none is.
                 if (!open || selected === none) {
