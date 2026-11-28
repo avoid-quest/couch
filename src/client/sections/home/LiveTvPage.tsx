@@ -74,7 +74,7 @@ export function useChannelActions() {
         label: "Play on",
         group: "play",
         disabled,
-        playOn: (on) => action.mutate({ channel, playNow: true, on }),
+        playOn: (on) => action.mutateAsync({ channel, playNow: true, on }).catch(() => false),
       },
       {
         label: "Queue",

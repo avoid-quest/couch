@@ -178,7 +178,7 @@ export function SavedFavorites({
         favorite.kind === "provider"
           ? onEnqueueProvider(favorite.item, playNow, on)
           : onEnqueueRadio(favorite.item, playNow, on);
-      await (playNow ? play(work, on) : work());
+      return await (playNow ? play(work, on) : work());
     } finally {
       setEnqueueing(false);
     }
@@ -257,7 +257,7 @@ export function SavedFavorites({
             label: "Play on",
             group: "play",
             disabled: !connected || !canPlay || pending,
-            playOn: (on) => void enqueue(favorite, true, on),
+            playOn: (on) => enqueue(favorite, true, on),
             audioOnly: favorite.kind === "radio",
           },
           {

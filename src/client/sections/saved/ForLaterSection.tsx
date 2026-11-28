@@ -117,7 +117,8 @@ export function ForLaterSection({
   const act = (item: ForLaterItem, mode: Mode, index: number, on?: PlayOn) => {
     if (!connected || pending) return;
     if (mode === "remove") removing(item.id, index);
-    action.mutate({ item, mode, on });
+    // Play on looks for its Undo once the play is done.
+    return action.mutateAsync({ item, mode, on }).catch(() => false);
   };
   // Move up and Move down, as the ordered ids the server persists.
   const order = (index: number, offset: number) =>

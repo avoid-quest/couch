@@ -135,7 +135,7 @@ export function SavedPlaylists({
   ) => {
     const send = (on?: PlayOn) =>
       write(`${listPath(target.id)}/load${playOnQuery(on)}`, { revision: target.revision, mode });
-    await (mode === "play"
+    return await (mode === "play"
       ? play(async (on) => (await send(on)) ?? false, on)
       : session
         ? session.queue(target.name, send)
@@ -212,7 +212,7 @@ export function SavedPlaylists({
                       label: "Play on",
                       group: "play",
                       disabled: disabled || !canPlay || !item.entryCount,
-                      playOn: (on) => void load(item, "play", on),
+                      playOn: (on) => load(item, "play", on),
                     },
                     {
                       label: "Queue",

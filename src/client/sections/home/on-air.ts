@@ -133,7 +133,7 @@ export function useStationMenu() {
         group: "play",
         disabled: !available,
         audioOnly: true,
-        playOn: (on) => void play((on) => enqueueRadio(station, true, on), on),
+        playOn: (on) => play((on) => enqueueRadio(station, true, on), on),
       },
       {
         label: saveLabel(favorite.saved, "Saved"),
