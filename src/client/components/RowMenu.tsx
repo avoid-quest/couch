@@ -65,7 +65,9 @@ const playVerbs = ["Play", "Resume", "Play all", "From start", "Play next", "Que
 function arranged(actions: MenuAction[]) {
   const rank = (action: MenuAction) => {
     const group = itemGroups.indexOf(action.group ?? "");
-    const verb = action.playOn ? playVerbs.length : playVerbs.indexOf(action.label);
+    const verb = action.playOn
+      ? playVerbs.length
+      : playVerbs.indexOf(action.label.replace(/ \(.*\)$/, ""));
     return (group < 0 ? itemGroups.length : group) * 100 + (action.group === "play" ? verb + 1 : 0);
   };
   return actions
