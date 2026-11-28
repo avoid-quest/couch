@@ -48,6 +48,7 @@ const sourceProviders = [
   "youtube",
   "raiplay",
   "bandcamp",
+  "soundcloud",
   "streamingcommunity",
   "movies123",
   "animesaturn",
@@ -118,7 +119,7 @@ function playlistSource(value: unknown): PlaylistSource {
     value.url.length > 2048
   ) {
     throw new PlaylistError(
-      "Choose a YouTube playlist, RaiPlay programme, StreamingCommunity film or series, 123MoviesFree film or season, AnimeSaturn or AnimeUnity anime, or Bandcamp album to save.",
+      "Choose a YouTube playlist, RaiPlay programme, StreamingCommunity film or series, 123MoviesFree film or season, AnimeSaturn or AnimeUnity anime, Bandcamp album, or SoundCloud set or profile to save.",
     );
   }
   fields(value, ["provider", "url"]);

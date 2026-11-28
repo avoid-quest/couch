@@ -27,6 +27,7 @@ user guide every change keeps true. Something new for people to do starts here.
 | [Join a Couch](join-a-couch.md) | preview | all |
 | [Movie night](movie-night.md) | preview | home, group |
 | [Everyone adds to Up next](everyone-adds-to-up-next.md) | preview | group, home, coworking |
+| [Find and play anything](find-and-play-anything.md) | wip | personal, group, home |
 | [Music through the house, and into the shower](music-through-the-house.md) | preview | home |
 | [Late film, quiet house](late-film-quiet-house.md) | preview | home, personal |
 | [My own thing, then onto the TV](my-own-thing-then-the-tv.md) | preview | personal, group |
@@ -50,7 +51,8 @@ user guide every change keeps true. Something new for people to do starts here.
 | --- | --- |
 | Pairing, device names, lending speakers and screen | Join a Couch |
 | Film, series and anime catalogues; Remote; Continue and resume | Movie night |
-| Search, pasting a link, Up next, Undo, Autoplay, lists, For later | Everyone adds to Up next |
+| Up next, Undo, Autoplay, lists, For later | Everyone adds to Up next |
+| Search, pasting a link, radio archives, Mixcloud, Spotify links, Clear Up next | Find and play anything |
 | Sound on several devices, in step; device levels and Volume | Music through the house |
 | Picture and sound on different devices, Sync…, Compressor | Late film, quiet house |
 | Several Playbacks, Play on, Move here, Stop | My own thing, then onto the TV |

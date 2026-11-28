@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Stage, StageTitle } from "@/components/Stage";
+import { ContentLink } from "@/components/ContentLink";
 import { Button } from "@/components/ui/button";
 import { ProgressLine } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
@@ -26,7 +27,7 @@ export const verbRow =
   "flex flex-wrap items-center gap-2 [&>[data-size=icon-lg]:first-child]:-ml-3 max-md:[&>[data-size=lg]:first-child]:w-full max-md:[&>[data-size=lg]:first-child+[data-size=lg]]:-ml-5 max-md:[&>[data-size=lg]:first-child+[data-size=icon-lg]]:-ml-3";
 
 /** Save as a bookmark that fills once saved: one fixed-width toggle, so Saved moves nothing beside it. */
-export function SaveToggle({
+function SaveToggle({
   saved,
   ...props
 }: { saved: boolean } & Omit<ComponentProps<typeof Button>, "children">) {
@@ -98,6 +99,7 @@ export function Description({ text, className }: { text?: string | null; classNa
  */
 export function DetailHeader({
   title,
+  titleHref,
   meta,
   context,
   description,
@@ -117,6 +119,8 @@ export function DetailHeader({
   children,
 }: {
   title: string;
+  /** Where pressing the title goes (a station's show searches for it). */
+  titleHref?: string;
   meta?: string;
   context?: ReactNode;
   description?: string | null;
@@ -156,7 +160,13 @@ export function DetailHeader({
     <Stage data-detail-header thumbnail={thumbnail ?? ""} shape={shape} fit={fit} title={title}>
       <div className="grid w-full justify-items-start gap-3">
         {trail}
-        <StageTitle title={title} />
+        <StageTitle title={title}>
+          {titleHref ? (
+            <ContentLink href={titleHref} className="no-underline hover:underline">
+              {title}
+            </ContentLink>
+          ) : undefined}
+        </StageTitle>
       </div>
       {(line || context || started || progress) && (
         <div className="grid w-full justify-items-start gap-2">

@@ -1,4 +1,4 @@
-import { providerForUrl, providerMediaPage } from "../shared/providers";
+import { providerForUrl, providerMediaPage, providerNames } from "../shared/providers";
 import type { PlaybackActor, QueueEntry, SessionState } from "../shared/protocol";
 import type { HistoryItem, HistorySelection, WatchingProfile } from "../shared/viewing";
 import type { VideoQuality } from "../shared/providers";
@@ -147,19 +147,7 @@ export function createCatalog({ radio, viewing }: Services) {
         }
       : saved;
     const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
-    const sourceLabel = provider
-      ? {
-          youtube: "YouTube",
-          twitch: "Twitch",
-          raiplay: "RaiPlay",
-          bandcamp: "Bandcamp",
-          soundcloud: "SoundCloud",
-          streamingcommunity: "StreamingCommunity",
-          movies123: "123MoviesFree",
-          animesaturn: "AnimeSaturn",
-          animeunity: "AnimeUnity",
-        }[provider]
-      : "Online";
+    const sourceLabel = provider ? providerNames[provider] : "Online";
     const url =
       source?.source.startsWith("web:") && !source.endless && source.kind !== "radio"
         ? providerMediaPage(source.source.slice(4))
@@ -265,6 +253,9 @@ export function createCatalog({ radio, viewing }: Services) {
               "movies123",
               "animesaturn",
               "animeunity",
+              "mixcloud",
+              "archives",
+              "spotify",
             ].includes(provider)
           )
             throw new RequestError("Invalid provider.");

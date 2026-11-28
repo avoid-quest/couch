@@ -1,6 +1,7 @@
 import { mediaCreator } from "../media-creator";
 import {
   publicProviderMediaUrl,
+  soundCloudListUrl,
   type BrowseRequest,
   type ProviderItem,
   type ProviderPage,
@@ -75,6 +76,49 @@ function item(value: unknown): ProviderItem | null {
   };
 }
 
+// A set or profile, as yt-dlp lists it flat (each track's page, title and length, no streams).
+async function listInfo(run: typeof runYtDlp, url: string, items: string, signal?: AbortSignal) {
+  const output = await run(
+    [
+      "--use-extractors",
+      "soundcloud.*,end",
+      "--flat-playlist",
+      "--dump-single-json",
+      "--playlist-items",
+      items,
+      "--",
+      url,
+    ],
+    { signal },
+  );
+  signal?.throwIfAborted();
+  let info: unknown;
+  try {
+    info = JSON.parse(output);
+  } catch {
+    throw new ProviderError("SoundCloud returned invalid catalog information.");
+  }
+  if (!object(info) || info._type !== "playlist" || !Array.isArray(info.entries))
+    throw new ProviderError("SoundCloud returned invalid catalog information.");
+  const entries = info.entries as unknown[];
+  return {
+    entries,
+    // A profile is listed as "Name (All)": its tracks and reposts, as its page shows them.
+    title: label(info.title)?.replace(/ \(All\)$/, "") ?? "SoundCloud",
+    subtitle: label(info.uploader),
+    description: label(info.description, 2000),
+    ...(typeof info.playlist_count === "number" && info.playlist_count >= 0
+      ? { count: info.playlist_count }
+      : {}),
+  };
+}
+
+const listItems = (entries: unknown[], title: string, url: string, offset = 0) =>
+  entries.flatMap((entry, index): ProviderItem[] => {
+    const track = item(entry);
+    return track ? [{ ...track, collection: { title, url, index: offset + index } }] : [];
+  });
+
 export function createSoundCloudBrowser(run: typeof runYtDlp = runYtDlp) {
   return async function browseSoundCloud(
     request: BrowseRequest,
@@ -98,8 +142,22 @@ export function createSoundCloudBrowser(run: typeof runYtDlp = runYtDlp) {
     const query = request.query?.trim() ?? "";
     const link = request.url ?? (/^https?:\/\//i.test(query) ? query : undefined);
     const url = link === undefined ? undefined : trackUrl(link);
-    if (link !== undefined && !url)
-      throw new ProviderError("Enter a public SoundCloud track link.", 400);
+    const list = link === undefined || url ? undefined : soundCloudListUrl(link);
+    if (link !== undefined && !url && !list)
+      throw new ProviderError("Enter a public SoundCloud track, set or profile link.", 400);
+    if (list) {
+      const info = await listInfo(run, list, `${offset + 1}:${offset + pageSize + 1}`, signal);
+      return withProviderItem("soundcloud", list, "collection", {
+        title: info.title,
+        subtitle: info.subtitle,
+        description: info.description,
+        ...(info.count === undefined ? {} : { count: info.count }),
+        items: listItems(info.entries.slice(0, pageSize), info.title, list, offset),
+        ...(info.entries.length > pageSize && offset < maxOffset
+          ? { nextCursor: String(offset + pageSize) }
+          : {}),
+      });
+    }
     if (offset && (url || !query))
       throw new ProviderError("Invalid SoundCloud page. Start a new search.", 400);
     if (!url && !query) return { title: "SoundCloud", items: [] };
@@ -149,4 +207,27 @@ export function createSoundCloudBrowser(run: typeof runYtDlp = runYtDlp) {
   };
 }
 
+/** A set's or profile's tracks to queue: the first 500 (Couch's queue limit) of a longer list. */
+export function createSoundCloudListLoader(run: typeof runYtDlp = runYtDlp) {
+  return async (url: string, signal?: AbortSignal): Promise<ProviderPage> => {
+    const list = soundCloudListUrl(url);
+    if (!list)
+      throw new ProviderError("Choose a SoundCloud set or profile link to queue its tracks.", 400);
+    const info = await listInfo(
+      run,
+      list,
+      "1:500",
+      AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]),
+    );
+    const items = listItems(info.entries, info.title, list);
+    if (!items.length) throw new ProviderError("This SoundCloud list has no public tracks.");
+    return {
+      title: info.title,
+      count: info.count ?? info.entries.length,
+      items,
+    };
+  };
+}
+
 export const browseSoundCloud = createSoundCloudBrowser();
+export const loadSoundCloudList = createSoundCloudListLoader();

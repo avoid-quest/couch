@@ -187,3 +187,173 @@ test("Up next pages through the whole Autoplay list, and any of it plays", async
     store.close();
   }
 });
+
+test("a Play waiting for its list outlasts Autoplay moving on, and Stop or Next cancels it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("reserved");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    {
+      resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }),
+      resolveContinuation: () => ({ title: "Collection", entries: [entry("following")] }),
+    },
+  );
+  const ended = () =>
+    session.observe({ ...state!.player, status: "ended", position: 100, duration: 100 });
+  try {
+    session.command({ type: "enqueue", entry: entry("playing"), playNow: true });
+    await flush();
+    const intent = session.reservePlay();
+    ended();
+    assert.equal(state!.currentEntryId, "following");
+    session.playNewEntries([entry("wishlist")], { intent });
+    assert.equal(state!.currentEntryId, "wishlist");
+
+    const stopped = session.reservePlay();
+    session.command({ type: "stop" });
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: stopped }), /canceled/);
+    const reset = session.reservePlay();
+    session.viewing(state!.activeProfile, state!.preferences, true);
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: reset }), /canceled/);
+    session.command({ type: "enqueue", entry: entry("again"), playNow: true });
+    const skipped = session.reservePlay();
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: skipped }), /canceled/);
+  } finally {
+    session.close();
+    store.close();
+  }
+});
+
+test("a list read in parts extends the Autoplay it started, and nothing that replaced it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("parts");
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    () => {},
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    assert.equal(
+      await session.extendContinuation("second", Promise.resolve([entry("third")])),
+      true,
+    );
+    assert.deepEqual(
+      playback.playbackContinuation()?.entries.map((item) => item.id),
+      ["second", "third"],
+    );
+    session.playNewEntries([entry("other")], {
+      continuation: { title: "Other", entries: [entry("after")] },
+    });
+    assert.equal(
+      await session.extendContinuation("third", Promise.resolve([entry("late")])),
+      false,
+    );
+    assert.deepEqual(
+      session.state.autoplay?.upcoming.map((item) => item.id),
+      ["after"],
+    );
+  } finally {
+    session.close();
+    store.close();
+  }
+});
+
+test("a list whose first part ends, or is skipped past, before its later part comes plays on with it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("late-part");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  const ended = () =>
+    session.observe({
+      ...state!.player,
+      status: "ended",
+      position: 100,
+      duration: 100,
+    });
+  const part = () => {
+    let deliver!: (entries: ReturnType<typeof entry>[]) => void;
+    return {
+      later: new Promise<ReturnType<typeof entry>[]>((done) => (deliver = done)),
+      deliver,
+    };
+  };
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    await flush();
+    const rest = part();
+    const extended = session.extendContinuation("second", rest.later);
+    ended();
+    assert.equal(state!.currentEntryId, "second");
+    ended();
+    assert.equal(state!.player.status, "ended");
+    assert.equal(state!.autoplay?.pending, true);
+    rest.deliver([entry("third"), entry("fourth")]);
+    assert.equal(await extended, true);
+    assert.equal(state!.currentEntryId, "third");
+
+    const more = part();
+    const skipped = session.extendContinuation("fourth", more.later);
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    assert.equal(state!.currentEntryId, "fourth");
+    more.deliver([entry("fifth")]);
+    assert.equal(await skipped, true);
+    assert.equal(state!.currentEntryId, "fifth");
+  } finally {
+    session.close();
+    store.close();
+  }
+});
+
+test("a queued item played after a list's last loaded item keeps the list's later part", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("queued-part");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  const ended = () =>
+    session.observe({ ...state!.player, status: "ended", position: 100, duration: 100 });
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    await flush();
+    let deliver!: (entries: ReturnType<typeof entry>[]) => void;
+    const extended = session.extendContinuation("second", new Promise((done) => (deliver = done)));
+    ended();
+    assert.equal(state!.currentEntryId, "second");
+    session.command({ type: "enqueue", entry: entry("queued") });
+    ended();
+    assert.equal(state!.currentEntryId, "queued");
+    deliver([entry("third")]);
+    assert.equal(await extended, true);
+    assert.deepEqual(
+      state!.autoplay?.upcoming.map((item) => item.id),
+      ["third"],
+    );
+    ended();
+    assert.equal(state!.currentEntryId, "third");
+  } finally {
+    session.close();
+    store.close();
+  }
+});

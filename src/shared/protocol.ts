@@ -206,12 +206,12 @@ export type SessionState = {
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
   liveSources?: LiveSource[];
-  // target: the one Device a listener-removed notice is for.
+  // target: the one Device a listener-removed or list-short notice is for.
   activity?: {
     id: string;
     actor: PlaybackActor;
     text: string;
-    kind?: "sharing-stopped" | "listener-removed";
+    kind?: "sharing-stopped" | "listener-removed" | "list-short";
     target?: string;
   };
   queueCursorEntryId?: string | null;
@@ -332,6 +332,8 @@ export type Action =
       placement?: "next";
     } & PlayOn)
   | { type: "remove"; entryId: string }
+  // Takes every waiting entry out of Up next at once; restoreRemoved puts them back.
+  | { type: "clearUpNext" }
   | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }

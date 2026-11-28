@@ -455,7 +455,9 @@ export function SessionGate({
         }
         if (before && current() && attempt === commandAttempt.current) {
           const undoable =
-            action.type === "remove" || (!!before.currentEntryId && action.type === "stop");
+            action.type === "remove" ||
+            action.type === "clearUpNext" ||
+            (!!before.currentEntryId && action.type === "stop");
           let after = readObservation();
           let plan = undoable && after && undoPlan(action, before, after);
           for (

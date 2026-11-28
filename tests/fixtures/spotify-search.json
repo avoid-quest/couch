@@ -1,0 +1,625 @@
+{
+ "data": {
+  "searchV2": {
+   "topResultsV2": {
+    "featured": [],
+    "itemsV2": [
+     {
+      "item": {
+       "__typename": "ArtistResponseWrapper",
+       "data": {
+        "__typename": "Artist",
+        "profile": {
+         "name": "Devi Tensione"
+        },
+        "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0",
+        "visuals": {
+         "avatarImage": {
+          "sources": [
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab6761610000e5eb14c7a7c6efd54b897a5b9deb",
+            "width": 640
+           },
+           {
+            "height": 160,
+            "url": "https://i.scdn.co/image/ab6761610000f17814c7a7c6efd54b897a5b9deb",
+            "width": 160
+           },
+           {
+            "height": 320,
+            "url": "https://i.scdn.co/image/ab6761610000517414c7a7c6efd54b897a5b9deb",
+            "width": 320
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     {
+      "item": {
+       "__typename": "PodcastResponseWrapper",
+       "data": {
+        "__typename": "Podcast",
+        "coverArt": {
+         "sources": [
+          {
+           "height": 64,
+           "url": "https://i.scdn.co/image/ab6765630000f68ddb211b496a9cf34535e5358c",
+           "width": 64
+          },
+          {
+           "height": 300,
+           "url": "https://i.scdn.co/image/ab67656300005f1fdb211b496a9cf34535e5358c",
+           "width": 300
+          },
+          {
+           "height": 640,
+           "url": "https://i.scdn.co/image/ab6765630000ba8adb211b496a9cf34535e5358c",
+           "width": 640
+          }
+         ]
+        },
+        "mediaType": "AUDIO",
+        "name": "Fratellanza Oscura",
+        "publisher": {
+         "name": "Andrea Prevignano"
+        },
+        "topics": {
+         "items": [
+          {
+           "__typename": "PodcastTopic",
+           "title": "History",
+           "uri": "spotify:genre:0JQ5DAqbMKFKK9EFSCDuOS"
+          }
+         ]
+        },
+        "uri": "spotify:show:0tLgmXOVgxsae0bvj1Eh24"
+       }
+      }
+     }
+    ]
+   },
+   "tracksV2": {
+    "totalCount": 311,
+    "items": [
+     {
+      "item": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "albumOfTrack": {
+         "coverArt": {
+          "sources": [
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab67616d00001e02f7d4edb2280f46b817a5ad93",
+            "width": 300
+           },
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67616d00004851f7d4edb2280f46b817a5ad93",
+            "width": 64
+           },
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab67616d0000b273f7d4edb2280f46b817a5ad93",
+            "width": 640
+           }
+          ]
+         },
+         "id": "6bHFDJkMMxVoCCZak0ogKr",
+         "name": "Tanto tempo",
+         "uri": "spotify:album:6bHFDJkMMxVoCCZak0ogKr"
+        },
+        "artists": {
+         "items": [
+          {
+           "profile": {
+            "name": "Devi Tensione"
+           },
+           "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+          }
+         ]
+        },
+        "duration": {
+         "totalMilliseconds": 114218
+        },
+        "id": "2vvTHPXVQcu5UCRyBIM6x8",
+        "trackMediaType": "AUDIO",
+        "name": "Verme",
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "uri": "spotify:track:2vvTHPXVQcu5UCRyBIM6x8"
+       }
+      }
+     },
+     {
+      "item": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "albumOfTrack": {
+         "coverArt": {
+          "sources": [
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab67616d00001e02f760a7ed3982089bbaefec67",
+            "width": 300
+           },
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67616d00004851f760a7ed3982089bbaefec67",
+            "width": 64
+           },
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab67616d0000b273f760a7ed3982089bbaefec67",
+            "width": 640
+           }
+          ]
+         },
+         "id": "0ATwA8q1jPJ9IaP9i1ipXp",
+         "name": "Non sapevo amore",
+         "uri": "spotify:album:0ATwA8q1jPJ9IaP9i1ipXp"
+        },
+        "artists": {
+         "items": [
+          {
+           "profile": {
+            "name": "Devi Tensione"
+           },
+           "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+          }
+         ]
+        },
+        "duration": {
+         "totalMilliseconds": 184000
+        },
+        "id": "1SzWMDuaYGPlAL1c3FsENc",
+        "trackMediaType": "AUDIO",
+        "name": "666",
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "uri": "spotify:track:1SzWMDuaYGPlAL1c3FsENc"
+       }
+      }
+     },
+     {
+      "item": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "albumOfTrack": {
+         "coverArt": {
+          "sources": [
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab67616d00001e02f760a7ed3982089bbaefec67",
+            "width": 300
+           },
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67616d00004851f760a7ed3982089bbaefec67",
+            "width": 64
+           },
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab67616d0000b273f760a7ed3982089bbaefec67",
+            "width": 640
+           }
+          ]
+         },
+         "id": "0ATwA8q1jPJ9IaP9i1ipXp",
+         "name": "Non sapevo amore",
+         "uri": "spotify:album:0ATwA8q1jPJ9IaP9i1ipXp"
+        },
+        "artists": {
+         "items": [
+          {
+           "profile": {
+            "name": "Devi Tensione"
+           },
+           "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+          }
+         ]
+        },
+        "duration": {
+         "totalMilliseconds": 75000
+        },
+        "id": "1oRzMPgWVOLk3t9jcIM5uh",
+        "trackMediaType": "AUDIO",
+        "name": "Tendo #3",
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "uri": "spotify:track:1oRzMPgWVOLk3t9jcIM5uh"
+       }
+      }
+     },
+     {
+      "item": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "albumOfTrack": {
+         "coverArt": {
+          "sources": [
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab67616d00001e02f760a7ed3982089bbaefec67",
+            "width": 300
+           },
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67616d00004851f760a7ed3982089bbaefec67",
+            "width": 64
+           },
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab67616d0000b273f760a7ed3982089bbaefec67",
+            "width": 640
+           }
+          ]
+         },
+         "id": "0ATwA8q1jPJ9IaP9i1ipXp",
+         "name": "Non sapevo amore",
+         "uri": "spotify:album:0ATwA8q1jPJ9IaP9i1ipXp"
+        },
+        "artists": {
+         "items": [
+          {
+           "profile": {
+            "name": "Devi Tensione"
+           },
+           "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+          }
+         ]
+        },
+        "duration": {
+         "totalMilliseconds": 109968
+        },
+        "id": "5fFeYjZDOzqTBZVlHHmlpX",
+        "trackMediaType": "AUDIO",
+        "name": "Ho paura del buio",
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "uri": "spotify:track:5fFeYjZDOzqTBZVlHHmlpX"
+       }
+      }
+     },
+     {
+      "item": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "albumOfTrack": {
+         "coverArt": {
+          "sources": [
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab67616d00001e0244514d308a2f85cbb003334e",
+            "width": 300
+           },
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67616d0000485144514d308a2f85cbb003334e",
+            "width": 64
+           },
+           {
+            "height": 640,
+            "url": "https://i.scdn.co/image/ab67616d0000b27344514d308a2f85cbb003334e",
+            "width": 640
+           }
+          ]
+         },
+         "id": "4t9bEqsWDjs0JWlKuBIu0E",
+         "name": "LLRRZZ",
+         "uri": "spotify:album:4t9bEqsWDjs0JWlKuBIu0E"
+        },
+        "artists": {
+         "items": [
+          {
+           "profile": {
+            "name": "Kinked"
+           },
+           "uri": "spotify:artist:7BV8pnU7rkOKZvUEbA3yVS"
+          },
+          {
+           "profile": {
+            "name": "Devi Tensione"
+           },
+           "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+          }
+         ]
+        },
+        "duration": {
+         "totalMilliseconds": 125000
+        },
+        "id": "55iY7rnXOYKt5spBh31bKh",
+        "trackMediaType": "AUDIO",
+        "name": "Rapanui (Devi Tensione Rework)",
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "uri": "spotify:track:55iY7rnXOYKt5spBh31bKh"
+       }
+      }
+     }
+    ]
+   },
+   "artists": {
+    "totalCount": 100,
+    "items": [
+     {
+      "__typename": "ArtistResponseWrapper",
+      "data": {
+       "__typename": "Artist",
+       "profile": {
+        "name": "Devi Tensione"
+       },
+       "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0",
+       "visuals": {
+        "avatarImage": {
+         "sources": [
+          {
+           "height": 640,
+           "url": "https://i.scdn.co/image/ab6761610000e5eb14c7a7c6efd54b897a5b9deb",
+           "width": 640
+          },
+          {
+           "height": 160,
+           "url": "https://i.scdn.co/image/ab6761610000f17814c7a7c6efd54b897a5b9deb",
+           "width": 160
+          },
+          {
+           "height": 320,
+           "url": "https://i.scdn.co/image/ab6761610000517414c7a7c6efd54b897a5b9deb",
+           "width": 320
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "__typename": "ArtistResponseWrapper",
+      "data": {
+       "__typename": "Artist",
+       "profile": {
+        "name": "Shiva"
+       },
+       "uri": "spotify:artist:2K5nCggbhSZ00YCYP5qkZS",
+       "visuals": {
+        "avatarImage": {
+         "sources": [
+          {
+           "height": 640,
+           "url": "https://i.scdn.co/image/ab6761610000e5ebaef53e971834894d112256a6",
+           "width": 640
+          },
+          {
+           "height": 160,
+           "url": "https://i.scdn.co/image/ab6761610000f178aef53e971834894d112256a6",
+           "width": 160
+          },
+          {
+           "height": 320,
+           "url": "https://i.scdn.co/image/ab67616100005174aef53e971834894d112256a6",
+           "width": 320
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   },
+   "albumsV2": {
+    "__typename": "AlbumOrPrereleasePage",
+    "totalCount": 99,
+    "items": [
+     {
+      "__typename": "AlbumResponseWrapper",
+      "data": {
+       "__typename": "Album",
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Devi Tensione"
+          },
+          "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+         }
+        ]
+       },
+       "coverArt": {
+        "sources": [
+         {
+          "height": 300,
+          "url": "https://i.scdn.co/image/ab67616d00001e02f760a7ed3982089bbaefec67",
+          "width": 300
+         },
+         {
+          "height": 64,
+          "url": "https://i.scdn.co/image/ab67616d00004851f760a7ed3982089bbaefec67",
+          "width": 64
+         },
+         {
+          "height": 640,
+          "url": "https://i.scdn.co/image/ab67616d0000b273f760a7ed3982089bbaefec67",
+          "width": 640
+         }
+        ]
+       },
+       "date": {
+        "year": 2022
+       },
+       "isAlbumPreRelease": false,
+       "name": "Non sapevo amore",
+       "playability": {
+        "playable": true,
+        "reason": "PLAYABLE"
+       },
+       "preReleaseEndDateTime": null,
+       "type": "ALBUM",
+       "uri": "spotify:album:0ATwA8q1jPJ9IaP9i1ipXp"
+      }
+     },
+     {
+      "__typename": "AlbumResponseWrapper",
+      "data": {
+       "__typename": "Album",
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Devi Tensione"
+          },
+          "uri": "spotify:artist:2enCZC6FjkZDdEW7rKBfw0"
+         }
+        ]
+       },
+       "coverArt": {
+        "sources": [
+         {
+          "height": 300,
+          "url": "https://i.scdn.co/image/ab67616d00001e02f7d4edb2280f46b817a5ad93",
+          "width": 300
+         },
+         {
+          "height": 64,
+          "url": "https://i.scdn.co/image/ab67616d00004851f7d4edb2280f46b817a5ad93",
+          "width": 64
+         },
+         {
+          "height": 640,
+          "url": "https://i.scdn.co/image/ab67616d0000b273f7d4edb2280f46b817a5ad93",
+          "width": 640
+         }
+        ]
+       },
+       "date": {
+        "year": 2022
+       },
+       "isAlbumPreRelease": false,
+       "name": "Tanto tempo",
+       "playability": {
+        "playable": true,
+        "reason": "PLAYABLE"
+       },
+       "preReleaseEndDateTime": null,
+       "type": "EP",
+       "uri": "spotify:album:6bHFDJkMMxVoCCZak0ogKr"
+      }
+     }
+    ]
+   },
+   "playlists": {
+    "totalCount": 101,
+    "items": [
+     {
+      "__typename": "PlaylistResponseWrapper",
+      "data": {
+       "__typename": "Playlist",
+       "description": "",
+       "format": "",
+       "images": {
+        "items": [
+         {
+          "sources": [
+           {
+            "height": 640,
+            "url": "https://mosaic.scdn.co/640/ab67616d00001e022affb249b20fd7e522a766eeab67616d00001e0283f032f9067a10d44d9e8adeab67616d00001e02d75057709f3ab729f17c90a5ab67616d00001e02f0ff57a0f009979140cb49ae",
+            "width": 640
+           },
+           {
+            "height": 300,
+            "url": "https://mosaic.scdn.co/300/ab67616d00001e022affb249b20fd7e522a766eeab67616d00001e0283f032f9067a10d44d9e8adeab67616d00001e02d75057709f3ab729f17c90a5ab67616d00001e02f0ff57a0f009979140cb49ae",
+            "width": 300
+           },
+           {
+            "height": 60,
+            "url": "https://mosaic.scdn.co/60/ab67616d00001e022affb249b20fd7e522a766eeab67616d00001e0283f032f9067a10d44d9e8adeab67616d00001e02d75057709f3ab729f17c90a5ab67616d00001e02f0ff57a0f009979140cb49ae",
+            "width": 60
+           }
+          ]
+         }
+        ]
+       },
+       "name": "depressione serio ♾️💔",
+       "ownerV2": {
+        "__typename": "UserResponseWrapper",
+        "data": {
+         "__typename": "User",
+         "avatar": null,
+         "name": "evaaaa",
+         "socialHandle": null,
+         "uri": "spotify:user:n6yo3kbj5o5p1vvyfal1ptuhv",
+         "username": "n6yo3kbj5o5p1vvyfal1ptuhv"
+        }
+       },
+       "uri": "spotify:playlist:7c1GsaRAdXjKKuQ97c1Uq7"
+      }
+     },
+     {
+      "__typename": "PlaylistResponseWrapper",
+      "data": {
+       "__typename": "Playlist",
+       "description": "With Lena Mædgen, Noah Praise God, Performance and more",
+       "format": "inspiredby-mix",
+       "images": {
+        "items": [
+         {
+          "sources": [
+           {
+            "height": null,
+            "url": "https://pickasso.spotifycdn.com/image/ab67c0de0000deef/dt/v1/img/radio/artist/2enCZC6FjkZDdEW7rKBfw0/en",
+            "width": null
+           }
+          ]
+         }
+        ]
+       },
+       "name": "Devi Tensione Radio",
+       "ownerV2": {
+        "__typename": "UserResponseWrapper",
+        "data": {
+         "__typename": "User",
+         "avatar": {
+          "sources": [
+           {
+            "height": 64,
+            "url": "https://i.scdn.co/image/ab67757000003b8255c25988a6ac314394d3fbf5",
+            "width": 64
+           },
+           {
+            "height": 300,
+            "url": "https://i.scdn.co/image/ab6775700000ee8555c25988a6ac314394d3fbf5",
+            "width": 300
+           }
+          ]
+         },
+         "name": "Spotify",
+         "socialHandle": null,
+         "uri": "spotify:user:spotify",
+         "username": "spotify"
+        }
+       },
+       "uri": "spotify:playlist:37i9dQZF1E4wm4leW9saWQ"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

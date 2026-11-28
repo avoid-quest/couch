@@ -20,6 +20,7 @@ export type PlaylistSource = {
     | "youtube"
     | "raiplay"
     | "bandcamp"
+    | "soundcloud"
     | "streamingcommunity"
     | "movies123"
     | "animesaturn"

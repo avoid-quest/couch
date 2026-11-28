@@ -121,6 +121,8 @@ export const playingOn = (name: string, deviceId: string) => {
   return show("playing-on", `Playing on ${name}`, { duration: brief });
 };
 export const notice = (text: string) => show("notice", text, { duration: long });
+/** A press whose answer takes a while, such as a long list loading: it shows until a notice replaces it or it's dismissed. */
+export const pendingNotice = (text: string) => show("notice", text, { duration: Infinity });
 /**
  * Once the last device stops watching, the capture still runs: say so once, with Stop sharing. Like every sharing
  * control it stays this device's own; sonner takes no data attributes, so navigation.ts reads its class instead.

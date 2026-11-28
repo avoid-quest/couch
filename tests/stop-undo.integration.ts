@@ -90,6 +90,23 @@ test(
       );
       await command({ type: "play", entryId: "film" });
       await until(() => state!.currentEntryId === "film");
+      // Clear Up next takes every waiting entry at once, and its Undo puts them back in order.
+      for (const id of ["next", "later"])
+        await command({
+          type: "enqueue",
+          entry: { id, title: id, source: `${hub.origin}/api/health` },
+        });
+      await command({ type: "clearUpNext" });
+      await until(() => state!.queue.length === 1 && !!state!.queueRemoval);
+      assert.equal(state!.currentEntryId, "film");
+      await command({ type: "restoreRemoved", token: state!.queueRemoval!.token });
+      await until(() => state!.queue.length === 3);
+      assert.deepEqual(
+        state!.queue.map((entry) => entry.id),
+        ["film", "next", "later"],
+      );
+      await command({ type: "clearUpNext" });
+      await until(() => state!.queue.length === 1);
       // Removing the stopped item keeps the Playback for Remove's own Undo.
       await command({ type: "stop" });
       await command({ type: "remove", entryId: "film" });

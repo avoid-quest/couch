@@ -1555,6 +1555,29 @@ html[data-cursor-hidden] * {
     margin-top: 1.75rem;
   }
 }
+/* Search results and a pasted list stand in the room (SearchPanel.tsx): fixed behind the page under the header, so it
+   stays the ground as the page scrolls, its light pooling behind the hero's artwork at the left. */
+.search-room {
+  position: fixed;
+  top: var(--top-bar, 4rem);
+  --room-x: 18%;
+  --room-y: 30%;
+}
+/* The query or the list's title, a step under a Details page's. */
+.search-title {
+  --title-short: 4rem;
+  --title-medium: 3.25rem;
+  --title-long: 2.5rem;
+  --title-xlong: 2rem;
+}
+@media (max-width: 47.99rem) {
+  .search-title {
+    --title-short: 2.75rem;
+    --title-medium: 2.25rem;
+    --title-long: 1.875rem;
+    --title-xlong: 1.625rem;
+  }
+}
 /* Over a stage, while the page is at its top, the header is see-through, its ink kept by the dimmed room; scrolled, black again. */
 html[data-stage-under-header] .app-header {
   background: transparent;

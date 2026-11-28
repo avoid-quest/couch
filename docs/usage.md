@@ -7,8 +7,11 @@ screen or sound.
 ## Sources
 
 - **Online video and music** through yt-dlp: YouTube (search, channels,
-  playlists), Twitch, RaiPlay, public Bandcamp albums and tracks, SoundCloud
-  tracks, and links from other sites yt-dlp supports.
+  playlists), Twitch, RaiPlay, public Bandcamp albums, tracks and fan
+  collections, SoundCloud tracks, sets and profiles, and links from other sites
+  yt-dlp supports.
+- **Spotify** search and track, album, playlist and artist links, each track
+  played from its YouTube match. See [providers](providers.md).
 - **StreamingCommunity, 123MoviesFree, AnimeSaturn and AnimeUnity** catalogues.
   Couch follows StreamingCommunity when its address moves through a redirect or
   its published address pages; otherwise an administrator sets the new address

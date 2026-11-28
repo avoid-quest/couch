@@ -1,3 +1,5 @@
+import { fold, searchWords } from "./search-text";
+
 export interface RadioStation {
   id: string;
   name: string;
@@ -155,23 +157,30 @@ export const radioHost = (show: RadioProgrammeDetails | null | undefined) =>
   show?.artist && show.artist.localeCompare(show.title, undefined, { sensitivity: "base" })
     ? show.artist
     : undefined;
+/** What a show is filed under, then who hosts it: the names people search for. */
+export const radioShowNames = (show: RadioProgrammeDetails | null | undefined) => {
+  const host = radioHost(show);
+  return [...radioShowLabels(show), ...(host ? [host] : [])];
+};
 export function radioMatches(
   station: RadioStation,
   query: string,
   show?: RadioProgrammeDetails | null,
 ) {
-  return [
-    station.name,
-    station.groupTitle,
-    ...(station.tags ?? []),
-    show?.title,
-    show?.artist,
-    ...radioShowLabels(show),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query.trim().toLowerCase());
+  const text = fold(
+    [
+      station.name,
+      station.groupTitle,
+      ...(station.tags ?? []),
+      show?.title,
+      show?.artist,
+      ...radioShowLabels(show),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  // Every word somewhere, in any order: "ale dj" finds DJ Alé's show.
+  return searchWords(query).every((word) => text.includes(word));
 }
 
 export interface AvoidRadioCatalog {

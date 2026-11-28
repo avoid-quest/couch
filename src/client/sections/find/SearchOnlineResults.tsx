@@ -70,6 +70,9 @@ export type SearchHit = {
   collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string;
   video?: boolean;
+  /** The recording's pages on other sources, and the sources whose copies search folded into this hit. */
+  copies?: string[];
+  also?: string[];
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
   actions: MenuAction[];
@@ -201,8 +204,7 @@ function OnlineResults(props: Props) {
     state?.devices?.map(({ id, name }) => [id, name]),
   ]);
   const request = props.url ? { url: props.url } : { query: props.query };
-  // Hidden sources still report search counts. Active controls presentation,
-  // not whether a source participates in the cross-source search.
+  // Active controls presentation (Twitch's live refresh), not whether the source is searched.
   const refetchInterval = provider === "twitch" && props.connected && props.active ? 20_000 : false;
   const browse = useInfiniteQuery({
     ...providerBrowseQuery(props, provider, request),
@@ -292,7 +294,7 @@ function OnlineResults(props: Props) {
   const lifetime = useRef<AbortController | null>(null);
   // Only presentation state is retained locally. Query owns pages, requests,
   // errors and retries, so changing a query or connection retires its reads.
-  const music = provider === "bandcamp" || provider === "soundcloud";
+  const music = ["bandcamp", "soundcloud", "mixcloud", "spotify", "archives"].includes(provider);
   const facet = (item: ProviderItem): Pick<SearchHit, "kind" | "duration"> => ({
     kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Stream" : "Video",
     duration: item.duration,
@@ -359,15 +361,19 @@ function OnlineResults(props: Props) {
         const existing = savedWeb(item);
         let collection = item.collection;
         if (!existing && collection?.index !== undefined) {
-          // AnimeUnity pages use displayed number ranges, which can combine several episodes.
-          const episodePage = provider === "animeunity";
+          // AnimeUnity pages use displayed number ranges, which can combine several episodes. The item's own provider
+          // refreshes it: Radio archives' Radio Alhara mixes are Mixcloud's.
+          const episodePage = item.provider === "animeunity";
           const fresh = await client.fetchQuery({
             ...providerPageQuery(
               props,
-              provider,
+              item.provider,
               episodePage
                 ? { url: item.url }
-                : { url: collection.url, cursor: providerCollectionCursor(provider, collection) },
+                : {
+                    url: collection.url,
+                    cursor: providerCollectionCursor(item.provider, collection),
+                  },
             ),
             staleTime: 0,
           });
@@ -463,6 +469,7 @@ function OnlineResults(props: Props) {
         live: item.live,
         collection: collectionLabel(item),
         thumbnail: item.thumbnail,
+        ...(item.copies ? { copies: item.copies } : {}),
         primary: {
           label: "Open",
           href: collectionLocation(item),
@@ -494,6 +501,21 @@ function OnlineResults(props: Props) {
                 saveAction,
               ]
             : [
+                // An album, set or show plays whole.
+                ...(["List", "Album"].includes(collectionLabel(item) ?? "")
+                  ? [
+                      {
+                        label: "Play all",
+                        disabled: !props.canPlay || busy || !props.onCommand,
+                        run: () => play(item, true),
+                      },
+                      {
+                        label: "Queue all",
+                        disabled: busy || !props.onCommand,
+                        run: () => play(item, false),
+                      },
+                    ]
+                  : []),
                 ...(pageSection(item) && !saved ? [] : [saveAction]),
                 {
                   label: "Add to Home",
