@@ -38,11 +38,16 @@ export function PaletteLink({
   const target = linkTarget(url);
   const list = usePastedList(credentials, url, target);
   const station = useLinkStation(credentials, url, target);
-  // Enter before Couch has found the station waits for it, then plays it (or opens the page when there's none).
-  const [waiting, setWaiting] = useState(false);
+  // Enter before Couch has found the station waits for it, then plays it (or opens the page when there's none); the press
+  // belongs to the link it was made on, so editing the field drops it.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  const waiting = waitingFor === url;
+  useEffect(() => {
+    if (waitingFor && waitingFor !== url) setWaitingFor(null);
+  }, [url]);
   useEffect(() => {
     if (!waiting || station === undefined) return;
-    setWaiting(false);
+    setWaitingFor(null);
     if (station) onPlayStation(station);
     else window.open(url, "_blank", "noopener,noreferrer");
   }, [waiting, station]);
@@ -109,7 +114,7 @@ export function PaletteLink({
           <CommandItem
             value="link:play"
             disabled={!connected}
-            onSelect={() => setWaiting(true)}
+            onSelect={() => setWaitingFor(url)}
             className={lead}
           >
             <span className="shrink-0">Play</span>
