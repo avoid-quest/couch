@@ -222,10 +222,14 @@ function searchHit(value: unknown): ProviderItem | null {
   };
 }
 
-// A re-release is another ID with the same title, byline and length: it reads as the same row, so it shows once.
+// A re-released song or album is another ID with the same title, byline and length: it reads as the same row, so it
+// shows once. Playlists and artists of one name are different ones.
+const released = (item: ProviderItem) =>
+  /^https:\/\/open\.spotify\.com\/(track|album)\//.exec(item.url)?.[1];
 const sameRow = (a: ProviderItem, b: ProviderItem) =>
   a.url === b.url ||
-  (a.kind === b.kind &&
+  (!!released(a) &&
+    released(a) === released(b) &&
     a.title === b.title &&
     a.subtitle === b.subtitle &&
     Math.abs((a.duration ?? 0) - (b.duration ?? 0)) <= 5);

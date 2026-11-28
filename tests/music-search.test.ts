@@ -460,7 +460,7 @@ test("Spotify's anonymous token carries the web player's TOTP for a known time",
 });
 
 /** open.spotify.com's anonymous token and search, as the web player asks them. */
-function spotifyWeb(rejected: number[] = []) {
+function spotifyWeb(rejected: number[] = [], search: unknown = spotifySearch) {
   const calls: { url: URL; init?: RequestInit }[] = [];
   const request = (async (input: string, init?: RequestInit) => {
     const url = new URL(input);
@@ -476,7 +476,7 @@ function spotifyWeb(rejected: number[] = []) {
             isAnonymous: true,
           });
     if (url.href === "https://api-partner.spotify.com/pathfinder/v2/query")
-      return Response.json(spotifySearch);
+      return Response.json(search);
     return new Response(null, { status: 404 });
   }) as typeof fetch;
   return { calls, request };
@@ -532,6 +532,15 @@ test("Spotify search reads the web player's results with its anonymous token, to
     subtitle: "Devi Tensione",
   });
   expect(page.items[9]!.thumbnail).toStartWith("https://mosaic.scdn.co/640/");
+  // Two playlists of one name and owner are two playlists.
+  const twin = structuredClone(spotifySearch);
+  const playlists = twin.data.searchV2.playlists.items;
+  playlists.push({
+    ...playlists[0]!,
+    data: { ...playlists[0]!.data, uri: "spotify:playlist:0000000000000000000000" },
+  });
+  const twins = await createSpotifyCatalog(spotifyWeb([], twin).request).browse({ query: "x" });
+  expect(twins.items.filter(({ title }) => title === "depressione serio ♾️💔")).toHaveLength(2);
   // A second search keeps the token until it expires.
   await catalog.browse({ query: "tanto tempo" });
   expect(web.calls.filter(({ url }) => url.pathname === "/api/token")).toHaveLength(1);
