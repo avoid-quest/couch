@@ -13,7 +13,7 @@ AirPlay password: the **Code** below the switch, with its dashes. **New code**
 restarts AirPlay and makes every device enter it again. With **Ask for a code**
 off, AirPlay restarts without a password and any device that reaches it plays.
 
-While a device plays, **AirPlay · {name}** leads Home's **Shared sources** and
+While a device plays, **AirPlay from {name}** leads Home's **Shared sources** and
 plays automatically on the Couch computer; other devices join it with **Play on**
 or **Where it plays**. AirPlay audio plays when the sender means it to be heard
 (about 1.75 s after it sends it), so a Mac's own video stays in step, and a
