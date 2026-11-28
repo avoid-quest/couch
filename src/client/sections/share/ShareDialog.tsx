@@ -177,9 +177,15 @@ function ShareForm({
     media: !!navigator.mediaDevices?.getUserMedia,
     display: !!navigator.mediaDevices?.getDisplayMedia,
   };
+  // Share again after Live opens on the choice it was made from (Audio input, System audio), still Live.
+  const initial = shareKinds.find((item) => item.id === initialKind);
   const [picked, setPicked] = useState<ShareKind>(
     () =>
-      kinds.find((item) => item.id === initialKind && !unavailable(item, browser)) ??
+      kinds.find(
+        (item) =>
+          (initial?.intent ? item.capture === initial.capture : item === initial) &&
+          !unavailable(item, browser),
+      ) ??
       kinds.find((item) => !unavailable(item, browser)) ??
       kinds[0]!,
   );
