@@ -496,7 +496,9 @@ export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], chos
       .filter((id) => !taken.includes(id));
     const live =
       state.liveSources?.find((source) => source.id === playback.liveSourceId)?.intent === "live";
-    const replaced = !rest.length && !playback.held && !live && taken[0] === leadOf(rows, choice);
+    // Core keeps a playback for Play on only where its lead device is all of it (hub.ts, own()).
+    const replaced =
+      playback.outputs.length === 1 && !playback.held && !live && taken[0] === leadOf(rows, choice);
     return rest.length
       ? [`${title} keeps playing on ${names(rest, rows)}.`]
       : replaced
