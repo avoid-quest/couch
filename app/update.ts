@@ -144,6 +144,9 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   let staged: string | null = null;
   autoUpdater.on("update-downloaded", ({ version }) => {
     staged = version;
+    // electron-updater registers its quit-time install right after this event. Arming it
+    // only now on Windows means a replaced or failed download never installs the old one.
+    if (windows) autoUpdater.autoInstallOnAppQuit = true;
     ready(version);
   });
   // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
@@ -272,9 +275,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
           ready(found.version);
         } else {
           // Updates install on quit only if this is on when their download finishes.
-          autoUpdater.autoInstallOnAppQuit = true;
-          // Starting a download drops the installer staged before, even if this one fails.
-          staged = null;
+          autoUpdater.autoInstallOnAppQuit = !windows;
           await autoUpdater.downloadUpdate();
         }
       } else ready(found.version);
