@@ -92,6 +92,31 @@ test("the same recording from several sources shows once, with the others in its
   expect(
     foldCopies([mixcloud, episode, soundcloud]).map((each) => [each.source, each.also]),
   ).toEqual([["Radio archives", ["Mixcloud", "SoundCloud"]]]);
+  // Copies that came first under other titles all fold into the episode naming them.
+  expect(
+    foldCopies([mixcloud, soundcloud, episode]).map((each) => [each.source, each.also]),
+  ).toEqual([["Radio archives", ["Mixcloud", "SoundCloud"]]]);
+  // A YouTube copy is its video, not every YouTube page.
+  const named = { ...episode, copies: ["https://www.youtube.com/watch?v=aaaaaaaaaaa"] };
+  const watch = (id: string) => ({
+    ...hit("YouTube", `Upload ${id}`),
+    url: `https://www.youtube.com/watch?v=${id}`,
+  });
+  expect(
+    foldCopies([named, watch("aaaaaaaaaaa"), watch("bbbbbbbbbbb")]).map((each) => each.source),
+  ).toEqual(["Radio archives", "YouTube"]);
+  // The same title and length by someone else is another recording.
+  const intro = (source: string, by: string, duration: number) => ({
+    ...hit(source, "Intro"),
+    meta: `${by} · ${source}`,
+    duration,
+  });
+  expect(
+    foldCopies([intro("SoundCloud", "Arsider", 45), intro("Bandcamp", "Sensato", 60)]),
+  ).toHaveLength(2);
+  expect(
+    foldCopies([intro("SoundCloud", "Arsider", 45), intro("YouTube", "Arsider - Topic", 60)]),
+  ).toHaveLength(1);
 });
 
 test("a copy out of the chosen kind never folds away the one in it", () => {

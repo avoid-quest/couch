@@ -2,22 +2,43 @@ import { linkTarget, providerForUrl } from "../shared/providers";
 import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
-// A page's address as copies name it: host without www, path decoded, no query or trailing slash.
+// A page's address as copies name it: host without www, path decoded, no query or trailing slash, except a YouTube watch
+// page's `?v=`, the only part naming its video.
 function pageKey(url?: string) {
   if (!url) return;
   try {
     const page = new URL(url);
+    const host = page.hostname.replace(/^www\./, "");
     const path = decodeURIComponent(page.pathname).replace(/\/$/, "");
-    return `${page.hostname.replace(/^www\./, "")}${path}`.toLowerCase();
+    const video = /(?:^|\.)youtube\.com$/.test(host) ? page.searchParams.get("v") : null;
+    return `${host}${path}${video ? `?v=${video}` : ""}`.toLowerCase();
   } catch {
     return;
   }
 }
-type Copyable = Pick<SearchHit, "source" | "title" | "url" | "duration" | "copies" | "also">;
+type Copyable = Pick<
+  SearchHit,
+  "source" | "title" | "url" | "duration" | "copies" | "also" | "creator" | "meta"
+>;
 const names = (from: Copyable, page?: string) =>
   !!page && !!from.copies?.some((copy) => pageKey(copy) === page);
-// Another source's hit is the same recording when either names the other's page as a copy, or when the titles match and
-// the lengths are within a minute (uploads trim a little silence).
+// Who a hit is by: its creator, else its byline's first name; a byline of only the source's name names nobody.
+function artist(hit: Copyable) {
+  const byline = hit.meta?.split(/ · |, /)[0];
+  return searchWords(hit.creator?.title ?? (byline === hit.source ? "" : (byline ?? "")));
+}
+// One artist names the other when either is unknown or one's words are all in the other's ("Pitbull - Topic").
+function sameArtist(a: Copyable, b: Copyable) {
+  const [one, other] = [artist(a), artist(b)];
+  return (
+    !one.length ||
+    !other.length ||
+    one.every((word) => other.includes(word)) ||
+    other.every((word) => one.includes(word))
+  );
+}
+// Another source's hit is the same recording when either names the other's page as a copy, or when the titles and
+// artists match and the lengths are within a minute (uploads trim a little silence).
 function sameRecording(kept: Copyable, hit: Copyable) {
   if (kept.source === hit.source) return false;
   if (names(kept, pageKey(hit.url)) || names(hit, pageKey(kept.url))) return true;
@@ -25,7 +46,8 @@ function sameRecording(kept: Copyable, hit: Copyable) {
     kept.duration != null &&
     hit.duration != null &&
     Math.abs(kept.duration - hit.duration) <= 60 &&
-    searchWords(kept.title).join(" ") === searchWords(hit.title).join(" ")
+    searchWords(kept.title).join(" ") === searchWords(hit.title).join(" ") &&
+    sameArtist(kept, hit)
   );
 }
 /**
@@ -36,20 +58,27 @@ function sameRecording(kept: Copyable, hit: Copyable) {
 export function foldCopies<T extends Copyable>(hits: readonly T[]): T[] {
   const kept: T[] = [];
   for (const hit of hits) {
-    const at = kept.findIndex((other) => sameRecording(other, hit));
-    if (at < 0) {
+    const matched = kept.filter((other) => sameRecording(other, hit));
+    if (!matched.length) {
       kept.push(hit);
       continue;
     }
-    const other = kept[at]!;
-    const [first, copy] = names(hit, pageKey(other.url)) ? [hit, other] : [other, hit];
-    kept[at] = {
+    const first = matched.some((other) => names(hit, pageKey(other.url))) ? hit : matched[0]!;
+    const folded = [...matched, hit].filter((each) => each !== first);
+    kept[kept.indexOf(matched[0]!)] = {
       ...first,
-      also: [...new Set([...(first.also ?? []), ...(copy.also ?? []), copy.source])].filter(
-        (source) => source !== first.source,
-      ),
-      copies: [...(first.copies ?? []), ...(copy.copies ?? []), ...(copy.url ? [copy.url] : [])],
+      also: [
+        ...new Set([
+          ...(first.also ?? []),
+          ...folded.flatMap((copy) => [...(copy.also ?? []), copy.source]),
+        ]),
+      ].filter((source) => source !== first.source),
+      copies: [
+        ...(first.copies ?? []),
+        ...folded.flatMap((copy) => [...(copy.copies ?? []), ...(copy.url ? [copy.url] : [])]),
+      ],
     };
+    for (const other of matched.slice(1)) kept.splice(kept.indexOf(other), 1);
   }
   return kept;
 }
