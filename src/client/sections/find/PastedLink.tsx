@@ -1,24 +1,37 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { PlayPill, usePlayOn } from "@/components/PlayOn";
-import { ItemMenu, useItemMenu } from "@/components/RowMenu";
-import { verbRow } from "@/components/DetailHeader";
-import { browserActions } from "@/original-page";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { MenuPanel } from "@/components/MenuPanel";
+import type { MenuAction } from "@/components/RowMenu";
+import { saveLabel } from "@/copy";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
+import { browserActions } from "@/original-page";
 import { linkAction, linkPlays, useLinkStation, type LinkVerb } from "@/pasted-link";
 import { createId } from "@/session/session";
 import { useShell } from "@/sections/shell/shell-context";
 import { supportsWebVideoQuality, videoQualityOptions } from "@/video-quality";
-import { linkTarget, type VideoQuality } from "../../../shared/providers";
+import {
+  linkTarget,
+  providerNames,
+  type ProviderId,
+  type VideoQuality,
+} from "../../../shared/providers";
 import type { PlayOn } from "../../../shared/protocol";
-import { useFirstVerb, type Props } from "./SearchPanel";
+import type { RadioStation } from "../../../shared/radio";
+import {
+  SearchOnlineResults,
+  type SearchHit,
+  type SearchResultSummary,
+} from "./SearchOnlineResults";
+import { SearchRoom, TopResult, useFirstVerb, type Props } from "./SearchPanel";
+
+// Sources whose links hold music or radio; the rest hold video.
+const music: ProviderId[] = ["bandcamp", "soundcloud", "mixcloud", "archives", "spotify"];
 
 /**
- * A pasted link that isn't a list, on the results page: open it as a webpage or as direct media, at a quality, then
- * Play with where it plays, and the rest (Play next, Queue, Open page where Couch's provider opens it) in its "…". A
- * station's page plays its station (focused first on the TV), else opens in the browser.
+ * A pasted link that isn't a list, as Search's top result: once Couch has read it (its source's page), its picture,
+ * title and source, else the address; then Play with where it plays, Save and its "…" (Play next, Queue, Play on…, its
+ * page, Copy link, and quietly Open as direct media and the quality). A station's page plays its station live once Couch
+ * finds it; a Play pressed before then waits for it, and nothing here plays a page Couch can't.
  */
 export function PastedLink({
   url,
@@ -32,8 +45,11 @@ export function PastedLink({
   onQualityChange: (quality: VideoQuality) => void;
   onDone: () => void;
 }) {
-  const [mode, setMode] = useState<"Webpage" | "Direct media">("Webpage");
+  const [direct, setDirect] = useState(false);
   const [pending, setPending] = useState(false);
+  const [choosingQuality, setChoosingQuality] = useState(false);
+  const root = useRef<HTMLElement>(null);
+  const anchor = useRef<HTMLElement | null>(null);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -42,154 +58,218 @@ export function PastedLink({
     return () => controller.abort();
   }, [props.origin, props.token, props.connected]);
   const { hostname, pathname } = new URL(url);
-  const { on } = usePlayOn();
+  const address = (hostname + pathname).replace(/\/$/, "");
   const target = linkTarget(url);
   const station = useLinkStation(props, url, target);
   const shell = useShell();
-  async function send(verb: LinkVerb, playOn?: PlayOn) {
-    if (!props.onCommand || pending || !lifetime.current) return;
-    const signal = lifetime.current.signal;
-    setPending(true);
-    // The command reports its own failure on the page.
-    try {
-      if (
-        (await props.onCommand(
-          mode === "Direct media"
-            ? {
-                type: "enqueue",
-                entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url },
-                ...(verb === "play" ? { playNow: true } : {}),
-                ...(verb === "next" ? { placement: "next" as const } : {}),
-                ...playOn,
-              }
-            : linkAction(url, target, verb, quality, {}, playOn),
-        )) &&
-        !signal.aborted
-      )
-        onDone();
-    } finally {
-      if (!signal.aborted) setPending(false);
-    }
-  }
-  // One press plays the station once, as one press sends the link once.
-  async function playStation(radio: NonNullable<typeof station>) {
+  const navigation = useDetailNavigation();
+  // What the link's source says it is, read as a search result is.
+  const [summary, setSummary] = useState<SearchResultSummary>();
+  const onResults = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
+  const read = target && target.shape !== "station" && !direct ? summary?.collection : undefined;
+  // A command that runs once per press; its own failure shows on the page.
+  async function once(work: () => Promise<boolean>) {
     if (pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
     try {
-      if ((await shell.enqueueRadio(radio, true)) && !signal.aborted) onDone();
+      if ((await work()) && !signal.aborted) onDone();
     } finally {
       if (!signal.aborted) setPending(false);
     }
   }
-  const navigation = useDetailNavigation();
+  const send = (verb: LinkVerb, on?: PlayOn) =>
+    props.onCommand &&
+    void once(() =>
+      props.onCommand!(
+        direct
+          ? {
+              type: "enqueue",
+              entry: { id: createId(), title: address.slice(0, 200), source: url },
+              ...(verb === "play" ? { playNow: true } : {}),
+              ...(verb === "next" ? { placement: "next" as const } : {}),
+              ...on,
+            }
+          : linkAction(url, target, verb, quality, {}, on),
+      ),
+    );
+  const playStation = (radio: RadioStation, on?: PlayOn) =>
+    void once(() => shell.enqueueRadio(radio, true, on));
+  // Play pressed while Couch still looks for the station plays it once found; this page is the link's, so a new link
+  // starts without it.
+  const [waiting, setWaiting] = useState<PlayOn | true | null>(null);
+  useEffect(() => {
+    if (!waiting || station === undefined) return;
+    setWaiting(null);
+    if (station) playStation(station, waiting === true ? undefined : waiting);
+  }, [waiting, station]);
   const disabled = !props.connected || pending;
-  // Open page shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage.
-  const page =
-    target && target.shape !== "station"
-      ? {
-          label: "Open page",
-          group: "go",
-          run: () => navigation.open(collectionLocation({ provider: target.provider, url })),
-        }
-      : undefined;
-  const plays = linkPlays(target) && !station;
-  const menu = useItemMenu([
-    ...(plays
+  const isStation = target?.shape === "station";
+  const plays = direct || (linkPlays(target) && !isStation);
+  const opens = !direct && target && !isStation;
+  const page = opens && {
+    label: target.shape === "page" ? "Open" : "Details",
+    run: () => navigation.open(collectionLocation({ provider: target.provider, url })),
+  };
+  const title = direct ? address : (station?.name ?? read?.title ?? address);
+  const verbs: MenuAction[] = isStation
+    ? station !== null
       ? [
+          {
+            label: "Play",
+            group: "play",
+            disabled: disabled || !props.canPlay || !!waiting,
+            run: () => (station ? playStation(station) : setWaiting(true)),
+          },
+          {
+            label: "Play on",
+            group: "play",
+            disabled: disabled || !props.canPlay || !!waiting,
+            audioOnly: true,
+            thumbnail: station?.logoUrl,
+            playOn: (on) => (station ? playStation(station, on) : setWaiting(on)),
+          },
+        ]
+      : []
+    : plays
+      ? [
+          {
+            label: "Play",
+            group: "play",
+            disabled: disabled || !props.canPlay || !props.onCommand,
+            run: () => send("play"),
+          },
           {
             label: "Play next",
             group: "play",
             disabled: disabled || !props.onCommand,
-            run: () => void send("next"),
+            run: () => send("next"),
           },
           {
             label: "Queue",
             group: "play",
             disabled: disabled || !props.onCommand,
-            run: () => void send("queue"),
+            run: () => send("queue"),
+          },
+          {
+            label: "Play on",
+            group: "play",
+            disabled: disabled || !props.canPlay || !props.onCommand,
+            thumbnail: read?.thumbnail,
+            audioOnly: !!target && music.includes(target.provider),
+            playOn: (on) => send("play", on),
+          },
+        ]
+      : [];
+  const options: MenuAction[] = [
+    ...(!isStation
+      ? [
+          {
+            label: direct ? "Open as webpage" : "Open as direct media",
+            group: "link",
+            disabled: pending,
+            run: () => setDirect(!direct),
           },
         ]
       : []),
-    ...(page && (plays || station) ? [page] : []),
-    ...(station === null ? [] : browserActions(url)),
-    ...(/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources
+    ...(!direct && plays && supportsWebVideoQuality(url)
+      ? [
+          {
+            label: `Quality: ${videoQualityOptions.find((option) => option.value === quality)?.label ?? "1080p"}…`,
+            group: "link",
+            disabled: pending,
+            // Its choices open from the stage's "…", which opened them.
+            run: () => {
+              anchor.current =
+                root.current?.querySelector<HTMLElement>("[data-row-options]") ?? null;
+              setChoosingQuality(true);
+            },
+          },
+        ]
+      : []),
+    ...(target?.provider === "streamingcommunity" && props.onManageSources
       ? [
           {
             label: "StreamingCommunity settings",
-            group: "settings",
+            group: "link",
             run: () => props.onManageSources?.("streaming-community"),
           },
         ]
       : []),
-  ]);
-  const root = useRef<HTMLElement>(null);
-  useFirstVerb(root, !!station && !disabled && props.canPlay, url);
+  ];
+  const hit: SearchHit = {
+    id: `link:${url}`,
+    kind: isStation ? "Radio" : target && music.includes(target.provider) ? "Music" : "Video",
+    source: direct
+      ? "Direct media"
+      : isStation
+        ? "Radio"
+        : (read?.source ?? (target ? providerNames[target.provider] : hostname)),
+    title,
+    meta: (!direct && read?.subtitle) || "",
+    url,
+    thumbnail: direct ? undefined : (station?.logoUrl ?? read?.thumbnail),
+    duration: read?.single ? read.duration : undefined,
+    primary: plays
+      ? { label: "Play", run: () => send("play") }
+      : page
+        ? {
+            label: page.label,
+            href: collectionLocation({ provider: target!.provider, url }),
+            run: page.run,
+          }
+        : {
+            label: "Open in browser",
+            run: () => void window.open(url, "_blank", "noopener,noreferrer"),
+          },
+    actions: [
+      ...verbs,
+      ...(read?.save && !(target?.shape === "page" && !plays)
+        ? [
+            {
+              label: saveLabel(!!read.saved, read.single ? "For later" : "Saved"),
+              group: "keep",
+              pressed: !!read.saved,
+              disabled: !props.connected || !!read.saveDisabled,
+              run: read.save,
+            },
+          ]
+        : []),
+      ...(page && plays ? [{ ...page, group: "go" }] : []),
+      ...(station === null ? [] : browserActions(url, title)),
+      ...options,
+    ],
+  };
+  useFirstVerb(root, !disabled && props.canPlay && (!isStation || !!station), url);
   return (
-    <section ref={root} className="max-w-3xl space-y-4">
-      <h1 className="sr-only">{hostname + pathname}</h1>
-      {target?.shape !== "station" && (
-        <SettingsSection>
-          <SettingsRow label="Open as">
-            <ChoiceGroup
-              label="Open link as"
-              value={mode}
-              onValueChange={setMode}
-              disabled={disabled}
-              options={[
-                { value: "Webpage", label: "Webpage" },
-                { value: "Direct media", label: "Direct media" },
-              ]}
-            />
-          </SettingsRow>
-          {mode === "Webpage" && supportsWebVideoQuality(url) && (
-            <SettingsRow label="Quality">
-              <ChoiceGroup
-                label="Video quality"
-                value={quality}
-                onValueChange={onQualityChange}
-                disabled={disabled}
-                options={videoQualityOptions}
-              />
-            </SettingsRow>
-          )}
-        </SettingsSection>
+    <section ref={root} aria-label={title} className="space-y-8">
+      <SearchRoom thumbnail={hit.thumbnail} />
+      <TopResult hit={hit} />
+      {target && !isStation && !direct && (
+        <SearchOnlineResults
+          {...props}
+          onResults={onResults}
+          provider={target.provider}
+          query=""
+          url={url}
+          paged
+          quality={quality}
+          onEnqueued={onDone}
+        />
       )}
-      <div data-nav-row className={verbRow}>
-        {station ? (
-          <Button
-            data-page-first
-            size="lg"
-            disabled={disabled || !props.canPlay}
-            onClick={() => void playStation(station)}
-          >
-            Play {station.name}
-          </Button>
-        ) : linkPlays(target) ? (
-          <PlayPill
-            size="lg"
-            label="Play"
-            aria-label={on(`Play ${hostname + pathname}`)}
-            title={hostname + pathname}
-            disabled={disabled || !props.canPlay || !props.onCommand}
-            onClick={() => void send("play")}
-            playOn={(playOn) => void send("play", playOn)}
+      {choosingQuality && (
+        <MenuPanel title="Quality" anchor={anchor} onClose={() => setChoosingQuality(false)}>
+          <ChoiceGroup
+            label="Video quality"
+            value={quality}
+            onValueChange={(value) => {
+              onQualityChange(value);
+              setChoosingQuality(false);
+            }}
+            options={videoQualityOptions}
           />
-        ) : page ? (
-          <Button size="lg" onClick={page.run}>
-            Open page
-          </Button>
-        ) : (
-          station === null && (
-            <Button asChild size="lg" variant="secondary">
-              <a href={url} target="_blank" rel="noopener noreferrer">
-                Open in browser
-              </a>
-            </Button>
-          )
-        )}
-        <ItemMenu menu={menu} size="icon-lg" title={hostname + pathname} className="opacity-100" />
-      </div>
+        </MenuPanel>
+      )}
     </section>
   );
 }
