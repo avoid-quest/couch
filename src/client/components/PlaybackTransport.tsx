@@ -281,7 +281,8 @@ const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean)
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
+ * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones. The full player's quiet bar
+ * (`quiet`) reads Play/Pause, Next, then Stop with its name, as YouTube's and Twitch's players lead with Play and Next.
  */
 export function PlaybackTransport({
   state,
@@ -291,11 +292,13 @@ export function PlaybackTransport({
   className,
   moreClassName,
   participation = true,
+  quiet = false,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
   moreClassName?: string;
   participation?: boolean;
+  quiet?: boolean;
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
@@ -323,6 +326,42 @@ export function PlaybackTransport({
     nextReady && hasNext,
   ];
   const first = (slot: number) => (pageFirst && enabled.indexOf(true) === slot) || undefined;
+  const stop = (
+    <Button
+      data-page-first={first(1)}
+      variant="ghost"
+      size={quiet ? "default" : "icon-lg"}
+      className={cn(transportInk, moreClassName, quiet && "h-(--player-target)")}
+      aria-label="Stop"
+      title="Stop"
+      disabled={!enabled[1]}
+      onClick={() => void run({ type: "stop" })}
+    >
+      <Square
+        aria-hidden="true"
+        data-icon={quiet ? "inline-start" : undefined}
+        className="fill-current"
+      />
+      {/* The narrowest phones keep the glyph alone, so the band's row still fits without scrolling. */}
+      {quiet && <span className="max-[23rem]:sr-only">Stop</span>}
+    </Button>
+  );
+  const next = (
+    <Button
+      data-page-first={first(2)}
+      variant="ghost"
+      size="icon-lg"
+      className={cn(transportInk, moreClassName)}
+      aria-label="Next"
+      title="Next"
+      disabled={!enabled[2]}
+      onClick={() => {
+        if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
+      }}
+    >
+      <SkipForward aria-hidden="true" className="fill-current" />
+    </Button>
+  );
   return (
     <div
       className={cn("flex shrink-0 items-center gap-0.5", className)}
@@ -354,32 +393,8 @@ export function PlaybackTransport({
           </Button>
         )}
       />
-      <Button
-        data-page-first={first(1)}
-        variant="ghost"
-        size="icon-lg"
-        className={cn(transportInk, moreClassName)}
-        aria-label="Stop"
-        title="Stop"
-        disabled={!enabled[1]}
-        onClick={() => void run({ type: "stop" })}
-      >
-        <Square aria-hidden="true" className="fill-current" />
-      </Button>
-      <Button
-        data-page-first={first(2)}
-        variant="ghost"
-        size="icon-lg"
-        className={cn(transportInk, moreClassName)}
-        aria-label="Next"
-        title="Next"
-        disabled={!enabled[2]}
-        onClick={() => {
-          if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
-        }}
-      >
-        <SkipForward aria-hidden="true" className="fill-current" />
-      </Button>
+      {quiet ? next : stop}
+      {quiet ? stop : next}
     </div>
   );
 }

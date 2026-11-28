@@ -1042,12 +1042,13 @@ html:has([data-slot="popover-content"]) .player-next-up {
   grid-column: 3;
   grid-row: 1;
 }
-/* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it the transport sits
-   in the middle and the tools at the right exactly as the now-playing bar's (Volume, Where it plays, Up next, the gear,
-   then the last slot: fullscreen here, Open player there), so nothing moves as the bar grows into the band. */
+/* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it one quiet row, as
+   YouTube's and Twitch's players: the transport leads at the left, its glyph under the position as the last tool's is
+   under the time left, nothing sits over the middle of the picture, and the tools end at the right in the now-playing
+   bar's order (Volume, Where it plays, Up next, the gear, then the last slot: fullscreen here, Open player there). */
 .player-control-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   grid-auto-flow: dense;
   align-items: center;
   gap: 0.5rem 1rem;
@@ -1060,11 +1061,12 @@ html:has([data-slot="popover-content"]) .player-next-up {
   scrollbar-width: thin;
 }
 .player-control-row > .player-transport {
-  grid-column: 2;
-  justify-self: center;
+  grid-column: 1;
+  justify-self: start;
+  margin-left: -0.625rem;
 }
 .player-control-row > [data-player-tools] {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: end;
 }
 @media (min-width: 960px) {
@@ -1106,25 +1108,15 @@ html:has([data-slot="popover-content"]) .player-next-up {
     column-gap: 0.5rem;
   }
 }
-/* Phones, at the bar's breakpoint (sm): a centred transport leaves room for two tools, so the transport leads, its glyph
-   under the position as the last tool's is under the time left, and every tool stays. Without gaps the seven 44px
-   targets fill 320px exactly, touching but never overlapping; anything narrower scrolls the row. */
+/* Phones, at the bar's breakpoint (sm): every tool stays, the targets touching but never overlapping; a screen too
+   narrow for the row scrolls it. */
 @media (width < 40rem) {
   .player-control-row {
     min-width: max-content;
-    grid-template-columns: auto minmax(0, 1fr);
     column-gap: 0;
   }
   .player-control-row > div {
     gap: 0;
-  }
-  .player-control-row > .player-transport {
-    grid-column: 1;
-    justify-self: start;
-    margin-left: -0.625rem;
-  }
-  .player-control-row > [data-player-tools] {
-    grid-column: 2;
   }
   /* The bar keeps only Open player on phones, so the band's empty last slot has no x to keep: the tools end at the gutter. */
   .player-control-row span[data-player-last] {

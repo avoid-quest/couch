@@ -1112,11 +1112,12 @@ export function PlayerPage({
             !shown && "opacity-0",
           )}
         >
-          {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
-            bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
-            gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
-            each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
-            at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
+          {/* The timeline, then one quiet row along the bottom, as YouTube's and Twitch's players: at the left Play/Pause,
+            Next and a labelled Stop, nothing over the middle of the picture, and at the right the bar's tools in its
+            order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback gear, then the
+            last slot: fullscreen here, bottom right as on every player, where the bar has Open player. Every control is a
+            ghost at the band's target (--player-target); those at the row's ends pull back (-2.5) so their glyphs line
+            up with the timeline's times. */}
           <div className="grid gap-1">
             {state && <PlaybackTimeline state={state} connected={connected} pageFirst compact />}
             <div
@@ -1132,6 +1133,7 @@ export function PlayerPage({
                     connected={connected}
                     run={run}
                     pageFirst
+                    quiet
                     className="player-transport"
                   />
                 )}
