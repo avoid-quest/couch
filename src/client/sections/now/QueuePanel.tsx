@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { deviceId } from "@/session/device-id";
+import { isTvPresentation } from "@/session/presentation";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
 import { useAutoplayList } from "./autoplay-list";
@@ -509,7 +510,12 @@ function QueueRow({
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>
       )}
-      <ItemMenu menu={options} title={entry.title} />
+      {/* On the TV, as MediaRow's, it is no focus stop while the press works: a held OK opens the menu. */}
+      <ItemMenu
+        menu={options}
+        title={entry.title}
+        tabIndex={isTvPresentation() && onPlay && !disabled ? -1 : undefined}
+      />
     </li>
   );
 }
