@@ -150,6 +150,8 @@ export function createSession(
   let quiescing = false;
   let continuation = store.playbackContinuation();
   let continuationResolution: AbortController | null = null;
+  // The later part of a list read in parts, while it loads (extendContinuation).
+  let listPart: AbortController | null = null;
   let continuationManualSources: string[] = [];
   let awaitingContinuation: "ended" | { authorize: () => void; playedBy?: PlaybackActor } | false =
     false;
@@ -338,9 +340,27 @@ export function createSession(
   };
   const remainingContinuation = () =>
     continuation ? { ...continuation, entries: continuation.entries.slice(1) } : null;
+  const extendWith = (lastEntryId: string, entries: QueueEntry[]) => {
+    if (!continuation) return false;
+    if ((continuation.entries.at(-1)?.id ?? state.currentEntryId) !== lastEntryId) return false;
+    const extended = { ...continuation, entries: [...continuation.entries, ...entries] };
+    try {
+      store.savePlaybackContinuation(extended);
+    } catch {
+      state.queueError = STORAGE_ERROR("Autoplay");
+      return false;
+    }
+    continuation = extended;
+    return true;
+  };
   const afterManualEntry = (entry: QueueEntry) =>
     continuation?.entries[0]?.source === entry.source ? remainingContinuation() : continuation;
-  const cancelContinuation = () => {
+  // Where Autoplay ends: its last entry, else the entry playing.
+  const listEnd = (list: PlaybackContinuation | null, current: string | null) =>
+    list ? (list.entries.at(-1)?.id ?? current) : undefined;
+  // `keepPart`: a list part still loading carries on, since Autoplay still ends where it did.
+  const cancelContinuation = (keepPart = false) => {
+    if (keepPart && continuationResolution && continuationResolution === listPart) return;
     continuationResolution?.abort();
     continuationResolution = null;
     continuationManualSources = [];
@@ -698,6 +718,7 @@ export function createSession(
     const entry = proposedQueue.find((entry) => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
     options.prepareAudio?.(entry);
+    const endedAt = listEnd(continuation, state.currentEntryId);
     const index = proposedQueue.indexOf(entry);
     const cursor = proposedQueue.findIndex(
       (item) => item.id === (state.currentEntryId ?? state.queueCursorEntryId),
@@ -732,7 +753,8 @@ export function createSession(
     );
     awaitingContinuation = false;
     if (preserveContext && continuationResolution) continuationManualSources.push(entry.source);
-    if (!preserveContext) cancelContinuation();
+    if (!preserveContext)
+      cancelContinuation(endedAt !== undefined && listEnd(continuation, entry.id) === endedAt);
     if (reason === "retry") state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
     if (reason === "play" || reason === "undoStop") reservation++;
@@ -1427,21 +1449,34 @@ export function createSession(
     },
     playNewEntries,
     // A list read in parts adds its later part to the Autoplay its first part started, while that Autoplay still
-    // ends where the first part did (`lastEntryId`).
-    extendContinuation(lastEntryId: string, entries: QueueEntry[]) {
-      if (!admitted() || !continuation) return false;
-      if ((continuation.entries.at(-1)?.id ?? state.currentEntryId) !== lastEntryId) return false;
-      const extended = { ...continuation, entries: [...continuation.entries, ...entries] };
-      try {
-        store.savePlaybackContinuation(extended);
-      } catch {
-        state.queueError = STORAGE_ERROR("Autoplay");
-        broadcast();
-        return false;
-      }
-      continuation = extended;
+    // ends where the first part did (`lastEntryId`). Until the part comes, Autoplay waits for it at its end, as it
+    // waits for any continuation still resolving; Stop, another Play or a failed part ends the wait.
+    async extendContinuation(lastEntryId: string, later: Promise<QueueEntry[]>) {
+      continuationResolution?.abort();
+      const controller = new AbortController();
+      continuationResolution = controller;
+      listPart = controller;
+      continuationManualSources = [];
       broadcast();
-      return true;
+      const entries = await later.catch(() => []);
+      if (listPart === controller) listPart = null;
+      if (continuationResolution !== controller) return false;
+      continuationResolution = null;
+      const advance = awaitingContinuation;
+      awaitingContinuation = false;
+      const extended = admitted() && extendWith(lastEntryId, entries);
+      broadcast();
+      if (!admitted()) return false;
+      if (advance === "ended" && state.player.status === "ended") advanceNext();
+      else if (
+        advance &&
+        typeof advance === "object" &&
+        !["error", "unavailable"].includes(state.player.status)
+      ) {
+        advance.authorize();
+        if (!advanceNext(advance.authorize, advance.playedBy)) stop();
+      }
+      return extended;
     },
     reservePlay() {
       available();

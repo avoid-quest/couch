@@ -4107,18 +4107,26 @@ export async function createHub(options: HubOptions) {
             playedBy,
             continuation: { title: prepared.title, entries: entries.slice(1) },
           });
-          void prepared.more
-            ?.then(({ entries: later, short }) => {
-              if (!session.extendContinuation(entries.at(-1)!.id, later) || !short) return;
-              const total = entries.length + later.length;
-              session.notice(
-                playedBy ?? playbackActor(null)!,
-                `Playing ${total} tracks from ${prepared.title}; the rest stay on its page`,
-                "list-short",
-                actor,
-              );
-            })
-            .catch(() => {});
+          const more = prepared.more;
+          if (more)
+            void session
+              .extendContinuation(
+                entries.at(-1)!.id,
+                more.then((part) => part.entries),
+              )
+              .then(async (extended) => {
+                if (!extended) return;
+                const { entries: later, short } = await more;
+                if (!short) return;
+                const total = entries.length + later.length;
+                session.notice(
+                  playedBy ?? playbackActor(null)!,
+                  `Playing ${total} tracks from ${prepared.title}; the rest stay on its page`,
+                  "list-short",
+                  actor,
+                );
+              })
+              .catch(() => {});
         } else {
           // A list longer than Up next's room queues what fits; a full Up next still refuses it.
           const room = 500 - stateOf(playback).queue.length;

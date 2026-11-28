@@ -238,7 +238,10 @@ test("a list read in parts extends the Autoplay it started, and nothing that rep
     session.playNewEntries([entry("first")], {
       continuation: { title: "Collection", entries: [entry("second")] },
     });
-    assert.equal(session.extendContinuation("second", [entry("third")]), true);
+    assert.equal(
+      await session.extendContinuation("second", Promise.resolve([entry("third")])),
+      true,
+    );
     assert.deepEqual(
       playback.playbackContinuation()?.entries.map((item) => item.id),
       ["second", "third"],
@@ -246,11 +249,68 @@ test("a list read in parts extends the Autoplay it started, and nothing that rep
     session.playNewEntries([entry("other")], {
       continuation: { title: "Other", entries: [entry("after")] },
     });
-    assert.equal(session.extendContinuation("third", [entry("late")]), false);
+    assert.equal(
+      await session.extendContinuation("third", Promise.resolve([entry("late")])),
+      false,
+    );
     assert.deepEqual(
       session.state.autoplay?.upcoming.map((item) => item.id),
       ["after"],
     );
+  } finally {
+    session.close();
+    store.close();
+  }
+});
+
+test("a list whose first part ends, or is skipped past, before its later part comes plays on with it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("late-part");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  const ended = () =>
+    session.observe({
+      ...state!.player,
+      status: "ended",
+      position: 100,
+      duration: 100,
+    });
+  const part = () => {
+    let deliver!: (entries: ReturnType<typeof entry>[]) => void;
+    return {
+      later: new Promise<ReturnType<typeof entry>[]>((done) => (deliver = done)),
+      deliver,
+    };
+  };
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    await flush();
+    const rest = part();
+    const extended = session.extendContinuation("second", rest.later);
+    ended();
+    assert.equal(state!.currentEntryId, "second");
+    ended();
+    assert.equal(state!.player.status, "ended");
+    assert.equal(state!.autoplay?.pending, true);
+    rest.deliver([entry("third"), entry("fourth")]);
+    assert.equal(await extended, true);
+    assert.equal(state!.currentEntryId, "third");
+
+    const more = part();
+    const skipped = session.extendContinuation("fourth", more.later);
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    assert.equal(state!.currentEntryId, "fourth");
+    more.deliver([entry("fifth")]);
+    assert.equal(await skipped, true);
+    assert.equal(state!.currentEntryId, "fifth");
   } finally {
     session.close();
     store.close();
