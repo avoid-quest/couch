@@ -249,21 +249,23 @@ const doors: Door[] = [
 
 /**
  * One quiet line of doors to the sources, each saying what is behind it, all as wide as each other, then the section's
- * "…"; it scrolls sideways where they don't fit. Its doors are its name: "Browse" is for screen readers.
+ * "…". The doors scroll sideways where they don't fit; the "…" stays at the line's end. Its doors are its name: "Browse"
+ * is for screen readers.
  */
 export function BrowseLine({ options }: { options: ReactNode }) {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
   return (
-    <section
-      aria-labelledby="home-browse"
-      className="-mx-(--gutter) overflow-x-auto border-y px-(--gutter) [scrollbar-width:none]"
-    >
+    <section aria-labelledby="home-browse" className="-mx-(--gutter) flex border-y pr-(--gutter)">
       <h2 id="home-browse" className="sr-only">
         Browse
       </h2>
-      <ul data-nav-row aria-labelledby="home-browse" className="flex">
+      <ul
+        data-nav-row
+        aria-labelledby="home-browse"
+        className="flex min-w-0 flex-1 overflow-x-auto pl-(--gutter) [scrollbar-width:none]"
+      >
         {doors.map((door) => {
           const href =
             "to" in door
@@ -312,9 +314,9 @@ export function BrowseLine({ options }: { options: ReactNode }) {
             </li>
           );
         })}
-        {/* On the doors' title line. */}
-        <li className="flex shrink-0 items-start pt-1.5 pl-1">{options}</li>
       </ul>
+      {/* On the doors' title line. */}
+      <div className="flex shrink-0 items-start pt-1.5 pl-1">{options}</div>
     </section>
   );
 }
