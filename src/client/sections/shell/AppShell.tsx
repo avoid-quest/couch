@@ -960,7 +960,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
             asChild
             variant="ghost"
             className={cn(
-              "relative border-0 font-medium text-subtle-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
+              "relative border-0 font-medium text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
               bar
                 ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
                 : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",

@@ -68,8 +68,8 @@ Tailwind names, never hex values in components. Couch's scales are in the
 | Spacing | `caption`, `stack`, `item`, `section`; the page gutter is `px-(--gutter)` |
 
 - **Colour**: room `#110f13`, ink `#f6f2ec`, quieter ink at 70%
-  (`text-muted-foreground`) and 48% for what only labels
-  (`text-subtle-foreground`: an unchosen tab, a placeholder), lines at 11%.
+  (`text-muted-foreground`, an unchosen tab too, so it reads over the light) and 48%
+  for what only labels (`text-subtle-foreground`: a placeholder), lines at 11%.
   No fixed accent: the light comes from what plays.
 - **Focus inverts** the focused control to white with black ink; the TV's
   highlight is the same, and a focused tile rings its picture and lifts.

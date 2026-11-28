@@ -167,7 +167,7 @@
   /* A small floating surface's ground (the sharing capsule). */
   --bar: #1d1a20;
   --muted: #1d1a20;
-  /* Quieter ink: 70% for meta and secondary text, 48% for what only labels (an unchosen tab, a placeholder). */
+  /* Quieter ink: 70% for meta, secondary text and an unchosen tab, 48% for what only labels (a placeholder). */
   --muted-foreground: rgb(246 242 236 / 70%);
   --subtle-foreground: rgb(246 242 236 / 48%);
   /* A list's row under the pointer (menus, the palette, a Select): a quiet fill, the ink unchanged. Keys invert it. */
