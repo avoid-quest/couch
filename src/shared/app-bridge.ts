@@ -57,10 +57,10 @@ export type CouchApp = {
   onAddresses(listener: (urls: string[]) => void): () => void;
   /** Closing hides the window, which keeps hosting and playing; the page ends its sharing. Older apps lack it. */
   onWindowClosed?(listener: () => void): () => void;
-  /** macOS HTML fullscreen resolves before the native window finishes animating. */
-  onFullscreenPending?(listener: (pending: boolean) => void): () => void;
-  /** Complete native entry before HTML fullscreen; false restores the previous native mode. */
-  playerFullscreen?(enter: boolean): Promise<void>;
+  /** Makes the window fullscreen or not when given; resolves whether it is. The TV and older apps lack it. */
+  fullScreen?(enter?: boolean): Promise<boolean>;
+  /** The window entered or left fullscreen, by Couch or by the system's own controls. */
+  onFullScreen?(listener: (fullScreen: boolean) => void): () => void;
   updates(): Promise<UpdateState>;
   update?(action: UpdateAction): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;

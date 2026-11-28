@@ -10,6 +10,7 @@ seek handlers that run the existing session actions. Chromium maps it to macOS
 Now Playing, the Windows media controls and Linux MPRIS, but only while the page
 itself plays media, which every Device does.
 
-The idle player and TV cursor hide with `html[data-cursor-hidden]`, and the
-player's fullscreen button uses the page's Fullscreen API, which Electron applies
-to the window.
+The idle player and TV cursor hide with `html[data-cursor-hidden]`. In the app the
+player's full screen is the window's own (`couchApp.fullScreen`), so its button
+agrees with the system's green button, menu and shortcut; a browser tab uses the
+page's Fullscreen API. Leaving the player leaves full screen.

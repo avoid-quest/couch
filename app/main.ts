@@ -145,7 +145,6 @@ const save = (next: Choice) => {
 };
 
 let window: BrowserWindow | null = null;
-let playerFullscreen: ((enter: boolean) => Promise<void>) | null = null;
 const capture = createCapture(
   () => window?.webContents ?? null,
   () => (choice.mode === "remote" ? choice.address : localOrigin),
@@ -662,51 +661,13 @@ function createWindow() {
     if (tv) window?.setFullScreen(true);
   });
   if (!tv) {
-    if (process.platform === "darwin") {
-      const host = window;
-      let nativeFullscreen = false,
-        restoreFullscreen: boolean | null = null;
-      const pending = (value: boolean) => host.webContents.send("couch:fullscreen-pending", value);
-      const change = (value: boolean) => {
-        if (nativeFullscreen === value && host.isFullScreen() === value) return Promise.resolve();
-        pending(true);
-        return new Promise<void>((resolve) => {
-          if (value) host.once("enter-full-screen", () => resolve());
-          else host.once("leave-full-screen", () => resolve());
-          if (host.isFullScreen() !== value) host.setFullScreen(value);
-        });
-      };
-      playerFullscreen = async (enter) => {
-        if (enter) {
-          restoreFullscreen ??= host.isFullScreen();
-          await change(true);
-        } else if (restoreFullscreen !== null) {
-          const restore = restoreFullscreen;
-          restoreFullscreen = null;
-          // The window's own fullscreen control may already be leaving; don't reverse it.
-          await change(restore && host.isFullScreen());
-        }
-      };
-      // HTML begins after native entry. Escape and older remote pages also exit here.
-      host.webContents.on("enter-html-full-screen", () => {
-        void playerFullscreen?.(true);
-      });
-      host.webContents.on("leave-html-full-screen", () => {
-        void playerFullscreen?.(false);
-      });
-      host.on("enter-full-screen", () => {
-        nativeFullscreen = true;
-        pending(false);
-      });
-      host.on("leave-full-screen", () => {
-        nativeFullscreen = false;
-        pending(false);
-      });
-    }
     // Fullscreen hides the window controls, so the header drops their space.
     const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
     window.on("enter-full-screen", fullScreen);
-    window.on("leave-full-screen", fullScreen);
+    window.on("leave-full-screen", () => {
+      pageFullScreen = false;
+      fullScreen();
+    });
     window.webContents.on("dom-ready", fullScreen);
   }
   window.on("close", (event) => {
@@ -729,6 +690,10 @@ function createWindow() {
   // Only a document load resets playback: did-start-loading also fires on in-app page changes.
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
     if (!mainFrame || inPlace) return;
+    if (pageFullScreen) {
+      pageFullScreen = false;
+      window?.setFullScreen(false);
+    }
     capture.clear();
     updatePlayback = "loading";
   });
@@ -783,10 +748,16 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
-handle("player-fullscreen", (_event, enter) => {
-  if (typeof enter !== "boolean" || !playerFullscreen)
-    throw new Error("Player fullscreen is unavailable.");
-  return playerFullscreen(enter);
+// The player's fullscreen is the window's, so the system's own controls and Couch's button agree.
+// Whether the page asked for this fullscreen (the player), so a new document leaves it rather than keep it on Home.
+let pageFullScreen = false;
+handle("full-screen", (_event, enter) => {
+  if (tv || !window) throw new Error("Fullscreen is unavailable.");
+  if (typeof enter === "boolean") {
+    pageFullScreen = enter;
+    window.setFullScreen(enter);
+  }
+  return window.isFullScreen();
 });
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));

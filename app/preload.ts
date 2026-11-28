@@ -139,18 +139,22 @@ if (captureId) {
 
   contextBridge.exposeInMainWorld("couchApp", {
     tvPresentation: process.argv.includes("--couch-tv-presentation"),
-    ...(process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation")
+    ...(!process.argv.includes("--couch-tv-presentation")
       ? {
-          playerFullscreen: (enter: boolean) => call<void>("player-fullscreen", enter),
+          // Entering needs a press, as the page's own fullscreen does; reading and leaving don't.
+          fullScreen: (enter?: boolean) =>
+            enter === true && !navigator.userActivation.isActive
+              ? Promise.reject(new Error("Fullscreen needs a press."))
+              : call<boolean>("full-screen", enter),
+          onFullScreen: (listener: (fullScreen: boolean) => void) => {
+            const handler = (_event: unknown, value: boolean) => listener(value);
+            ipcRenderer.on("couch:full-screen", handler);
+            return () => {
+              ipcRenderer.off("couch:full-screen", handler);
+            };
+          },
         }
       : {}),
-    onFullscreenPending: (listener) => {
-      const handler = (_event: unknown, pending: boolean) => listener(pending);
-      ipcRenderer.on("couch:fullscreen-pending", handler);
-      return () => {
-        ipcRenderer.off("couch:fullscreen-pending", handler);
-      };
-    },
     deviceName: (name) => call("device-name", name),
     errorReporting: (enabled) => {
       if (enabled === true && !navigator.userActivation.isActive)
