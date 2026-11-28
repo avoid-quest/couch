@@ -461,17 +461,7 @@ export function HomePage() {
         ),
       ]),
     ),
-    // Its "…" ends the line, beside the doors, as every section's ends its heading's.
-    sources: (
-      <section className="flex min-w-0">
-        <div className="min-w-0 flex-1 [&>section]:mr-0">
-          <BrowseLine />
-        </div>
-        <div className="-mr-(--gutter) flex items-center border-y pr-(--gutter) pl-1">
-          {options("sources")}
-        </div>
-      </section>
-    ),
+    sources: <BrowseLine options={options("sources")} />,
   };
   for (const follow of follows)
     lists[follow.id] = (

@@ -267,7 +267,7 @@
   box-shadow: none;
 }
 :is(button, a):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)
-  .text-muted-foreground,
+  :is(.text-muted-foreground, .text-subtle-foreground),
 :where([data-keyboard])
   :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus)
   .text-muted-foreground,
