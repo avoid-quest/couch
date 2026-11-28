@@ -352,7 +352,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
         <AlertAction>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() =>
               void couchApp

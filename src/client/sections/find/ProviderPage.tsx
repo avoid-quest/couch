@@ -33,7 +33,7 @@ import { artShape, type ArtShape } from "@/art-shape";
 import { isChannelTab, metaLine, pageTitle } from "@/media-caption";
 import { collectionLinks } from "@/collection-target";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { TRY_AGAIN } from "@/copy";
+import { TryAgain } from "@/components/TryAgain";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
@@ -520,15 +520,13 @@ function MovedSource({
     <Alert variant="destructive">
       <AlertTitle>Couldn't load {name}.</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
-      <AlertAction className="flex gap-2">
+      <AlertAction>
         {administrator && (
-          <Button data-page-first variant="ghost" size="sm" asChild>
+          <Button data-page-first variant="secondary" size="sm" asChild>
             <Link to="/settings/couch/sources/streaming-community">Set site address</Link>
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={() => retry?.()}>
-          {TRY_AGAIN}
-        </Button>
+        <TryAgain onClick={() => retry?.()} />
       </AlertAction>
     </Alert>
   );

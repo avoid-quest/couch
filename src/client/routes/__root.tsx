@@ -11,25 +11,19 @@ import { AppShell } from "../sections/shell/AppShell";
 import { RemotePlayerSession } from "../session/remote-player-session";
 import { UpdateCenterProvider } from "../session/update-center";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageProblem } from "@/components/PageProblem";
+import { TryAgain } from "@/components/TryAgain";
 
+// With no header around it, the page keeps a way Home beside Try again.
 function RootError({ error, reset }: ErrorComponentProps) {
+  useEffect(() => console.error(error), [error]);
   return (
-    <main id="main" className="px-(--gutter) py-6">
-      <Alert variant="destructive">
-        <AlertDescription>
-          {error instanceof Error ? error.message : String(error)}
-        </AlertDescription>
-        <div className="col-span-full flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" onClick={reset}>
-            Try again
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/">Back to Couch</Link>
-          </Button>
-        </div>
-      </Alert>
-    </main>
+    <PageProblem error={error}>
+      <TryAgain onClick={reset} />
+      <Button variant="ghost" size="sm" asChild>
+        <Link to="/">Back to Couch</Link>
+      </Button>
+    </PageProblem>
   );
 }
 

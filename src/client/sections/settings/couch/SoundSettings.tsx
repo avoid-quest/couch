@@ -4,6 +4,7 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 import { soundQuery, soundView, type SoundView } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -13,7 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { TRY_AGAIN } from "@/copy";
 import { DelayControl } from "@/components/DelayControl";
 import type { SoundState } from "../../../../shared/sound";
 
@@ -139,17 +139,13 @@ export function SoundSettings({
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
+              <TryAgain
                 disabled={!connected || pending}
                 onClick={() => {
                   mutation.reset();
                   void sound.refetch();
                 }}
-              >
-                {TRY_AGAIN}
-              </Button>
+              />
             </AlertAction>
           </Alert>
         )}

@@ -102,17 +102,38 @@ In `src/client/components`:
 - `playbackStatus`: one status vocabulary for every playback surface
 
 Messages: **toasts** (`src/client/toasts.ts`, a fixed set of kinds, at most one
-action, never taking focus) for errors, Undo and unexpected outcomes; routine
-actions stay quiet. A message is a short pill in ink, its action a dark capsule
+action, never taking focus) for a failed action, Undo and unexpected outcomes;
+routine actions stay quiet. A message is a short pill in ink, its action a dark capsule
 inside, an Undo draining a thin bar over its time; a problem keeps the bar's dark
 surface and its icon. Every message shows in one place, centred over the content
 beside the side player (`--side-player`), at the bottom clear of the dock, tabs
 or player controls (`--bottom-bar`), or at the top: each device chooses in This
 device → General, and can turn off confirmations (Queued, Playing on).
-**Alert** for a problem that is the page, **Empty** for empty states, **Dialog**
+**Alert** for a problem (see Problems), **Empty** for empty states, **Dialog**
 for short tasks, **AlertDialog** for confirmations, **Popover** for panels over
 the picture, **Sheet** for longer panels on phones.
 Portalled surfaces share `z-50`; later portals cover earlier ones.
+
+## Problems
+
+A problem shows where it belongs, never as a banner dropping into the page:
+
+- **One thing** (a shelf, a device's row, a setting, a panel) says so in that
+  thing's own place, quietly: a shelf under its heading (`ShelfProblem`), a
+  device under its name, a setting under its row. Nothing else moves.
+- **What you just did** (an action failed) is a message (`failed()` in
+  `toasts.ts`), beside nothing else.
+- **The whole app** (Couch out of reach, refusing this address, updated, its
+  player unavailable, an update that failed) is one quiet line in one fixed
+  place: the header's status row (`StatusLine`, `UpdateCue`), or the pairing
+  page, which has no header.
+- **A page that can't show at all** keeps its own space: its title, one line
+  and one action (`PageProblem`, or the page's header with an Alert).
+
+Every problem looks the same: an icon, one sentence in ink and one action
+(`TryAgain` when it can retry), no box or border. Red is only the problem's
+icon. An Alert announces itself (`role="alert"`, or `status` for a note), and
+its action is a remote's next stop below the thing it belongs to.
 
 **A control's panel opens from it.** On desktops and the TV its Popover or menu
 hangs from the control and fits the screen; on phones a longer panel rises as a
@@ -120,7 +141,9 @@ Sheet from the bottom, by the dock, while short menus stay Popovers.
 
 ## Copy
 
-Sentence case, short: say what happened and what to do next. Parts of a line
+Sentence case, short: say what happened and what to do next. A problem says
+"Couldn't {verb} {thing}." then what happens next or what to do, or Core's own
+sentence when it sent one; never codes, script errors or an "Error:" prefix. Parts of a line
 join with commas (`metaLine`), never middle dots. Shared strings live in
 `src/client/copy.ts`. Verbs are the same everywhere: Play, Pause, Stop, Next,
 Play next, Queue, Save, Open, Resume, From start, Remove, Hide. Couch's own words:

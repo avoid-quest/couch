@@ -12,6 +12,7 @@ import {
 import { RowOptions } from "@/components/RowMenu";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -232,14 +233,10 @@ export function BluetoothSettings({
             <AlertDescription>{error}</AlertDescription>
             {bluetooth.error && !mutation.error && (
               <AlertAction>
-                <Button
-                  variant="outline"
-                  size="sm"
+                <TryAgain
                   disabled={!connected || pending}
                   onClick={() => void bluetooth.refetch()}
-                >
-                  Try again
-                </Button>
+                />
               </AlertAction>
             )}
           </Alert>

@@ -1,7 +1,7 @@
 import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { TryAgain } from "@/components/TryAgain";
 import {
   Empty,
   EmptyContent,
@@ -10,7 +10,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
-import { offline, TRY_AGAIN } from "@/copy";
+import { offline } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
 
 // The messages every Saved tab shows around its rows (docs/design.md "Messages").
@@ -34,9 +34,7 @@ export function SavedError({ message, onRetry }: { message: string; onRetry?: ()
       <AlertDescription>{message}</AlertDescription>
       {onRetry && (
         <AlertAction>
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            {TRY_AGAIN}
-          </Button>
+          <TryAgain onClick={onRetry} />
         </AlertAction>
       )}
     </Alert>

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { detailHref, useDetailNavigation } from "@/detail-navigation";
 
 /**
@@ -99,6 +101,51 @@ export function Shelf({
       >
         {children}
       </ol>
+    </section>
+  );
+}
+
+/**
+ * A shelf that can't load says so in its own place, under its heading, with Try again (docs/design.md "Problems"):
+ * what couldn't happen, then Core's own sentence when it sent one.
+ */
+export function ShelfProblem({
+  title,
+  href,
+  options,
+  problem,
+  detail,
+  retry,
+}: {
+  title: string;
+  href?: string;
+  options?: ReactNode;
+  problem: string;
+  detail?: string;
+  retry?: () => void;
+}) {
+  return (
+    <section aria-label={title} className="grid min-w-0 gap-2">
+      {/* A row of its own, so a remote's Down from the heading reaches the problem's row, not the next heading. */}
+      <div data-nav-row className="flex min-w-0 items-center gap-1">
+        <ShelfHeading title={title} href={href} />
+        {options}
+      </div>
+      <Alert variant="destructive" className="border-y py-4">
+        {detail ? (
+          <>
+            <AlertTitle>{problem}</AlertTitle>
+            <AlertDescription>{detail}</AlertDescription>
+          </>
+        ) : (
+          <AlertDescription>{problem}</AlertDescription>
+        )}
+        {retry && (
+          <AlertAction>
+            <TryAgain data-page-first onClick={retry} />
+          </AlertAction>
+        )}
+      </Alert>
     </section>
   );
 }

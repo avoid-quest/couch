@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Navigate } from "@tanstack/react-router";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Button } from "@/components/ui/button";
@@ -78,9 +79,9 @@ function UpdatesContent({ section }: { section: "updates" | "device-updates" }) 
         </SettingsSection>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {!targets.length && administrator && (
         <p className="text-sm text-muted-foreground">Waiting for a Couch app to connect…</p>

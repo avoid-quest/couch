@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addHidden, hiddenQuery, removeHidden } from "@/api/hidden";
@@ -86,14 +87,7 @@ export function HiddenSettings({
           <AlertDescription>{error}</AlertDescription>
           {rules.error && (
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!available}
-                onClick={() => void rules.refetch()}
-              >
-                Try again
-              </Button>
+              <TryAgain disabled={!available} onClick={() => void rules.refetch()} />
             </AlertAction>
           )}
         </Alert>

@@ -73,7 +73,7 @@ export type Row = {
   output?: Output;
   /** This device, whose own controls stay its own. */
   mine: boolean;
-  /** Only what matters: "This device", then an exception ("Joining", "Behind", "Can't play: {Core's reason}", "Muted"…). */
+  /** Only what matters: "This device", then an exception ("Joining", "Behind", Core's reason it can't play, "Muted"…). */
   status: string;
   /** The status is a failure, said in destructive red. */
   failed: boolean;
@@ -208,7 +208,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
       sharing ||
       (hostOnly && lock) ||
       (current?.error
-        ? `Can't play: ${current.error}`
+        ? current.error
         : (current?.state && receiverWords[current.state]) ||
           locked ||
           (soundOn && device.muted

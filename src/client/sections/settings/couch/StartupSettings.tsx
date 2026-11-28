@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
-import { TRY_AGAIN } from "@/copy";
 import { apiSend } from "@/api/client";
 import { startupQuery } from "@/api/settings";
 import type { StartupState } from "../../../../shared/startup";
@@ -67,17 +67,13 @@ export function StartupSettings({ credentials, connected }: Props) {
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
           <AlertAction>
-            <Button
-              variant="outline"
-              size="sm"
+            <TryAgain
               disabled={!connected}
               onClick={() => {
                 saving.reset();
                 void startup.refetch();
               }}
-            >
-              {TRY_AGAIN}
-            </Button>
+            />
           </AlertAction>
         </Alert>
       )}

@@ -305,7 +305,7 @@ function UpdateCenterSession({ children, storageKey }: PropsWithChildren<{ stora
           );
         const errors = next.items
           .filter((item) => item.status === "error")
-          .map((item) => `${item.name}: ${item.error ?? "Update failed"}`);
+          .map((item) => `${item.name}: ${item.error ?? "Couldn't update"}`);
         if (errors.length) throw new Error(errors.join("; "));
         return;
       }

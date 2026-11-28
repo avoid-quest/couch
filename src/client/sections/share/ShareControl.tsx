@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ScreenShare, SlidersVertical, Square, Users, X } from "lucide-react";
+import { CircleAlert, ScreenShare, SlidersVertical, Square, Users, X } from "lucide-react";
 import { Level } from "@/components/Level";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -354,9 +354,15 @@ function SharingPanel({
                 <span
                   className={cn(
                     "text-meta",
-                    viewer.error ? "text-destructive" : "text-muted-foreground",
+                    viewer.error ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
+                  {viewer.error && (
+                    <CircleAlert
+                      aria-hidden="true"
+                      className="mr-1.5 inline size-[1.1em] -translate-y-px text-destructive"
+                    />
+                  )}
                   {viewerLine(viewer, routes[viewer.device.id])}
                 </span>
               </div>

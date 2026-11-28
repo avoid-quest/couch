@@ -3,7 +3,7 @@ import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { RowOptions, type MenuAction } from "@/components/RowMenu";
-import { Shelf, ShelfHeading } from "@/components/Shelf";
+import { Shelf, ShelfHeading, ShelfProblem } from "@/components/Shelf";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import { PopoverDescription, PopoverHeader, PopoverTitle } from "@/components/ui
 import { majorityShape, providerItemShape } from "@/art-shape";
 import { collectionLocation } from "@/detail-navigation";
 import { metaLine } from "@/media-caption";
-import { TRY_AGAIN } from "@/copy";
 import { undoable } from "@/toasts";
 import { progressFor } from "@/sections/find/provider-progress";
 import { SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
@@ -153,22 +152,14 @@ export function FollowShelf({
   const shelved = items.filter(({ item }) => !lead || !progressFor(item, [lead]));
   const shape = (item: (typeof items)[number]["item"]) => providerItemShape(source, item);
   const frame = majorityShape(shelved.slice(0, shelfLength).map(({ item }) => shape(item)));
-  const quiet = (text: string, retry?: () => void) => (
+  const quiet = (text: string) => (
     <section aria-label={follow.name} className="grid min-w-0 gap-2">
       <div className="flex min-w-0 items-center gap-1">
         <ShelfHeading title={follow.name} href={href} />
         {menu}
       </div>
-      <p
-        role="status"
-        className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"
-      >
+      <p role="status" className="text-sm text-muted-foreground">
         {text}
-        {retry && (
-          <Button variant="ghost" size="sm" onClick={retry}>
-            {TRY_AGAIN}
-          </Button>
-        )}
       </p>
     </section>
   );
@@ -201,10 +192,14 @@ export function FollowShelf({
       {lastCursor && read(lastCursor, reportNewest)}
       {previousCursor && read(previousCursor, reportBefore)}
       {(opening?.error || summary?.error) && !items.length ? (
-        quiet(
-          `Couldn't load ${follow.list} from ${source}.`,
-          opening?.error ? opening.retry : summary?.retry,
-        )
+        <ShelfProblem
+          title={follow.name}
+          href={href}
+          options={menu}
+          problem={`Couldn't load ${follow.list} from ${source}.`}
+          detail={(opening?.error ? opening : summary)?.errorMessage}
+          retry={opening?.error ? opening.retry : summary?.retry}
+        />
       ) : !loading && !shelved.length ? (
         quiet(`${source} lists nothing here right now.`)
       ) : (

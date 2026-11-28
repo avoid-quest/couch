@@ -2,7 +2,6 @@ import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { type ComponentProps, useSyncExternalStore } from "react";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,14 +14,13 @@ import { majorityShape, providerItemShape } from "@/art-shape";
 import { metaLine } from "@/media-caption";
 import { usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
-import { Shelf, ShelfHeading } from "@/components/Shelf";
+import { Shelf, ShelfHeading, ShelfProblem } from "@/components/Shelf";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { browserActions } from "@/original-page";
 import { cn } from "@/lib/utils";
 import { providerNames, type SearchHit } from "@/sections/find/SearchOnlineResults";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
-import { TRY_AGAIN } from "@/copy";
 import type { GuideRow } from "../../../shared/iptv";
 import {
   pageSection,
@@ -57,7 +55,7 @@ export function LiveTvShelf() {
   });
   const actions = useChannelActions();
   if (guide.error && !guide.data)
-    return <Failed what="Live TV" retry={() => void guide.refetch()} />;
+    return <Failed title="Live TV" href="/live-tv" retry={() => void guide.refetch()} />;
   if (guide.data && !guide.data.channels.length) return null;
   return (
     <Shelf loading={!guide.data} title="Live TV" href="/live-tv">
@@ -390,17 +388,19 @@ function SourceChip({
   );
 }
 
-export function Failed({ what, retry }: { what: string; retry?: () => void }) {
+/** A Home shelf that couldn't load, in that shelf's place. */
+export function Failed({
+  title,
+  href,
+  what = title,
+  retry,
+}: {
+  title: string;
+  href?: string;
+  what?: string;
+  retry: () => void;
+}) {
   return (
-    <Alert variant="destructive">
-      <AlertDescription>Couldn't load {what}.</AlertDescription>
-      {retry && (
-        <AlertAction>
-          <Button data-page-first variant="ghost" size="sm" onClick={retry}>
-            {TRY_AGAIN}
-          </Button>
-        </AlertAction>
-      )}
-    </Alert>
+    <ShelfProblem title={title} href={href} problem={`Couldn't load ${what}.`} retry={retry} />
   );
 }

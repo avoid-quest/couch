@@ -11,6 +11,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { RemotePad } from "@/components/RemotePad";
 import { hasUpNext } from "@/sections/now/QueuePanel";
 import { PageHeader } from "@/components/PageHeader";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -164,9 +165,9 @@ export function RemotePage() {
                     : "Connected"}
         </p>
         {error && (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
       </div>
       {target && (

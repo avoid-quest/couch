@@ -16,6 +16,7 @@ import { kindLabels, scopeLabels } from "../../search-palette";
 import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   Empty,
   EmptyContent,
@@ -958,13 +959,7 @@ export function SourceProblems({ summaries }: { summaries: Entry[] }) {
             )}
           </AlertDescription>
           <AlertAction>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => failed.forEach(([, summary]) => summary.retry?.())}
-            >
-              Try again
-            </Button>
+            <TryAgain onClick={() => failed.forEach(([, summary]) => summary.retry?.())} />
           </AlertAction>
         </Alert>
       )}

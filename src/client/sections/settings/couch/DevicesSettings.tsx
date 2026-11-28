@@ -8,6 +8,7 @@ import { PairingDialog } from "@/components/PairingDialog";
 import { RowOptions } from "@/components/RowMenu";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +21,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TRY_AGAIN } from "@/copy";
 import { formatSeen } from "@/time-format";
 import { ChevronDown, Laptop, MonitorSmartphone, Smartphone, Tv } from "lucide-react";
 import { staleDuplicates, type Device, type DeviceIdentity } from "../../../../shared/devices";
@@ -269,14 +269,10 @@ export function DevicesSettings({
               <Alert variant="destructive">
                 <AlertDescription>Couldn't load the admin code.</AlertDescription>
                 <AlertAction>
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <TryAgain
                     disabled={!connected || setupCode.isFetching}
                     onClick={() => void setupCode.refetch()}
-                  >
-                    Try again
-                  </Button>
+                  />
                 </AlertAction>
               </Alert>
             ) : (
@@ -341,9 +337,7 @@ export function DevicesSettings({
           <Alert variant="destructive">
             <AlertDescription>Couldn't load devices.</AlertDescription>
             <AlertAction>
-              <Button variant="outline" size="sm" onClick={() => void devices.refetch()}>
-                {TRY_AGAIN}
-              </Button>
+              <TryAgain onClick={() => void devices.refetch()} />
             </AlertAction>
           </Alert>
         ) : !devices.data.length ? (

@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { useSessionGate } from "@/session/session-context";
 import { useUpdateCenter } from "@/session/update-center";
@@ -43,17 +42,10 @@ export function UpdateCue() {
       ? `Updating ${Math.min(batch.items.filter((item) => item.status === "updated").length + 1, batch.items.length)} of ${batch.items.length}`
       : "Updating media tools"
     : failed
-      ? "Update failed"
+      ? "Couldn't update"
       : "Downloading update";
   return (
-    <Button
-      variant="ghost"
-      asChild
-      className={cn(
-        "touch:size-11 touch:p-0 tv:w-auto tv:px-3.5",
-        failed && !busy && "text-destructive",
-      )}
-    >
+    <Button variant="ghost" asChild className="touch:size-11 touch:p-0 tv:w-auto tv:px-3.5">
       <Link
         to={canMaintain ? "/settings/couch/updates" : "/settings/device/updates"}
         aria-label={label}
@@ -63,7 +55,7 @@ export function UpdateCue() {
         {busy ? (
           <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
         ) : failed ? (
-          <CircleAlert aria-hidden="true" />
+          <CircleAlert aria-hidden="true" className="text-destructive" />
         ) : (
           <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
         )}
