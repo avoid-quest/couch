@@ -1,7 +1,7 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
-import { MediaContext } from "@/components/MediaContext";
+import { MediaContext, useRelatedMenu } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import {
   canReturn,
@@ -560,14 +560,15 @@ function TopResult({ hit }: { hit: SearchHit }) {
     play &&
     hit.actions.find((action) => action.playOn && !action.sharingDeviceId && !action.liveAudio);
   const own = hit.actions.find((action) => action.group === "keep" && action.pressed !== undefined);
+  // The "…" holds Play on… as well as the pill, then where it belongs, as the hit's row has it.
   const rest = useItemMenu([
     ...(play && main.label === "Open" && main.href
       ? [{ label: "Details", group: "go", disabled: main.disabled, run: main.run }]
       : []),
     ...hit.actions.filter(
-      (action) =>
-        action !== play && action !== playOn && action !== own && action.label !== main.label,
+      (action) => action !== play && action !== own && action.label !== main.label,
     ),
+    ...useRelatedMenu(hitRelated(hit)),
   ]);
   const meta = hitMeta(hit);
   const level = useLevel(hitSources(hit));

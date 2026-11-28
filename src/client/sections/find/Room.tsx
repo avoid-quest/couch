@@ -7,7 +7,7 @@ import { useRoomLead } from "@/components/AmbientLight";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { mediaSubtitle } from "@/components/MediaContext";
+import { mediaSubtitle, useRelatedMenu } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { PlayPill, usePlayOn } from "@/components/PlayOn";
 import { SaveToggle } from "@/components/DetailHeader";
@@ -408,12 +408,11 @@ export function RoomLead({
   const own = hit.actions.find((action) => action.group === "keep" && action.pressed !== undefined);
   const keep =
     save ?? (own && { saved: !!own.pressed, run: () => own.run?.(), disabled: own.disabled });
-  // The pill holds Play and where it plays, the icon Save; the "…" holds the rest.
-  const rest = useItemMenu(
-    hit.actions.filter(
-      (action) => action !== play && action !== playOn && action !== own && action.label !== "Open",
-    ),
-  );
+  // The pill holds Play and where it plays, the icon Save; the "…" holds the rest, Play on… and where it belongs too.
+  const rest = useItemMenu([
+    ...hit.actions.filter((action) => action !== play && action !== own && action.label !== "Open"),
+    ...useRelatedMenu({ collection: item.collection, creator: item.creator }),
+  ]);
   const href = collectionLocation(item);
   const press = () => (play ? play.run?.() : openProvider(item));
   return (

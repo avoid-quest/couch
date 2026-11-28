@@ -143,12 +143,12 @@ function Lead({
   const { on } = usePlayOn();
   const destination = usePlayDestination();
   const save = useForLaterToggle(item.url, () => historyReference(item), useDetailAction());
-  // The pill holds Resume and Play on, and the icon Save, so the "…" holds the rest. The TV has no Save or "…" beside
-  // Resume: a held OK opens the menu, from the artwork, and Save is in it.
+  // The pill holds Resume and Play on, and the icon Save, so the "…" holds the rest, Play on… too. The TV has no Save or
+  // "…" beside Resume: a held OK opens the menu, from the artwork, and Save is in it.
   const tv = isTvPresentation();
   const related = useRelatedMenu({ collection: item.collection, creator: item.creator });
   const options = useItemMenu([
-    ...menu.filter((action) => !action.playOn && (tv || action.pressed === undefined)),
+    ...menu.filter((action) => tv || action.pressed === undefined),
     ...related,
   ]);
   const light = useItemLight(item.thumbnail);

@@ -146,10 +146,24 @@ export function DetailHeader({
   children?: ReactNode;
 }) {
   const { on } = usePlayOn();
-  // The Stage holds its main verb with where it plays and Save; the "…" holds the rest, From start and Queue first.
+  // The Stage holds its main verb with where it plays and Save; the "…" holds the rest, the play verbs first, Play on…
+  // among them as well as in the pill.
   const rest = useItemMenu([
     ...(fromStart ? [{ ...fromStart, group: "play" }] : []),
     ...(queue ? [{ ...queue, group: "play" }] : []),
+    ...(play && playOn
+      ? [
+          {
+            label: "Play on",
+            group: "play",
+            disabled: play.disabled || playOn.disabled,
+            thumbnail,
+            audioOnly: playOn.audioOnly,
+            verb: position && duration ? "Resume" : undefined,
+            playOn: playOn.run,
+          },
+        ]
+      : []),
     ...more,
   ]);
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
