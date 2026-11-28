@@ -148,8 +148,11 @@ const cache = new Map<string, Art>();
 export const cachedArt = (src: string) => cache.get(src) ?? null;
 const pending = new Map<string, Promise<Art | null>>();
 
-/** The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS); a blob: is the page's own. */
-const picture = async (src: string, credentials: ApiCredentials | null | undefined) =>
+/**
+ * The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS) or a browser to at all; a blob:
+ * is the page's own.
+ */
+export const artworkBytes = async (src: string, credentials: ApiCredentials | null | undefined) =>
   (src.startsWith("blob:") || !credentials
     ? await fetch(src, { referrerPolicy: "no-referrer" })
     : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)
@@ -165,7 +168,7 @@ export function readArt(src: string, credentials?: ApiCredentials | null): Promi
   let read = pending.get(src);
   if (!read) {
     read = (async () => {
-      const bitmap = await createImageBitmap(await picture(src, credentials));
+      const bitmap = await createImageBitmap(await artworkBytes(src, credentials));
       try {
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = size;

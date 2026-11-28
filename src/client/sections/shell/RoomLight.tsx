@@ -1,4 +1,9 @@
-import { roomStyle, useArtworkLight, useLeadPicture } from "@/components/AmbientLight";
+import {
+  roomStyle,
+  useArtworkLight,
+  useArtworkPicture,
+  useLeadPicture,
+} from "@/components/AmbientLight";
 import { useStationShow } from "@/sections/home/on-air";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "./shell-context";
@@ -27,11 +32,10 @@ export function useRoomLight() {
 
 /** The room behind every screen, lit as `useRoomLight` says. */
 export function RoomLight({ picture }: { picture: string | undefined }) {
+  const shown = useArtworkPicture(picture);
   return (
     <div aria-hidden="true" className="room room-light">
-      {picture && (
-        <img src={picture} alt="" referrerPolicy="no-referrer" className="room-picture" />
-      )}
+      {shown && <img src={shown} alt="" className="room-picture" />}
     </div>
   );
 }

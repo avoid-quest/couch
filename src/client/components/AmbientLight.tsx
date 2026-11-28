@@ -6,7 +6,7 @@ import {
   type CSSProperties,
   type SyntheticEvent,
 } from "react";
-import { cachedArt, readArt, type Art, type Light, type Rgb } from "@/artwork-light";
+import { artworkBytes, cachedArt, readArt, type Art, type Light, type Rgb } from "@/artwork-light";
 import { SessionGateContext } from "@/session/gate-context";
 
 /** What was read of the artwork at `src` (its light, its edges), at once when this page has read it before; null while reading or unreadable. */
@@ -34,6 +34,33 @@ export function useArtwork(src: string | undefined) {
 /** The light of the artwork at `src`, at once when this page has read it before; null while reading or without any. */
 export const useArtworkLight = (src: string | undefined): Light | null =>
   useArtwork(src)?.light ?? null;
+
+/**
+ * The artwork at `src` as Core serves it, for an image to show: a phone or a browser can be refused a host's picture
+ * (RaiPlay's) that Core reads. Undefined while loading, or when it can't be had.
+ */
+export function useArtworkPicture(src: string | undefined) {
+  const credentials = useContext(SessionGateContext)?.credentials;
+  const [picture, setPicture] = useState<{ src: string; url: string }>();
+  useEffect(() => {
+    if (!src) return;
+    let live = true,
+      url: string | undefined;
+    void artworkBytes(src, credentials).then(
+      (bytes) => {
+        if (!live) return;
+        url = URL.createObjectURL(bytes);
+        setPicture({ src, url });
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [src]);
+  return picture && picture.src === src ? picture.url : undefined;
+}
 
 const rgb = (colour: Rgb) => `rgb(${colour.join(" ")})`;
 /**
