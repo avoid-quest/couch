@@ -19,9 +19,9 @@ const loadCount = 100;
 // Albums are read a few per extraction, in parallel; when one of them fails, only its group is read again album by
 // album, so that one is skipped and the rest still play.
 const albumGroup = 8;
-// yt-dlp runs three extractions at once for all of Core; a fan list takes no more, so it never fills the waiting
-// line and Bandcamp sees no burst.
-const albumLanes = 3;
+// yt-dlp runs three extractions at once for all of Core; a fan list takes two, so playback and searches always keep
+// one and Bandcamp sees no burst.
+const albumLanes = 2;
 
 /** Runs tasks so that at most `count` are underway at once, the rest in the order they came. */
 function lanes(count: number) {
