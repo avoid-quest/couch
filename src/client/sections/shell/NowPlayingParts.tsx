@@ -32,7 +32,7 @@ export function WhereTokens({ state, compact }: { state: ClientSessionState; com
     return (
       <span className={cn("inline-flex items-center gap-1.5", !compact && "text-sm font-medium")}>
         {joined && <Volume2 aria-hidden="true" className={cn(icon, "text-muted-foreground")} />}
-        {joined ? "Your sound, on This device" : "Not joined"}
+        {joined ? "Your sound, on this device" : "Not joined"}
       </span>
     );
   }

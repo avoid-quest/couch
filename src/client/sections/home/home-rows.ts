@@ -45,14 +45,21 @@ const browseFirst = (() => {
   }
 })();
 const discoverRows = readSectionRows("couch.discover-rows", sourceRows);
-// A fresh device's Home: Browse, Continue (its followed sections join here), For later, Radio, then the other sources.
-// Played recently lives in Saved → Played, so it starts off.
+// A fresh device's Home: Browse, Shared sources while anything is shared, Continue (its followed sections join here),
+// For later, Radio, then the other sources. Played recently lives in Saved → Played, so it starts off.
 export const defaultHomeRows: HomeRow[] = [
-  ...(browseFirst ? [{ id: "sources" as const, shown: true }] : []),
+  ...(browseFirst
+    ? [
+        { id: "sources" as const, shown: true },
+        { id: "shared" as const, shown: true },
+      ]
+    : []),
   { id: "continue", shown: true },
   { id: "later", shown: true },
   ...(browseFirst ? [{ id: "radio" as const, shown: true }] : []),
-  ...discoverRows.filter((row) => !browseFirst || (row.id !== "sources" && row.id !== "radio")),
+  ...discoverRows.filter(
+    (row) => !browseFirst || (row.id !== "sources" && row.id !== "radio" && row.id !== "shared"),
+  ),
   { id: "recent", shown: false },
   { id: "upNext", shown: false },
 ];

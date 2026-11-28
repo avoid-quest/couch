@@ -39,6 +39,8 @@ export type LiveSelection = {
   videoFrameRate?: LiveVideoFrameRate;
   includeAudio?: boolean;
   surface?: "monitor" | "window";
+  /** The shared window's own name, for the source's title ("Chess on Studio Mac"). */
+  windowName?: string;
   intent?: "relaxed" | "live";
   metadata?: LiveMetadata;
 };

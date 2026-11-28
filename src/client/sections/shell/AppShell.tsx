@@ -73,7 +73,7 @@ import {
 } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
-import { dismiss, failed, waitingForTap } from "@/toasts";
+import { failed } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { RoomStyle, ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
@@ -83,11 +83,12 @@ import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { UpdateCue, useUpdatesReady } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
+import { SharePlayer } from "@/sections/share/SharePlayer";
+import { showShare, useShareView } from "@/sections/share/share-view";
 import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
-import { hear, onBlocked } from "@/session/renderer";
 import { showsPicture } from "@/session/device-id";
 
 // The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
@@ -116,6 +117,7 @@ function useShellValue() {
     setError,
     videoQualityPreference,
     playerTarget,
+    localLiveSourceId,
   } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
@@ -202,6 +204,8 @@ function useShellValue() {
   const pickedPicture = useRef<string | null>(null);
   const selectPlayback = async (id: string) => {
     const picked = state?.playbacks?.find((playback) => playback.id === id);
+    // Choosing a Playback shows it in the player, in place of this device's share.
+    if (!picked?.liveSourceId || picked.liveSourceId !== localLiveSourceId) showShare(false);
     // Picking a film already showing here keeps the page we picked it from.
     pickedPicture.current = id !== state?.playback && showsPicture(picked) ? id : null;
     if (!(await run({ type: "selectPlayback", playbackId: id }))) {
@@ -481,22 +485,7 @@ export function AppShell() {
 
 function MediaSessionBridge() {
   useMediaSession();
-  useTapToHear();
   return null;
-}
-
-// A browser that needs a gesture before it plays sound asks for one on its own screen (#644).
-function useTapToHear() {
-  useEffect(() => {
-    const unsubscribe = onBlocked((blocked) => {
-      if (blocked) waitingForTap(hear);
-      else dismiss("tap-to-hear");
-    });
-    return () => {
-      unsubscribe();
-      dismiss("tap-to-hear");
-    };
-  }, []);
 }
 
 const isOffline = (status: string) => status === "server-unavailable" || status === "reconnecting";
@@ -678,6 +667,7 @@ function ShellChrome({ children }: PropsWithChildren) {
     run,
     error,
     setError,
+    localLiveSourceId,
   } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
@@ -713,9 +703,18 @@ function ShellChrome({ children }: PropsWithChildren) {
   const installationName = state?.installationName ?? details?.name;
   const tvName = useTvName();
   useRememberCouchName(installationName);
+  // The player follows this device's share as it starts, even while nobody receives it; choosing or starting another
+  // Playback shows that one instead, and the header's pill shows the share again (share-view.ts).
+  const shareView = useShareView();
+  useEffect(() => showShare(!!localLiveSourceId), [localLiveSourceId]);
+  useEffect(() => {
+    const playback = state?.playbacks?.find((item) => item.id === state.playback);
+    if (playback && playback.liveSourceId !== localLiveSourceId) showShare(false);
+  }, [state?.playback]);
+  const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
   const nowPlaying =
-    !!current &&
-    (active || player?.status === "error" || player?.status === "ended") &&
+    (sharing ||
+      (!!current && (active || player?.status === "error" || player?.status === "ended"))) &&
     !playerVisible &&
     !remoteVisible;
   // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and
@@ -729,17 +728,27 @@ function ShellChrome({ children }: PropsWithChildren) {
   // The footer holds the capsule or the dock and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
   useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying && !sidePlayer);
-  const nowPlayingView = state && (
-    <NowPlaying
-      state={state}
-      connected={connected}
-      run={run}
-      size={playerSize}
-      side={playerSide}
-      onOpen={() => shell.openPlayer()}
-      onSize={(size) => setMinimised(size === "mini")}
-    />
-  );
+  const nowPlayingView =
+    state && sharing ? (
+      <SharePlayer
+        state={state}
+        size={playerSize}
+        side={playerSide}
+        onSize={(size) => setMinimised(size === "mini")}
+      />
+    ) : (
+      state && (
+        <NowPlaying
+          state={state}
+          connected={connected}
+          run={run}
+          size={playerSize}
+          side={playerSide}
+          onOpen={() => shell.openPlayer()}
+          onSize={(size) => setMinimised(size === "mini")}
+        />
+      )
+    );
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
   const room = useRoomLight();
@@ -834,10 +843,9 @@ function ShellChrome({ children }: PropsWithChildren) {
                   </div>
                   {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
                   <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
-                  {/* Share keeps a compact entry slot. Its active capsule occupies its own grid row, so neither it nor
-                  variable status text can move or resize navigation and search. HeaderSearch stays mounted. */}
-                  <ShareControl />
+                  {/* Share stands after the search, and becomes the share's pill while this device shares. */}
                   <HeaderSearch className="app-header-search w-full" />
+                  <ShareControl />
                   {tvPresentation && (
                     <DigitalClock className="app-header-tools text-muted-foreground" />
                   )}
@@ -889,6 +897,14 @@ function ShellChrome({ children }: PropsWithChildren) {
                 {nowPlaying && !sidePlayer && nowPlayingView}
                 <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
               </div>
+            )}
+            {state && sharing && shareView.full && (
+              <SharePlayer
+                state={state}
+                size="full"
+                side={playerSide}
+                onSize={(size) => setMinimised(size === "mini")}
+              />
             )}
             {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
             <Toaster tvPresentation={tvPresentation} />

@@ -654,7 +654,7 @@ export async function createHub(options: HubOptions) {
         const source = {
           id,
           deviceId: AIRPLAY_PUBLISHER,
-          name: `AirPlay · ${sender}`,
+          name: `AirPlay from ${sender}`,
           kind: "airplay" as const,
           audio: true,
           video: false,

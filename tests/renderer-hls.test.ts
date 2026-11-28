@@ -233,19 +233,16 @@ test("external subtitles remain the only visible captions and Off disables them 
   assert.ok(video.textTracks.some(track => track.kind === "captions"), "streams without external subtitles keep their in-band captions");
 `));
 
-test("blocked audio is replayed when the shell subscribes again after recovery", () =>
+test("a player mounted while sound waits for a tap offers Tap to hear, and hears it unlock", () =>
   check(`
-  const { onBlocked, waitForTap } = await import("./src/client/session/renderer.ts");
+  const { waitForTap } = await import("./src/client/session/renderer.ts");
+  const { waitingForTap, subscribeTapToHear } = await import("./src/client/session/tap-to-hear.ts");
   waitForTap(() => {});
-  const first = [], recovered = [];
-  const unsubscribe = onBlocked(value => first.push(value));
-  assert.deepEqual(first, [true], "a new shell needs the current blocked state");
-  unsubscribe();
-  const stop = onBlocked(value => recovered.push(value));
-  assert.deepEqual(recovered, [true], "recovery must offer Tap to hear again");
+  assert.equal(waitingForTap(), true, "a new player needs the current blocked state");
+  const heard = [];
+  const stop = subscribeTapToHear(() => heard.push(waitingForTap()));
   waitForTap(null);
-  assert.deepEqual(first, [true], "the old shell unsubscribed");
-  assert.deepEqual(recovered, [true, false], "recovery still hears audio unlocking");
+  assert.deepEqual(heard, [false], "the player still hears audio unlocking");
   stop();
 `));
 

@@ -506,10 +506,11 @@
   padding-inline: var(--gutter);
 }
 
-/* Primary controls never wrap. Names yield to search; sharing has a separate, optional row.
-   Container units follow interface zoom as well as the window's available width. */
+/* Primary controls never wrap. Names yield to search; Share stands after it, and while this device shares it is the
+   share's pill, which takes the room it needs from the search. Container units follow interface zoom as well as the
+   window's available width. */
 .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr);
+  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(0, 1fr) auto;
 }
 .app-header-couch {
   grid-area: 1 / 1;
@@ -518,35 +519,27 @@
   grid-area: 1 / 2;
 }
 .app-header-search {
-  grid-area: 1 / 4;
+  grid-area: 1 / 3;
 }
 .app-header-share-entry {
-  grid-area: 1 / 3;
+  grid-area: 1 / 4;
+  min-width: 0;
 }
 .app-header-tools {
   grid-area: 1 / 5;
 }
-/* Keep the desktop capsule left of the search palette. Inline containment prevents
-   its contents from contributing to the primary grid's column widths. */
-.app-header-sharing {
-  grid-column: 1 / 4;
-  contain: inline-size;
-}
 @media (max-width: 959px), (pointer: coarse) {
   .app-header-controls {
-    grid-template-columns: clamp(2.75rem, 25cqw, 10rem) 2.75rem minmax(0, 1fr);
+    grid-template-columns: clamp(2.75rem, 25cqw, 10rem) minmax(0, 1fr) auto;
   }
   .app-header-search {
-    grid-column: 3;
+    grid-column: 2;
   }
   .app-header-share-entry {
-    grid-column: 2;
+    grid-column: 3;
   }
   .app-header-tools {
     display: none;
-  }
-  .app-header-sharing {
-    grid-column: 1 / -1;
   }
 }
 @media (min-width: 640px) and (max-width: 959px), (min-width: 640px) and (pointer: coarse) {
@@ -566,7 +559,7 @@
    tabs at the bottom. */
 @media (max-width: 639px) {
   body:not(.tv-presentation) .app-header-controls {
-    grid-template-columns: minmax(0, 1fr) 2.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 0.5rem;
   }
   body:not(.tv-presentation) .app-header-couch {
@@ -580,34 +573,31 @@
   }
 }
 .tv-presentation .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr) auto;
+  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(0, 1fr) auto auto;
 }
 .tv-presentation .app-header-couch {
   display: flex;
 }
 .tv-presentation .app-header-search {
-  grid-column: 4;
+  grid-column: 3;
 }
 .tv-presentation .app-header-share-entry {
-  display: block;
-  grid-column: 3;
+  display: flex;
+  grid-column: 4;
 }
 .tv-presentation .app-header-tools {
   display: flex;
 }
-.tv-presentation .app-header-sharing {
-  grid-column: 1 / -1;
-}
 /* Beside the side player too the TV keeps one row; only a narrower header puts the tabs on their own. */
 @container header (width < 52rem) {
   .tv-presentation .app-header-controls {
-    grid-template-columns: minmax(0, 1fr) 2.75rem minmax(0, 2fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto auto;
   }
   .tv-presentation .app-header-search {
-    grid-column: 3;
+    grid-column: 2;
   }
   .tv-presentation .app-header-share-entry {
-    grid-column: 2;
+    grid-column: 3;
   }
   .tv-presentation .app-header-tools {
     grid-column: 4;

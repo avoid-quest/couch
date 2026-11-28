@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { toast, type ToastT } from "sonner";
-import { dismiss, queued, waitingForTap } from "../src/client/toasts";
+import { dismiss, notice, queued } from "../src/client/toasts";
 
 // sonner defers a dismissal's notice to a frame; there is no Toaster here to hear it.
 globalThis.requestAnimationFrame ??= (callback) => setTimeout(callback, 0) as unknown as number;
@@ -27,14 +27,14 @@ test("once a kind's toast is leaving, its repeat takes a new id, so that exit ca
   press(second);
   const third = queued("Film", () => {});
   expect(third).not.toBe(second);
-  const sound = waitingForTap(() => {});
-  dismiss("tap-to-hear");
-  const again = waitingForTap(() => {});
-  expect(again).not.toBe(sound);
+  const said = notice("Copied");
+  dismiss("notice");
+  const again = notice("Copied");
+  expect(again).not.toBe(said);
   expect(
     toast
       .getToasts()
       .filter((each) => each.id === third || each.id === again)
       .map((each) => each.title),
-  ).toEqual(["Queued Film", "Sound is waiting for a tap"]);
+  ).toEqual(["Queued Film", "Copied"]);
 });

@@ -1,4 +1,6 @@
 import { livePlayback, listeningLive, playbackControls } from "@/session/playback-controls";
+import { Level } from "@/components/Level";
+import { LiveClock } from "@/components/LiveClock";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
@@ -240,13 +242,17 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
                   identify={identify}
                 />
               )}
-              <UpNext
-                state={state}
-                connected={connected}
-                run={run}
-                // After a station's notes, room for its heading and first row (the notes give way).
-                className={isRadio(current) ? "min-h-24" : undefined}
-              />
+              {current.liveSourceId ? (
+                <SharedNote state={state} entry={current} />
+              ) : (
+                <UpNext
+                  state={state}
+                  connected={connected}
+                  run={run}
+                  // After a station's notes, room for its heading and first row (the notes give way).
+                  className={isRadio(current) ? "min-h-24" : undefined}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -257,6 +263,7 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
             said
             className="px-0.5 pt-2 pb-1 [&_[data-time-labels]]:text-xs"
           />
+          {current.liveSourceId && <SharedLine state={state} entry={current} />}
           <div className="flex min-h-(--player-target) items-center gap-1.5">
             <PlaybackTransport
               state={state}
@@ -380,6 +387,59 @@ function Picture({
         />
       )}
     </span>
+  );
+}
+
+/** Who shares what plays here: its device's name, or the source's own (an AirPlay sender's). */
+function sharedFrom(state: ClientSessionState, entry: QueueEntry) {
+  const source = state.liveSources?.find((item) => item.id === entry.liveSourceId);
+  return state.devices?.find((device) => device.id === source?.deviceId)?.name ?? source?.name;
+}
+
+/**
+ * A shared screen or sound in Up next's place: it follows its source as it happens, so there is no timeline and nothing
+ * to skip, and only the device that shares it can stop sharing.
+ */
+function SharedNote({ state, entry }: { state: ClientSessionState; entry: QueueEntry }) {
+  const from = sharedFrom(state, entry) ?? "the device sharing it";
+  const live = livePlayback(state);
+  return (
+    <div className="mt-3.5 grid content-start gap-1 border-t border-border pt-2.5">
+      <h3 className="font-heading text-sm font-semibold">
+        {live ? "Live audio" : "Shared as it happens"}
+      </h3>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {live
+          ? `Close to live, in step on every device that joins. There's no Pause and no Up next: you join or leave, and your volume is your own. Only ${from} can stop sharing.`
+          : `It follows ${from}: no timeline, nothing to skip. Pause and Stop work on these devices only; only ${from} can stop sharing.`}
+      </p>
+    </div>
+  );
+}
+
+/** The line above a share's controls: how it follows its source. */
+function SharedLine({ state, entry }: { state: ClientSessionState; entry: QueueEntry }) {
+  const from = sharedFrom(state, entry);
+  const playback = state.playbacks?.find((item) => item.id === state.playback);
+  const playing = state.player.status === "playing" && !state.player.buffering;
+  const source = state.liveSources?.find((item) => item.id === entry.liveSourceId);
+  return (
+    <p className="flex min-w-0 items-center gap-2 px-0.5 pb-1 text-xs text-muted-foreground">
+      <Level moving={playing} className="shrink-0" />
+      <span className="truncate">
+        {livePlayback(state) ? (
+          playbackControls(state).leave ? (
+            <LiveClock prefix="Listening, live" startedAt={source?.startedAt} />
+          ) : (
+            <LiveClock startedAt={source?.startedAt} />
+          )
+        ) : playback?.delivery === "scheduled" ? (
+          `In sync, a few seconds behind ${from ?? "its source"}`
+        ) : (
+          `As it happens${from ? ` on ${from}` : ""}`
+        )}
+      </span>
+    </p>
   );
 }
 

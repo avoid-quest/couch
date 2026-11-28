@@ -48,7 +48,9 @@ function stopped(before: SessionState, here: string) {
   const entry = before.queue.find((item) => item.id === before.currentEntryId);
   const kept =
     !!entry && keepsProgress(entry) && before.player.seekable && before.player.position > 0;
-  return `Stopped${where.length ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : ""}`;
+  // A share stopped here goes on for everyone else.
+  const shared = before.liveSources?.some((source) => source.id === entry?.liveSourceId);
+  return `Stopped${where.length ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : shared ? " It's still in Shared sources." : ""}`;
 }
 
 export function undoPlan(

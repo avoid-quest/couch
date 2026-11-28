@@ -9,7 +9,7 @@ const brief = 4_000,
 /** How long Undo stays: Core keeps a stopped Playback this long (a removed entry only six seconds). */
 export const undoTime = 10_000;
 
-type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "tap-to-hear" | "sharing";
+type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "sharing";
 /** The Toaster shows the newest two; older ones stay mounted, hidden. */
 export const visibleToasts = 2;
 // Sonner updates a toast in place, so a repeat keeps its toast's id only while that toast shows: one leaving (timed
@@ -111,19 +111,21 @@ export const confirmed = (text: string) => confirmations.read() && notice(text);
 /** A press whose answer takes a while, such as a long list loading: it shows until a notice replaces it or it's dismissed. */
 export const pendingNotice = (text: string) => show("notice", text, { duration: Infinity });
 /**
- * Once the last device stops watching, the capture still runs: say so once, with Stop sharing. Like every sharing
- * control it stays this device's own; sonner takes no data attributes, so navigation.ts reads its class instead.
+ * The share ended by itself (the system ended the capture, its window closed): it's gone, so say so, with Share again.
+ * Like every sharing control it stays this device's own; sonner takes no data attributes, so navigation.ts reads its
+ * class instead.
  */
-export const stillSharing = (title: string, stop: () => void, live = false) =>
-  show("sharing", `Still sharing ${title}, ${live ? "with no listeners" : "on no screens"}`, {
+export const sharingStopped = (shareAgain: () => void) =>
+  show("sharing", "Sharing stopped: the system ended the capture.", {
     duration: long,
     className: "tv-local-only",
-    action: { label: "Stop sharing", onClick: stop },
+    action: { label: "Share again", onClick: shareAgain },
   });
-export const waitingForTap = (hear: () => void) =>
-  show("tap-to-hear", "Sound is waiting for a tap", {
-    duration: Infinity,
-    action: { label: "Tap to hear", onClick: hear },
+/** Leaving Live audio closes its player here; it plays on for the rest, and Join is one press away. */
+export const leftLive = (title: string, join: () => void) =>
+  show("notice", `Left ${title}. It plays on for everyone else.`, {
+    duration: long,
+    action: { label: "Join", onClick: join },
   });
 
 // Where messages appear and whether confirmations show, saved per device (This device → General).

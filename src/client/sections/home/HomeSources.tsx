@@ -1,5 +1,10 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { type ComponentProps, type ReactNode, useSyncExternalStore } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
+import { Airplay, AudioLines, Monitor, Volume2 } from "lucide-react";
+import { Level } from "@/components/Level";
+import { LiveClock } from "@/components/LiveClock";
+import { deviceId } from "@/session/device-id";
+import type { LiveSource } from "../../../shared/live-input";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Button } from "@/components/ui/button";
@@ -145,36 +150,147 @@ export function SavedSourceShelf({
   );
 }
 
-/** The devices' shared inputs, while any are shared; each plays, and its other verbs are its menu. */
+/**
+ * The devices' shared inputs, while any are shared, right under Browse: each a row with its picture or mark, what it
+ * is and who shares it, where it plays now, and its one verb (Play, Join, Leave, or Open once it plays here or on the
+ * device that shares it); its other verbs are its menu.
+ */
 export function SharedSources({ hits, options }: { hits: SearchHit[]; options?: ReactNode }) {
-  const { on } = usePlayOn();
+  const { state } = useSessionGate();
   return (
-    <section aria-label="Shared sources" className="grid min-w-0 gap-stack">
+    <section aria-label="Shared sources" className="grid min-w-0 gap-2">
       <div className="flex items-center gap-4">
         <ShelfHeading title="Shared sources" />
         {options}
       </div>
-      <ul data-nav-row aria-label="Shared sources" className="flex flex-wrap gap-2">
-        {hits.map((hit, index) => (
-          <SourceChip
-            key={hit.id}
-            data-page-first={index === 0 || undefined}
-            title={hit.title}
-            meta={hit.meta}
-            aria-label={
-              hit.primary.label === "Play"
-                ? on(`Play ${hit.title}`)
-                : `${hit.primary.label} ${hit.title}`
-            }
-            disabled={hit.primary.disabled}
-            onClick={hit.primary.run}
-            menu={hit.actions.filter((action) => action.label !== hit.primary.label)}
-          />
-        ))}
+      <ul
+        data-nav-row
+        aria-label="Shared sources"
+        className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,26rem),1fr))] gap-x-6"
+      >
+        {hits.map((hit, index) => {
+          const source = state?.liveSources?.find((item) => `live:${item.id}` === hit.id);
+          return (
+            source && <SharedSourceRow key={hit.id} hit={hit} source={source} first={index === 0} />
+          );
+        })}
       </ul>
     </section>
   );
 }
+
+function SharedSourceRow({
+  hit,
+  source,
+  first,
+}: {
+  hit: SearchHit;
+  source: LiveSource;
+  first: boolean;
+}) {
+  const { state, liveSharing, tvPresentation } = useSessionGate();
+  const { on } = usePlayOn();
+  const options = useItemMenu(hit.actions.filter((action) => action.label !== hit.primary.label));
+  const here = deviceId();
+  const mine = source.deviceId === here;
+  const from =
+    source.kind === "airplay"
+      ? undefined
+      : mine
+        ? undefined
+        : state?.devices?.find((device) => device.id === source.deviceId)?.name;
+  // Where it plays now, by every Playback of it.
+  const outputs = [
+    ...new Set(
+      (state?.playbacks ?? [])
+        .filter((playback) => playback.liveSourceId === source.id)
+        .flatMap((playback) => playback.outputs.map((output) => output.deviceId)),
+    ),
+  ].filter((id) => id !== (source.intent === "live" ? undefined : source.deviceId));
+  const named = outputs.map((id) =>
+    id === here
+      ? tvPresentation
+        ? "this TV"
+        : "this device"
+      : (state?.devices?.find((device) => device.id === id)?.name ?? "another device"),
+  );
+  const listening = source.intent === "live" && outputs.includes(here);
+  const where = mine ? (
+    "You're sharing this"
+  ) : source.intent === "live" ? (
+    <LiveClock prefix={listening ? "Listening, live" : "Live"} startedAt={source.startedAt} />
+  ) : named.length ? (
+    `Playing on ${list.format(named.slice(0, 2))}${named.length > 2 ? ` and ${named.length - 2} more` : ""}`
+  ) : (
+    "Not playing anywhere yet"
+  );
+  const preview = mine ? liveSharing.current()?.stream : undefined;
+  const Mark =
+    source.kind === "airplay"
+      ? Airplay
+      : source.video
+        ? Monitor
+        : source.intent === "live" || source.kind === "microphone"
+          ? AudioLines
+          : Volume2;
+  return (
+    <li
+      {...options.item}
+      className={cn("flex min-h-16 min-w-0 items-center gap-3 py-1.5", options.item.className)}
+    >
+      <span
+        aria-hidden="true"
+        className="grid aspect-video h-11 shrink-0 place-items-center overflow-hidden rounded-md bg-muted"
+      >
+        {preview?.getVideoTracks().length ? (
+          <video
+            muted
+            autoPlay
+            playsInline
+            ref={(video) => {
+              if (video && video.srcObject !== preview) video.srcObject = preview;
+            }}
+            className="size-full object-cover"
+          />
+        ) : (
+          <Mark className="size-5 text-muted-foreground" />
+        )}
+      </span>
+      <span className="grid min-w-0 flex-1 text-sm leading-snug">
+        <span className="truncate font-medium" title={hit.title}>
+          {hit.title}
+        </span>
+        <span className="truncate text-muted-foreground">
+          {[hit.meta, from && `from ${from}`].filter(Boolean).join(", ")}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+          {(listening || (!mine && named.length > 0)) && <Level moving className="shrink-0" />}
+          <span className="truncate">{where}</span>
+        </span>
+      </span>
+      <Button
+        {...options.target}
+        data-page-first={first || undefined}
+        variant={
+          hit.primary.label === "Open" || hit.primary.label === "Leave" ? "secondary" : "default"
+        }
+        className="shrink-0 rounded-full px-4"
+        aria-label={
+          hit.primary.label === "Play"
+            ? on(`Play ${hit.title}`)
+            : `${hit.primary.label} ${hit.title}`
+        }
+        disabled={hit.primary.disabled}
+        onClick={hit.primary.run}
+      >
+        {hit.primary.label}
+      </Button>
+      <ItemMenu menu={options} title={hit.title} className="size-control shrink-0" />
+    </li>
+  );
+}
+
+const list = new Intl.ListFormat("en", { type: "conjunction" });
 
 /**
  * The sources whose latest answer here was a failure (their home, a page or a search), by their catalogue queries'
@@ -327,42 +443,6 @@ export function DoorBody({ label, meta }: { label: string; meta: string }) {
 }
 
 /** A shared source as a chip with its name and a muted word after it, one target; its other verbs are its menu, as a tile's are. */
-function SourceChip({
-  title,
-  meta,
-  onClick,
-  menu = [],
-  ...props
-}: {
-  title: string;
-  meta?: string;
-  onClick: () => void;
-  menu?: MenuAction[];
-} & Omit<ComponentProps<typeof Button>, "title" | "onClick" | "children">) {
-  const options = useItemMenu(menu);
-  return (
-    <li
-      {...options.item}
-      className={cn("relative flex min-w-0 max-w-full", options.item.className)}
-    >
-      <Button
-        variant="secondary"
-        {...options.target}
-        {...props}
-        className={cn(
-          "h-auto min-h-control min-w-0 max-w-full flex-wrap text-body font-normal whitespace-normal [overflow-wrap:anywhere]",
-          options.shown.length && "pr-10",
-        )}
-        onClick={onClick}
-      >
-        <span>{title}</span>
-        {meta && <span className="font-normal text-muted-foreground">{meta}</span>}
-      </Button>
-      <ItemMenu menu={options} title={title} className="absolute top-0 right-1 size-control" />
-    </li>
-  );
-}
-
 /** A Home shelf that couldn't load, in that shelf's place. */
 export function Failed({
   title,

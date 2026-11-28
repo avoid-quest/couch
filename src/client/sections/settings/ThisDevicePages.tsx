@@ -9,7 +9,7 @@ import { SectionRowsSettings } from "./SectionRowsSettings";
 import { Switch } from "@/components/ui/switch";
 import { homeRows, useHomeRows } from "@/sections/home/home-rows";
 import { AddSection, useFollowedRows } from "@/sections/home/FollowedSettings";
-import { ShareButton } from "@/sections/share/ShareControl";
+import { ShareButton } from "@/sections/share/ShareDialog";
 import { useShowShare } from "@/sections/share/show-share";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";

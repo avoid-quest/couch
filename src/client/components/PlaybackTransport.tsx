@@ -1,14 +1,14 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ClientSessionState } from "@/session/session";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlayButton, Time, TimeSlider, useMedia } from "@videojs/react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Action } from "../../shared/protocol";
 import { isRadio } from "../../shared/radio";
-import { heldOutOf } from "../../shared/live-input";
+import { heldOutOf, liveTitle } from "../../shared/live-input";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
@@ -20,6 +20,23 @@ import { useDurationClock } from "./DurationBar";
 import { CouchMedia } from "@/session/couch-media";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { LiveClock } from "./LiveClock";
+import { subscribeTapToHear, tapToHear as hear, waitingForTap } from "@/session/tap-to-hear";
+import { leftLive } from "@/toasts";
+
+/** Whether this browser waits for a tap before it plays sound: the player then offers Tap to hear where Play is. */
+const useWaitingForTap = () => useSyncExternalStore(subscribeTapToHear, waitingForTap, () => false);
+function TapToHear({ pageFirst, children }: { pageFirst?: boolean; children: ReactNode }) {
+  if (!useWaitingForTap()) return children;
+  return (
+    <Button
+      data-page-first={pageFirst}
+      className="h-(--player-target) rounded-full px-4"
+      onClick={hear}
+    >
+      Tap to hear
+    </Button>
+  );
+}
 
 type Props = {
   state: ClientSessionState;
@@ -345,6 +362,7 @@ export function PlaybackTransport({
         connected={connected}
         run={run}
         pageFirst={pageFirst}
+        quiet={quiet}
         className={className}
       />
     ) : null;
@@ -404,45 +422,54 @@ export function PlaybackTransport({
       role="group"
       aria-label="Playback controls"
     >
-      {/* Video.js's own Play button: CouchMedia sends Play, Pause, Replay and Try again to Core. */}
-      <PlayButton
-        disabled={!enabled[0]}
-        label={(button) => slotLabel(button, failed)}
-        render={(props, button) => (
-          <Button
-            {...props}
-            data-page-first={first(0)}
-            data-play-button
-            variant="ghost"
-            size="icon-lg"
-            className={transportInk}
-            title={slotLabel(button, failed)}
-            disabled={!enabled[0]}
-          >
-            {button.ended || failed ? (
-              <RotateCcw aria-hidden="true" />
-            ) : button.paused ? (
-              <Play aria-hidden="true" className="fill-current" />
-            ) : (
-              <Pause aria-hidden="true" className="fill-current" />
-            )}
-          </Button>
-        )}
-      />
-      {quiet ? next : stop}
-      {quiet ? stop : next}
+      {/* A browser that needs a gesture before it plays sound asks for one here, in Play's place (#644). */}
+      <TapToHear pageFirst={first(0)}>
+        {/* Video.js's own Play button: CouchMedia sends Play, Pause, Replay and Try again to Core. */}
+        <PlayButton
+          disabled={!enabled[0]}
+          label={(button) => slotLabel(button, failed)}
+          render={(props, button) => (
+            <Button
+              {...props}
+              data-page-first={first(0)}
+              data-play-button
+              variant="ghost"
+              size="icon-lg"
+              className={transportInk}
+              title={slotLabel(button, failed)}
+              disabled={!enabled[0]}
+            >
+              {button.ended || failed ? (
+                <RotateCcw aria-hidden="true" />
+              ) : button.paused ? (
+                <Play aria-hidden="true" className="fill-current" />
+              ) : (
+                <Pause aria-hidden="true" className="fill-current" />
+              )}
+            </Button>
+          )}
+        />
+      </TapToHear>
+      {/* A share follows its source: nothing to skip. */}
+      {quiet ? !current?.liveSourceId && next : stop}
+      {quiet ? stop : !current?.liveSourceId && next}
     </div>
   );
 }
 
-/** Audience membership is local; leaving never pauses or stops the source. */
+/**
+ * Audience membership is local; leaving never pauses or stops the source. Leaving closes the player here, and its message
+ * offers Join again. While the browser waits for a tap, Tap to hear takes Join's place, with Leave beside it. `quiet`
+ * (Now playing's sizes) keeps the buttons; the side player and the dock say the rest in their own lines.
+ */
 export function LiveParticipation({
   state,
   connected,
   run,
   pageFirst,
+  quiet = false,
   className,
-}: Props & { pageFirst?: boolean; className?: string }) {
+}: Props & { pageFirst?: boolean; quiet?: boolean; className?: string }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const busy = useRef(false);
@@ -453,21 +480,38 @@ export function LiveParticipation({
   const publisher = !!source && heldOutOf(source) === deviceId();
   const output = state.outputs?.find((output) => output.deviceId === deviceId());
   const error = receiving ? output?.error || state.player.error : null;
+  const waiting = useWaitingForTap() && receiving;
   if (!source || publisher) return null;
   const label = receiving ? "Leave" : "Join";
+  const join = () => void run({ type: "playLive", sourceId: source.id, deviceId: deviceId() });
   return (
     <div
       data-live-participation
       className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}
     >
-      <span className="text-sm text-muted-foreground">
-        <LiveClock startedAt={source.startedAt} />
-      </span>
+      {!quiet && (
+        <span className="text-sm text-muted-foreground">
+          <LiveClock startedAt={source.startedAt} />
+        </span>
+      )}
+      {waiting && (
+        <Button
+          data-page-first={pageFirst || undefined}
+          className="h-(--player-target) rounded-full px-5"
+          onClick={hear}
+        >
+          Tap to hear
+        </Button>
+      )}
       <Button
-        data-page-first={pageFirst || undefined}
+        data-page-first={(!waiting && pageFirst) || undefined}
+        variant={waiting ? "ghost" : "default"}
         aria-busy={pending || undefined}
         aria-disabled={pending || undefined}
-        className="aria-disabled:opacity-50"
+        className={cn(
+          "aria-disabled:opacity-50",
+          !waiting && "h-(--player-target) rounded-full px-5",
+        )}
         disabled={!connected || (receiving && !state.player.playbackId)}
         onClick={async () => {
           if (busy.current || (receiving && !state.player.playbackId)) return;
@@ -475,13 +519,13 @@ export function LiveParticipation({
           setPending(true);
           setFailed(false);
           try {
-            setFailed(
-              !(await run(
-                receiving
-                  ? { type: "leave", playbackId: state.player.playbackId! }
-                  : { type: "playLive", sourceId: source.id, deviceId: deviceId() },
-              )),
+            const done = await run(
+              receiving
+                ? { type: "leave", playbackId: state.player.playbackId! }
+                : { type: "playLive", sourceId: source.id, deviceId: deviceId() },
             );
+            setFailed(!done);
+            if (done && receiving) leftLive(liveTitle(source), join);
           } catch {
             setFailed(true);
           } finally {
@@ -496,7 +540,7 @@ export function LiveParticipation({
         role="status"
         className={cn(
           "min-w-0 text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]",
-          pending && "sr-only",
+          (pending || quiet) && "sr-only",
         )}
       >
         {pending
@@ -506,21 +550,25 @@ export function LiveParticipation({
           : receiving && !error
             ? !connected
               ? "Reconnecting…"
-              : state.player.status === "playing" && !state.player.buffering
-                ? "Listening"
-                : "Waiting for audio…"
+              : waiting
+                ? "Sound is waiting for a tap."
+                : state.player.status === "playing" && !state.player.buffering
+                  ? "Listening"
+                  : "Waiting for audio…"
             : ""}
       </span>
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {failed && (
-        <Alert variant="destructive">
-          <AlertDescription>Couldn't {receiving ? "leave" : "join"}. Try again.</AlertDescription>
-        </Alert>
-      )}
+      {(error || failed) &&
+        (quiet ? (
+          <span role="alert" className="min-w-0 truncate text-xs text-muted-foreground">
+            {error || `Couldn't ${receiving ? "leave" : "join"}. Try again.`}
+          </span>
+        ) : (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {error || `Couldn't ${receiving ? "leave" : "join"}. Try again.`}
+            </AlertDescription>
+          </Alert>
+        ))}
     </div>
   );
 }

@@ -1,12 +1,34 @@
 import { deviceId } from "@/session/device-id";
 import { useMemo } from "react";
 import { useSessionGate } from "@/session/session-context";
+import { playbackControls } from "@/session/playback-controls";
+import { showShare } from "@/sections/share/share-view";
+import { useShell } from "@/sections/shell/shell-context";
 import type { SearchHit } from "./SearchOnlineResults";
-import { heldOutOf, liveTitle } from "../../../shared/live-input";
+import { heldOutOf, liveTitle, type LiveSource } from "../../../shared/live-input";
 
-/** Active device inputs use the same search rows and playback actions as other sources. */
+/** What a shared source is, in a few words: "Screen with sound", "System audio", "Side A, track 3, Live audio". */
+const sharedKind = (source: LiveSource) =>
+  source.intent === "live"
+    ? [source.metadata?.description, "Live audio"].filter(Boolean).join(", ")
+    : source.video
+      ? source.audio
+        ? "Screen with sound"
+        : "Screen"
+      : source.kind === "system-audio"
+        ? "System audio"
+        : source.kind === "airplay"
+          ? "AirPlay"
+          : "Audio input";
+
+/**
+ * Active device inputs use the same search rows and playback actions as other sources. Each has one verb: Play, Join or
+ * Leave for Live audio, and Open where it already plays here or on the device that shares it, which shows it in the
+ * player.
+ */
 export function useLiveSourceHits(query: string): SearchHit[] {
   const { state, connected, run } = useSessionGate();
+  const { selectPlayback, openPlayer } = useShell();
   return useMemo(
     () =>
       (state?.liveSources ?? [])
@@ -16,39 +38,50 @@ export function useLiveSourceHits(query: string): SearchHit[] {
           ),
         )
         .map((source) => {
-          // Play on the publisher, or while controlling it, waits in Where it plays to choose receivers.
+          const here = deviceId();
           const live = source.intent === "live";
-          const publisher = live && heldOutOf(source) === deviceId();
-          const disabled = !connected || publisher;
-          const primary = publisher ? "Sharing" : live ? "Join" : "Play";
+          const mine = source.deviceId === here;
+          // Where it plays on this device: a Playback of it with this device among its outputs. The one this device
+          // controls says it through its controls: a listener there can Leave.
+          const playback = state?.playbacks?.find(
+            (item) =>
+              item.liveSourceId === source.id &&
+              item.outputs.some((output) => output.deviceId === here) &&
+              (item.id !== state.playback || !live || playbackControls(state).leave),
+          );
           const play = () => {
             void run({
               type: "playLive",
               sourceId: source.id,
-              ...(live ? { deviceId: deviceId() } : {}),
+              ...(live ? { deviceId: here } : {}),
             });
           };
-          const label = source.video
-            ? source.audio
-              ? "Screen and audio"
-              : "Screen without audio"
-            : source.kind === "system-audio"
-              ? "System audio"
-              : source.kind === "airplay"
-                ? "AirPlay"
-                : "Audio input";
-          const meta = live ? "Live audio" : label;
+          const primary = mine
+            ? { label: "Open", disabled: false, run: () => showShare(true) }
+            : live && playback
+              ? {
+                  label: "Leave",
+                  disabled: !connected,
+                  run: () => void run({ type: "leave", playbackId: playback.id }),
+                }
+              : playback
+                ? {
+                    label: "Open",
+                    disabled: !connected,
+                    run: () => void selectPlayback(playback.id).then(() => openPlayer()),
+                  }
+                : { label: live ? "Join" : "Play", disabled: !connected, run: play };
           return {
             id: `live:${source.id}`,
             source: "Shared sources",
             title: liveTitle(source),
-            meta: source.metadata?.description || (source.name.endsWith(` · ${meta}`) ? "" : meta),
+            meta: sharedKind(source),
             kind: "Stream",
             live: true,
             video: source.video,
-            primary: { label: primary, disabled, run: play },
+            primary,
             actions: [
-              { label: primary, disabled, run: play },
+              primary,
               {
                 label: "Play on",
                 disabled: !connected,
@@ -84,6 +117,6 @@ export function useLiveSourceHits(query: string): SearchHit[] {
             ],
           };
         }),
-    [state?.liveSources, connected, run, query],
+    [state?.liveSources, state?.playbacks, connected, run, query, selectPlayback, openPlayer],
   );
 }

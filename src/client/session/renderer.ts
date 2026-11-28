@@ -1,3 +1,4 @@
+import { reportTapToHear } from "./tap-to-hear";
 import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
 import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
@@ -58,7 +59,6 @@ const ptsOffsets = new Map<number, { offset: number; start: number }>();
 let report: ((state: PlayerState) => void) | undefined;
 let reportedAt = 0;
 let reported = "";
-const blockedListeners = new Set<(blocked: boolean) => void>();
 
 // Chromium plays YouTube's VP9 (#644 ticket 1); other engines get H.264.
 export const playsVp9 =
@@ -187,9 +187,8 @@ const send = (positionChanged = false) => {
 };
 // Synced sound's player waits for a tap too (#644 ticket 10); this unlocks it.
 let unlockSound: (() => void) | null = null;
-const notify = () => {
-  for (const listener of blockedListeners) listener(blocked || !!unlockSound);
-};
+// "Tap to hear" (#644): whether this browser is waiting for a gesture before it plays sound (tap-to-hear.ts).
+const notify = () => reportTapToHear(blocked || !!unlockSound, hear);
 const setBlocked = (value: boolean) => {
   if (blocked === value) return;
   blocked = value;
@@ -919,15 +918,7 @@ export function renderInto(parent: HTMLElement | null) {
   };
 }
 
-// "Tap to hear" (#644): whether this browser is waiting for a gesture before it plays sound.
-export function onBlocked(listener: (blocked: boolean) => void) {
-  blockedListeners.add(listener);
-  listener(blocked || !!unlockSound);
-  return () => {
-    blockedListeners.delete(listener);
-  };
-}
-export function hear() {
+function hear() {
   resumeCompression();
   unlockSound?.();
   unlockSound = null;

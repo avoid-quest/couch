@@ -38,6 +38,8 @@ type Publication = {
   frameRate: LiveVideoFrameRate;
   pictureWork?: Promise<void>;
   preview: MediaStream;
+  // An audio input's sound alone, for its level meter; none for a native input or a picture.
+  input?: MediaStream;
   surface?: LiveSelection["surface"];
   since: number;
   uploadId?: string;
@@ -56,12 +58,13 @@ type Peer = {
 };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
- * silent preview; relay: a TURN relay is offered to its connections.
+ * silent preview; input: an audio input's sound, for its level meter; relay: a TURN relay is offered to its connections.
  */
 export type LiveSharing = {
   captureFormat?: AudioCaptureFormat;
   source: LiveSource;
   stream: MediaStream;
+  input?: MediaStream;
   quality: LiveVideoQuality;
   frameRate: LiveVideoFrameRate;
   muted: boolean;
@@ -130,6 +133,8 @@ export function createLiveSession(options: {
   uploadUrl?: (sourceId: string, key: string, uploadId: string) => string;
   failed: (error: Error) => void;
   published: (source: LiveSource | null) => void;
+  /** The system ended the capture (or closed its window): the share ends here, and says so. */
+  ended?: (source: LiveSource, surface?: LiveSelection["surface"]) => void;
 }) {
   let generation = 0;
   let closed = false;
@@ -796,16 +801,24 @@ export function createLiveSession(options: {
         }
         if (selection.intent === "live" && !audioFrames && !nativeAudioId)
           throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
+        // Named as people say it: "Studio Mac screen", "Chess on Studio Mac", "Studio Mac sound".
+        const name = localDeviceName();
         const label =
           selection.kind === "microphone"
-            ? "Audio input"
+            ? "audio input"
             : selection.kind === "system-audio"
-              ? "System audio"
-              : "Screen";
+              ? "sound"
+              : selection.surface === "window"
+                ? "window"
+                : "screen";
         const source: LiveSource = {
           id: sourceId,
           deviceId: deviceId(),
-          name: `${localDeviceName() ?? "This device"} · ${label}`,
+          name: !name
+            ? label[0]!.toUpperCase() + label.slice(1)
+            : selection.windowName
+              ? `${selection.windowName} on ${name}`
+              : `${name} ${label}`,
           kind: selection.kind,
           audio: !!nativeAudioId || !!audioTracks.length,
           video: !!videoTracks.length,
@@ -829,6 +842,9 @@ export function createLiveSession(options: {
           quality,
           frameRate,
           preview: new MediaStream(videoTracks),
+          ...(selection.kind === "microphone" && audioTracks.length
+            ? { input: new MediaStream(audioTracks) }
+            : {}),
           surface: selection.surface,
           since: Date.now(),
         };
@@ -839,7 +855,9 @@ export function createLiveSession(options: {
           track.addEventListener(
             "ended",
             () => {
-              if (publication === current) void end().catch(() => {});
+              if (publication !== current) return;
+              if (current.published) options.ended?.(current.source, current.surface);
+              void end().catch(() => {});
             },
             { once: true },
           );
@@ -885,6 +903,7 @@ export function createLiveSession(options: {
         quality: current.quality,
         frameRate: current.frameRate,
         stream: current.preview,
+        input: current.input,
         surface: current.surface,
         since: current.since,
         relay: options.iceServers.some((server) =>
