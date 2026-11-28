@@ -35,18 +35,16 @@ export function SettingsRow({
       )}
       {...props}
     >
-      <FieldContent className="min-w-0 basis-60 gap-1">
+      <FieldContent className="min-w-0 basis-60 gap-1 [overflow-wrap:anywhere]">
         {htmlFor ? (
           <FieldLabel htmlFor={htmlFor} className={cn("items-center", labelLine)}>
             {label}
           </FieldLabel>
         ) : (
-          <FieldTitle className={cn("min-w-0 break-words", labelLine)}>{label}</FieldTitle>
+          <FieldTitle className={cn("min-w-0", labelLine)}>{label}</FieldTitle>
         )}
         {description && (
-          <FieldDescription className="max-w-[46ch] text-pretty break-words">
-            {description}
-          </FieldDescription>
+          <FieldDescription className="max-w-[46ch] text-pretty">{description}</FieldDescription>
         )}
       </FieldContent>
       {Children.toArray(children).length > 0 && (
@@ -76,7 +74,7 @@ export function SettingsSection({
   children?: ReactNode;
 }) {
   return (
-    <FieldSet className={cn("min-w-0 gap-2", className)} {...props}>
+    <FieldSet className={cn("min-w-0 gap-2 [overflow-wrap:anywhere]", className)} {...props}>
       {title && (
         <FieldLegend className="mb-0 font-heading data-[variant=legend]:text-heading font-semibold">
           {title}

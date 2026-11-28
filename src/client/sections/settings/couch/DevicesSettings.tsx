@@ -51,7 +51,7 @@ function DeviceName({
         aria-hidden="true"
         className={cn("size-4 shrink-0", !online && "text-muted-foreground")}
       />
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </span>
   );
 }
@@ -211,7 +211,9 @@ export function DevicesSettings({
       <SettingsSection data-devices>
         {!host && manager && (
           <SettingsRow label="Name" description="This Couch's name on every device.">
-            <span className="text-sm text-muted-foreground">{hostName}</span>
+            <span className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {hostName}
+            </span>
             <RenameCouch
               credentials={credentials}
               connected={connected}

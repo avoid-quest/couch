@@ -134,7 +134,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
             <SettingsRow
               key={source.id}
               data-radio-source-id={source.id}
-              label={<span className="break-words">{source.name}</span>}
+              label={source.name}
               description={
                 <>
                   <span className="block break-all">{source.url}</span>

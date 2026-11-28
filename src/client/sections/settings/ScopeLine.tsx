@@ -25,7 +25,7 @@ export function ScopeLine({ owner, couch }: { owner: "device" | "couch"; couch: 
       ) : (
         <DeviceGlyph className="size-3.5 shrink-0" />
       )}
-      <span className="min-w-0">
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         {owner === "couch"
           ? `Changes here are for everyone on ${couch}`
           : "Changes here stay on this device"}
