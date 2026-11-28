@@ -594,3 +594,56 @@ test(
     }
   },
 );
+
+test(
+  "Undo of Move here leaves its publisher out once it stops sharing with the one who moved it",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      await f.publish("screen");
+      await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
+      await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+      await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id });
+      await until(() => !!f.publisher.state.playback);
+      const screen = f.publisher.state.playback!;
+      const joined = await f.receiver.command({
+        type: "playLive",
+        sourceId: "screen",
+        deviceId: f.receiver.id,
+      });
+      assert.equal(joined.ok, true, joined.error ?? "");
+      await until(() => direct(f.receiver.load()));
+      f.receiver.report();
+      await until(() => f.receiver.state.player.status === "playing");
+      const held = () =>
+        f.publisher.state.playbacks?.find((playback) => playback.id === screen)?.held?.deviceId;
+      assert.equal(held(), f.publisher.id);
+      const before = f.receiver.state;
+      const moved = await f.receiver.command({ type: "solo", deviceId: f.receiver.id });
+      assert.equal(moved.ok, true, moved.error ?? "");
+      await until(() => held() === undefined);
+      const plan = madeWay(before, f.receiver.state);
+      assert.deepEqual(plan.undo.restore, [
+        { playbackId: screen, outputs: [], held: f.publisher.id },
+      ]);
+      await f.publisher.command({ type: "sharing", sharing: { audio: false, video: false } });
+      await until(() => consent(f.receiver, f.publisher.id)?.audio === false);
+      await assert.rejects(
+        undoMadeWay(
+          plan,
+          async (action) => {
+            const result = await f.receiver.command(action);
+            if (!result.ok) throw new Error(result.error);
+          },
+          () => f.receiver.state,
+        ),
+        /is not sharing/,
+      );
+      assert.equal(held(), undefined);
+      assert.deepEqual(receivers(f.publisher), [f.receiver.id]);
+    } finally {
+      await f.close();
+    }
+  },
+);

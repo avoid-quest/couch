@@ -5779,6 +5779,8 @@ export async function createHub(options: HubOptions) {
                   throw stale(`${nameOf(held)} shares something else`);
                 if (lockedByLive(deviceId, held))
                   throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+                // Holding it again needs its consent now, as when the actor plays it there.
+                requireOutput(publisher, deviceId);
               }
               return { target, permitted, outputs, publisher };
             });
