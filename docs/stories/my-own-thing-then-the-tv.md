@@ -1,36 +1,13 @@
 # My own thing, then onto the TV
 
-Status: preview · Scenes: personal, group
+Status: preview
 
-The TV plays something for everyone. I watch or listen to my own thing on my
-phone or laptop meanwhile, and later move it to the TV.
+The kids are watching cartoons on the TV. Alessio chooses **Play on** his phone
+for a match and watches it on the sofa while the cartoons carry on. When they
+finish, he opens **Where it plays** and taps **Move here** on the TV's row: the
+match picks up on the TV where it was, with its **Up next**, and his phone
+stops.
 
-## Journey
+## Good to know
 
-1. On an item, **Play on** → my device (marked **This device**). The TV keeps
-   playing its own thing.
-2. While more than one thing plays, the player's **on {device}** lists them all.
-   I pick the one I control. **Play** and **Play on** control what they start.
-3. Later, in my player's **Where it plays**, the TV's row → **Move here**.
-4. My Playback, with its position and Up next, moves to the TV; my device stops.
-5. **Stop** stops only what I control. Then I control what still plays on my
-   device, else the newest thing playing.
-
-## Done when
-
-- Several Playbacks run at once, each with its own Up next and devices.
-- **Play on** a device takes it out of the Playback it was in; the others keep
-  playing.
-- Every running Playback can be controlled from any device allowed to; none is
-  left playing without controls.
-- **Move here** moves the whole Playback, and is refused rather than taking a
-  device another person keeps private.
-
-## Demo
-
-Needs: the TV (or the HDMI display) and a laptop or phone. Content: two
-different videos.
-
-## Known issues
-
-- **Move here** waits until the item has started playing.
+- **Move here** waits until the match has started playing.

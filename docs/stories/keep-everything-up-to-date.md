@@ -1,33 +1,14 @@
 # Keep everything up to date
 
-Status: preview · Scenes: admin
+Status: preview
 
-From my phone, I keep the Couch, its media tools and every Couch app in the
-house up to date, without walking to each device.
+On a Sunday morning Marta opens **Settings → Updates** on her phone and taps
+**Check for updates**. The Couch, the TV, the laptop in the study and the media
+tools are all listed. She reads **What's new**, taps **Update 3 devices**, and
+because the kids are watching cartoons, Couch asks before it stops them.
 
-## Journey
+## Good to know
 
-1. **Settings → Updates → Check for updates**.
-2. The page lists each Couch app (the Couch computer, the TV, desktops) and the
-   **Media tools** (yt-dlp, FFmpeg, QuickJS, mpv).
-3. **What's new** shows a ready update's release notes.
-4. **Update <name>** or **Update N devices**; if something is playing, **Stop
-   playback and update**.
-5. Each app can follow **Stable** or **Preview**.
-
-## Done when
-
-- One page updates the Couch, its media tools and connected apps, in a safe
-  order.
-- Nothing playing is interrupted without asking.
-- A TV set up with the Debian appliance install goes back to the previous version
-  when an update fails to start.
-
-## Demo
-
-Needs: an installed Couch on the previous preview and a phone.
-
-## Known issues
-
-- Browsers and phones aren't update targets; they load the Couch's page.
-- Stable has no release yet.
+- Phones and browsers aren't listed: they always open the Couch's current
+  version.
+- **Stable** has no release yet; every app follows **Preview**.
