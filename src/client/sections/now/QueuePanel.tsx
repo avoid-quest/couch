@@ -93,7 +93,8 @@ export function hasUpNext(state: ClientSessionState | null | undefined) {
 
 /**
  * Up next's button in the full player's band. While there is nothing to show it keeps its slot, disabled, and
- * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip).
+ * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip). A shared screen or sound
+ * has no Up next of its own: there it shows only once something is queued after it.
  */
 export function UpNextButton({
   state,
@@ -102,6 +103,8 @@ export function UpNextButton({
 }: ComponentProps<typeof Button> & { state: ClientSessionState | null }) {
   if (!playbackControls(state).queue) return null;
   const empty = !hasUpNext(state) && props["aria-expanded"] !== true;
+  if (empty && state?.playbacks?.find((item) => item.id === state.playback)?.liveSourceId)
+    return null;
   return (
     <span title={empty ? "Nothing queued" : undefined} className={cn("inline-flex", className)}>
       <Button
