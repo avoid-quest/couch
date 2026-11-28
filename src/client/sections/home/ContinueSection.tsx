@@ -15,6 +15,7 @@ import { historyShape, majorityShape } from "@/art-shape";
 import { mediaCaption, metaLine } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
 import { historyReference, useDetailAction, useForLaterToggle } from "@/sections/details/ItemPage";
+import { isTvPresentation } from "@/session/presentation";
 import type { PlayOn } from "../../../shared/protocol";
 import type { HistoryItem } from "../../../shared/viewing";
 import { BoardArt } from "./HomeBoard";
@@ -140,10 +141,24 @@ function Lead({
   const [choosing, setChoosing] = useState(false);
   const { devices } = usePlayOn();
   const destination = usePlayDestination();
-  const options = useItemMenu(menu);
+  const save = useForLaterToggle(item.url, () => historyReference(item), useDetailAction());
+  // The TV has no Save or "…" beside Resume: a held OK opens the menu, from the artwork, and Save is in it.
+  const tv = isTvPresentation();
+  const options = useItemMenu(
+    tv && item.url
+      ? [
+          ...menu,
+          {
+            label: save.saved ? "Saved" : "Save",
+            pressed: save.saved,
+            disabled: save.disabled,
+            run: save.run,
+          },
+        ]
+      : menu,
+  );
   const light = useItemLight(item.thumbnail);
   const level = useLevel(item.url);
-  const save = useForLaterToggle(item.url, () => historyReference(item), useDetailAction());
   const caption = mediaCaption(item);
   const meta = metaLine(caption.lead ?? programme(item), left(item));
   const makesWay = !playing && destination.playing;
@@ -200,6 +215,11 @@ function Lead({
             )}
           </span>
         </Button>
+        {tv && (
+          <span className="pointer-events-none absolute inset-x-0 top-0 aspect-video">
+            <ItemMenu hidden menu={options} title={item.title} />
+          </span>
+        )}
       </div>
       <div data-nav-row className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="inline-flex max-w-full min-w-0 rounded-full bg-secondary">
@@ -232,16 +252,10 @@ function Lead({
             />
           )}
         </span>
-        {item.url && (
-          <SaveToggle
-            size="icon"
-            className="tv:hidden"
-            saved={save.saved}
-            disabled={save.disabled}
-            onClick={save.run}
-          />
+        {!tv && item.url && (
+          <SaveToggle size="icon" saved={save.saved} disabled={save.disabled} onClick={save.run} />
         )}
-        <ItemMenu menu={options} title={item.title} className="tv:hidden" />
+        {!tv && <ItemMenu menu={options} title={item.title} />}
       </div>
       {makesWay && (
         <p className="-mt-1 text-meta text-muted-foreground">
