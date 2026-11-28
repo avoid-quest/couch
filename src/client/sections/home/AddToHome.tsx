@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { House, HousePlus } from "lucide-react";
 import { providerPageQuery } from "@/api/providers";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -313,28 +313,16 @@ const channelTabs = (live: boolean) =>
   live ? ["streams", "videos", "shorts"] : ["videos", "shorts", "streams"];
 
 /**
- * The followed section a playing item's list is: its season or list itself, or for a YouTube channel the tab it
- * plays from, by the channel's canonical address (the one its page and its videos share). A tab followed by another
- * address (its @handle) is known by the channel its items name, once Home has read them.
+ * The followed section a playing item's list is: its season or list itself, or for a YouTube channel the tab it plays
+ * from (a live video's Live streams first).
  */
-function followedFor(
-  entry: QueueEntry,
-  target: AddTarget,
-  follows: HomeFollow[],
-  channelOf: (follow: HomeFollow) => string | undefined,
-) {
+function followedFor(entry: QueueEntry, target: AddTarget, follows: HomeFollow[]) {
   const same = follows.find((follow) => follow.url === target.url);
   if (same || target.provider !== "youtube" || target.url !== entry.creator?.url) return same;
-  const tabs = channelTabs(!!entry.endless);
-  const tab = (follow: HomeFollow) => tabs.indexOf(new URL(follow.url).pathname.split("/").at(-1)!);
-  return follows
-    .filter((follow) => follow.provider === "youtube" && tab(follow) >= 0)
-    .filter(
-      (follow) =>
-        follow.url === `${target.url.replace(/\/+$/, "")}/${tabs[tab(follow)]}` ||
-        channelOf(follow) === target.url,
-    )
-    .sort((a, b) => tab(a) - tab(b))[0];
+  const channel = target.url.replace(/\/+$/, "");
+  return channelTabs(!!entry.endless)
+    .map((tab) => follows.find((follow) => follow.url === `${channel}/${tab}`))
+    .find(Boolean);
 }
 
 /**
@@ -342,23 +330,12 @@ function followedFor(
  * person to that section; a section hidden there says so, and shows again as it is opened.
  */
 export function AddToHomeButton({ entry }: { entry: QueueEntry }) {
-  const { changeSection, credentials } = useShell();
-  const client = useQueryClient();
+  const { changeSection } = useShell();
   const follows = useHomeFollows();
   const { rows } = useHomeRows();
   const target = entryTarget(entry);
   if (!target) return null;
-  const followed = followedFor(
-    entry,
-    target,
-    follows,
-    (follow) =>
-      client
-        .getQueryData<ProviderPage>(
-          providerPageQuery(credentials, follow.provider, { url: follow.url }).queryKey,
-        )
-        ?.items.find((item) => item.creator)?.creator?.url,
-  );
+  const followed = followedFor(entry, target, follows);
   if (followed) {
     const hidden = rows.some((row) => row.id === followed.id && !row.shown);
     return (
