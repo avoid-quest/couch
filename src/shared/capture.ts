@@ -53,4 +53,11 @@ export type NativeAudioInput = {
   nominalRate: 44100 | 48000;
   ownerHalBufferFrames: number;
 };
-export type AudioInput = { deviceId: string; label: string; nativeChannels?: number };
+// meterId: the same device as the browser names it, read only to show its level (a native input's sound never
+// reaches the page).
+export type AudioInput = {
+  deviceId: string;
+  label: string;
+  nativeChannels?: number;
+  meterId?: string;
+};

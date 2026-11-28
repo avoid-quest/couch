@@ -654,7 +654,7 @@ export async function createHub(options: HubOptions) {
         const source = {
           id,
           deviceId: AIRPLAY_PUBLISHER,
-          name: `AirPlay · ${sender}`,
+          name: `AirPlay from ${sender}`,
           kind: "airplay" as const,
           audio: true,
           video: false,
@@ -5458,7 +5458,8 @@ export async function createHub(options: HubOptions) {
             reconcile(playback);
             broadcast();
           } else if (action.type === "leave") {
-            playback = playing(action.playbackId);
+            // The player names its item's playbackId; Home's Shared sources names the Playback itself.
+            playback = playing(action.playbackId) ?? playbacks.get(action.playbackId);
             if (!playback || !playback.outputs.some((output) => output.deviceId === deviceId))
               throw new ControllerError("This device is no longer receiving that playback.", 409);
             leave(playback, deviceId);

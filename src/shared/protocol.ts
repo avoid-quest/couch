@@ -273,6 +273,7 @@ export type Action =
     }
   | { type: "updateLiveMetadata"; sourceId: string; metadata: LiveMetadata }
   | { type: "endLive"; sourceId: string }
+  // A listener leaves a Playback: its item's playbackId, or its PlaybackSummary id.
   | { type: "leave"; playbackId: string }
   // The host or an administrator removes a Live audio listener from a Playback (its PlaybackSummary id).
   | { type: "removeLiveListener"; playbackId: string; deviceId: string }

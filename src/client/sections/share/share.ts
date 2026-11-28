@@ -150,6 +150,7 @@ export function selectionOf(
           videoFrameRate: choice.frameRate ?? defaultLiveFrameRate,
           includeAudio: choice.sound,
           surface: kind.pictures === "screen" ? ("monitor" as const) : ("window" as const),
+          ...(kind.pictures === "window" && source ? { windowName: source.name } : {}),
         }
       : {}),
     ...(kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default"

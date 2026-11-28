@@ -213,7 +213,7 @@ test(
         assert.equal(join.ok, false, "deviceId" in action ? "Play on" : "Play");
         assert.equal(
           join.error,
-          "Publisher · Screen is playing privately on Receiver. It can join when they let other devices use their speakers or screen.",
+          "Publisher screen is playing privately on Receiver. It can join when they let other devices use their speakers or screen.",
         );
       }
       assert.equal(
@@ -342,7 +342,7 @@ test(
       await f.publisher.command({ type: "next", playbackId: f.publisher.state.player.playbackId! });
       await until(
         () =>
-          playingNow(f.receiver) === "Publisher · Screen" &&
+          playingNow(f.receiver) === "Publisher screen" &&
           receivers(f.receiver)?.join() === f.receiver.id,
       );
       // The normal device API: it ends the publisher's capture too.
@@ -404,7 +404,7 @@ test(
       });
       await until(
         () =>
-          playingNow(f.receiver) === "Publisher · Screen" &&
+          playingNow(f.receiver) === "Publisher screen" &&
           receivers(f.receiver)?.join() === f.receiver.id,
       );
       const screen = f.receiver.state.playback;
@@ -462,7 +462,7 @@ test(
       // The publisher keeps viewing and controlling the playback it asked for.
       assert.equal(f.receiver.state.playback, waiting);
       assert.equal(f.publisher.state.playback, waiting);
-      assert.deepEqual(titles(f.publisher), ["Publisher · Screen"]);
+      assert.deepEqual(titles(f.publisher), ["Publisher screen"]);
       const pause = await f.publisher.command({
         type: "pause",
         playbackId: f.publisher.state.player.playbackId!,

@@ -1,3 +1,4 @@
+import { SharedPlate } from "@/sections/shell/NowPlaying";
 import { Description } from "@/components/DetailHeader";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
@@ -58,7 +59,7 @@ import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { WhereItPlays } from "@/sections/shell/Outputs";
-import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
+import { SharingPill } from "@/sections/share/ShareControl";
 import { cn } from "@/lib/utils";
 import { titleFit, titleLength } from "@/components/Stage";
 import { useLocation } from "@tanstack/react-router";
@@ -256,7 +257,7 @@ export function PlayerPage({
     setInfoFor(infoKey);
   }, [infoRequest, infoKey]);
   const sharing = !!localLiveSourceId;
-  // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
+  // While this device shares, the bands stay up, so the top band's pill and its Stop stay on screen.
   const autoHide = connected && playing && !artworkStage && !sharing;
   useBottomBar(band, !!current && shown);
   useEffect(() => {
@@ -906,7 +907,7 @@ export function PlayerPage({
             )}
 
             <div className="ml-auto flex shrink-0 items-center gap-3">
-              <LiveSharingStatus />
+              <SharingPill onShow={shell.leavePlayer} />
               <div ref={setRecognitionControls} className="empty:hidden" />
               {playingMenu}
               {current && artworkStage && infoButton}
@@ -936,7 +937,7 @@ export function PlayerPage({
               </div>
             )}
             <div className="ml-auto flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
-              {sharing && <LiveSharingStatus />}
+              {sharing && <SharingPill className="self-center" onShow={shell.leavePlayer} />}
               {tvPresentation && !radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
               {playingMenu && <span className="self-center">{playingMenu}</span>}
@@ -950,7 +951,12 @@ export function PlayerPage({
           {current && artworkStage && (
             <div data-player-summary className="player-summary">
               <div ref={artFrame} data-player-art aria-hidden="true" className="player-art">
-                {artwork || <Music2 className="size-12 text-muted-foreground" />}
+                {artwork ||
+                  (current.liveSourceId && state ? (
+                    <SharedPlate state={state} entry={current} />
+                  ) : (
+                    <Music2 className="size-12 text-muted-foreground" />
+                  ))}
               </div>
               {/* The media title leads, then where it comes from; Info adds the rest under them in place. Then what's wrong, if anything. */}
               <div
@@ -1175,6 +1181,7 @@ export function PlayerPage({
                     run={run}
                     pageFirst
                     quiet
+                    onLeft={shell.leavePlayer}
                     className="player-transport"
                   />
                 )}
