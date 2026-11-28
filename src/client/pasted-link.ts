@@ -137,10 +137,11 @@ export function useListCommand(run: ((action: Action) => Promise<boolean>) | und
     async (action: Action, list: { title?: string; count?: number }, name: string) => {
       if (!run) return false;
       if (action.type !== "enqueueProvider" || action.shape !== "playlist") return run(action);
-      const loading = setTimeout(
-        () => pendingNotice(`Loading ${list.title ?? name}…`),
-        loadingDelay,
-      );
+      let showedLoading = false;
+      const loading = setTimeout(() => {
+        showedLoading = true;
+        pendingNotice(`Loading ${list.title ?? name}…`);
+      }, loadingDelay);
       const ok = await run(action).finally(() => clearTimeout(loading));
       // The snapshot with the list's Autoplay can render just after the reply.
       const answered = latest.current;
@@ -153,7 +154,8 @@ export function useListCommand(run: ((action: Action) => Promise<boolean>) | und
         notice(
           `Playing ${loaded.toLocaleString()} of ${listUnit(action.provider, shown)}, some couldn't be read`,
         );
-      else dismiss("notice");
+      // A notice from something else stays when this answered before its own showed.
+      else if (showedLoading) dismiss("notice");
       return ok;
     },
     [run],
