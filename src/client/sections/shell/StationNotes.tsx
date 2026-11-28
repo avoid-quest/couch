@@ -4,18 +4,14 @@ import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { Level } from "@/components/Level";
 import { RadioProgress, RadioSlot } from "@/components/RadioSchedule";
 import { RadioRecognition } from "@/components/RadioRecognition";
+import { SearchNames } from "@/components/SearchNames";
 import { metaLine } from "@/media-caption";
 import { useRadioClock } from "@/radio-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useShell } from "./shell-context";
 import { useUncut } from "./uncut";
 import type { QueueEntry } from "../../../shared/protocol";
-import {
-  radioHost,
-  radioNext,
-  radioShowLabels,
-  type RadioProgrammeDetails,
-} from "../../../shared/radio";
+import { radioNext, radioShowNames, type RadioProgrammeDetails } from "../../../shared/radio";
 
 /**
  * A station's notes, where the side player keeps Up next for everything else: its name, that it's on air, then the
@@ -51,12 +47,14 @@ export function StationNotes({
   const next = radioNext(guide, useRadioClock(guide ? [guide] : []));
   const { player } = state;
   const song = [player.nowPlaying?.artist, player.nowPlaying?.title].filter(Boolean).join(" — ");
+  // A show's styles and host search everything for them, as in the full player; a station's tags are words.
+  const names = radioShowNames(show);
   const about = show
-    ? metaLine(...radioShowLabels(show), radioHost(show))
+    ? names.length > 0 && <SearchNames names={names} />
     : metaLine(...(tags ?? []));
   const box = useRef<HTMLElement>(null);
   // Notes the panel would cut wait unseen, so Up next after the station keeps its room.
-  useUncut(box, "[data-note]", JSON.stringify([show?.title, about, song, next?.id]));
+  useUncut(box, "[data-note]", JSON.stringify([show?.title, names, tags, song, next?.id]));
   return (
     <section
       ref={box}

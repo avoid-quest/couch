@@ -153,7 +153,7 @@ export function radioShowLabels(
   return radioLabels([...categories, repeated ? "" : genre]);
 }
 /** A show's host, unless the show is named after them ("DJ Alé" hosted by DJ Alé): its title already says it. */
-export const radioHost = (show: RadioProgrammeDetails | null | undefined) =>
+const radioHost = (show: RadioProgrammeDetails | null | undefined) =>
   show?.artist && show.artist.localeCompare(show.title, undefined, { sensitivity: "base" })
     ? show.artist
     : undefined;
