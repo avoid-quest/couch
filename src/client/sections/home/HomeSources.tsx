@@ -1,5 +1,5 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { type ComponentProps, useSyncExternalStore } from "react";
+import { type ComponentProps, type ReactNode, useSyncExternalStore } from "react";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -46,7 +46,7 @@ export const sourceHomes = [
 ] as const satisfies readonly ProviderId[];
 
 /** The first channels of the Live TV guide; the heading opens every channel. A channel has no page, so its tile plays it. */
-export function LiveTvShelf() {
+export function LiveTvShelf({ options }: { options?: ReactNode }) {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   // The guide's first page, as Live TV's own page asks for it.
@@ -60,7 +60,7 @@ export function LiveTvShelf() {
     return <Failed what="Live TV" retry={() => void guide.refetch()} />;
   if (guide.data && !guide.data.channels.length) return null;
   return (
-    <Shelf loading={!guide.data} title="Live TV" href="/live-tv">
+    <Shelf loading={!guide.data} title="Live TV" href="/live-tv" options={options}>
       {!guide.data ? (
         <MediaTilesSkeleton />
       ) : (
@@ -112,9 +112,11 @@ function ChannelTile({
 export function SavedSourceShelf({
   provider,
   items: saved,
+  options,
 }: {
   provider: ProviderId;
   items: ProviderItem[];
+  options?: ReactNode;
 }) {
   const { openProvider } = useShell();
   const name = providerNames[provider];
@@ -126,7 +128,7 @@ export function SavedSourceShelf({
   const shape = (item: ProviderItem) => providerItemShape(name, item);
   const frame = majorityShape(items.map(shape));
   return (
-    <Shelf title={name} href={collectionLocation({ provider, url: "" })}>
+    <Shelf title={name} href={collectionLocation({ provider, url: "" })} options={options}>
       {items.map((item, index) => (
         <li key={item.id} className="shrink-0">
           <MediaTile
@@ -151,11 +153,14 @@ export function SavedSourceShelf({
 }
 
 /** The devices' shared inputs, while any are shared; each plays, and its other verbs are its menu. */
-export function SharedSources({ hits }: { hits: SearchHit[] }) {
+export function SharedSources({ hits, options }: { hits: SearchHit[]; options?: ReactNode }) {
   const { on } = usePlayOn();
   return (
     <section aria-label="Shared sources" className="grid min-w-0 gap-stack">
-      <ShelfHeading title="Shared sources" />
+      <div className="flex items-center gap-4">
+        <ShelfHeading title="Shared sources" />
+        {options}
+      </div>
       <ul data-nav-row aria-label="Shared sources" className="flex flex-wrap gap-2">
         {hits.map((hit, index) => (
           <SourceChip
@@ -266,7 +271,7 @@ export function BrowseLine() {
         Browse
       </h2>
       <ul data-nav-row aria-labelledby="home-browse" className="flex flex-1">
-        {doors.map((door, index) => {
+        {doors.map((door) => {
           const href =
             typeof door.to === "string"
               ? door.to
@@ -283,12 +288,7 @@ export function BrowseLine() {
               className="flex min-w-36 flex-1 border-l first:border-l-0 max-sm:min-w-[45vw]"
             >
               {href ? (
-                <Button
-                  asChild
-                  variant="ghost"
-                  data-page-first={index === 0 || undefined}
-                  className={doorClass}
-                >
+                <Button asChild variant="ghost" className={doorClass}>
                   <a
                     href={detailHref(href)}
                     aria-label={down ? `${door.label}, couldn't load` : undefined}

@@ -108,7 +108,7 @@ function recoverPageFocus(page: HTMLElement, router: AnyRouter) {
 
 /** Call while a commit removes the focused control: after it, return lost focus to the
  * same page, leaving navigation and any deliberately chosen target alone. */
-export function returnLostFocus(router: AnyRouter) {
+function returnLostFocus(router: AnyRouter) {
   const page = document.querySelector<HTMLElement>("[data-page]");
   const location = router.state.location;
   // The player puts focus on its own picture.

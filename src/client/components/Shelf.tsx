@@ -13,6 +13,7 @@ export function Shelf({
   label = title,
   href,
   loading = false,
+  note,
   options,
   children,
 }: {
@@ -20,7 +21,9 @@ export function Shelf({
   label?: string;
   href?: string;
   loading?: boolean;
-  /** The section's own "…", beside its heading. */
+  /** A quiet line after the heading: what the section follows. */
+  note?: ReactNode;
+  /** The section's own "…", at the end of its heading's line. */
   options?: ReactNode;
   children: ReactNode;
 }) {
@@ -56,35 +59,38 @@ export function Shelf({
   };
   return (
     <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 gap-2">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-1">
+      <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3">
           <ShelfHeading title={title} href={href} loading={loading} />
+          {note}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {(edges.previous || edges.next) && (
+            <div className="flex gap-1 tv:hidden [@media(pointer:coarse)]:hidden">
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                aria-label={`Previous ${title}`}
+                aria-controls={id}
+                disabled={!edges.previous}
+                onClick={() => advance(-1)}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                aria-label={`Next ${title}`}
+                aria-controls={id}
+                disabled={!edges.next}
+                onClick={() => advance(1)}
+              >
+                <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
+          )}
           {options}
         </div>
-        {(edges.previous || edges.next) && (
-          <div className="flex gap-1 tv:hidden [@media(pointer:coarse)]:hidden">
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              aria-label={`Previous ${title}`}
-              aria-controls={id}
-              disabled={!edges.previous}
-              onClick={() => advance(-1)}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              aria-label={`Next ${title}`}
-              aria-controls={id}
-              disabled={!edges.next}
-              onClick={() => advance(1)}
-            >
-              <ChevronRight aria-hidden="true" />
-            </Button>
-          </div>
-        )}
       </div>
       {/* It scrolls by wheel, trackpad, scrollbar or focus, out to the window's edges, so a long shelf runs off the right
         of the screen rather than stopping at the gutter; its padding holds a lit tile's glow, its ring and, on the TV, the

@@ -1603,14 +1603,6 @@ html[data-stage-under-header] .app-header {
 [data-nav-rail] a[aria-current="page"] {
   font-weight: 600;
 }
-/* Personal shelves use one full-width rhythm, in the chosen Home order. */
-.home-shelves {
-  display: grid;
-  align-items: start;
-  gap: 2.5rem;
-  min-width: 0;
-}
-
 /* A missing poster keeps the same silhouette as its loaded neighbours in a mixed frame. */
 [data-tile-art][data-own="poster"] > span.media-artwork {
   width: min(100%, calc(var(--tile-art) * 2 / 3));
@@ -1618,43 +1610,16 @@ html[data-stage-under-header] .app-header {
   border-radius: var(--radius-md);
 }
 
-/* Home keeps its feature compact and its shelves in one full-width rhythm. */
+/* Home's sections stand in one full-width rhythm. */
 [data-page="Home"] {
   gap: 2.5rem;
 }
-.stage[data-stage="home"] {
-  --stage-h: min(24vw, 23rem);
-  --title-short: 3rem;
-  --title-medium: 2.75rem;
-  --title-long: 2.5rem;
-  --title-xlong: 2.25rem;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 2.5rem;
-}
-[data-stage="home"] .stage-picture {
-  grid-area: 1 / 1;
-}
-[data-stage="home"] .stage-object {
-  width: min(30vw, calc(12rem * var(--art-ratio)));
-}
-[data-stage="home"] .stage-copy {
-  grid-area: 1 / 2;
-  max-width: 42rem;
-  gap: 0.875rem;
-}
-[data-stage="home"] .stage-copy > [data-nav-row]:last-child {
-  margin-top: 0.25rem;
-}
-[data-stage="home"] > .room {
-  --room-x: 20%;
-}
 /* Whole pictures share a height; captions and progress share their visible edges. */
-.home-shelves [data-natural],
+[data-page="Home"] [data-natural],
 .home-radio-tile {
   --tile-art: clamp(8.5rem, 12.5vw, 11.5rem);
 }
-.home-shelves [data-natural][data-tile-shape="poster"] {
+[data-page="Home"] [data-natural][data-tile-shape="poster"] {
   --tile-art: clamp(11rem, 16vw, 15rem);
 }
 [data-natural] [data-tile-art] {
@@ -1662,48 +1627,6 @@ html[data-stage-under-header] .app-header {
 }
 [data-natural] [data-tile-art][data-own="poster"] > span.media-artwork {
   width: 100%;
-}
-@media (max-width: 47.99rem) {
-  .stage[data-stage="home"] {
-    grid-template-columns: minmax(0, 1fr) 7.5rem;
-    gap: 0.75rem 1rem;
-    padding-top: calc(var(--top-bar, 4rem) + 1.25rem);
-    align-items: start;
-    --title-short: 1.75rem;
-    --title-medium: 1.625rem;
-    --title-long: 1.5rem;
-    --title-xlong: 1.375rem;
-  }
-  [data-stage="home"] .stage-picture {
-    grid-area: 1 / 2 / 3 / 3;
-    margin: 0;
-    padding: 0;
-  }
-  [data-stage="home"] .stage-object {
-    width: min(100%, calc(7.5rem * var(--art-ratio)));
-  }
-  [data-stage="home"] .stage-copy {
-    display: contents;
-  }
-  [data-stage="home"] .stage-copy > * {
-    grid-column: 1 / -1;
-  }
-  [data-stage="home"]:has(.stage-object) .stage-copy > :is(h2, [data-nav-row]:first-child) {
-    grid-column: 1;
-  }
-  [data-stage="home"] .stage-copy > :first-child {
-    grid-row: 1;
-  }
-  [data-stage="home"]:has(.stage-object) .home-hero-meta {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  [data-stage="home"] .home-hero-meta {
-    margin-top: -0.25rem;
-  }
-  [data-stage="home"] .stage-copy > [data-nav-row]:last-child {
-    margin-top: 0;
-  }
 }
 
 @media (pointer: coarse) {

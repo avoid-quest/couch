@@ -23,7 +23,7 @@ test("A Home after Discover keeps the sources, Browse among them, as Discover ha
   ]);
   expect(defaultHomeRows.slice(-3)).toEqual([
     { id: "animeunity", shown: true },
-    { id: "recent", shown: true },
+    { id: "recent", shown: false },
     { id: "upNext", shown: false },
   ]);
 });

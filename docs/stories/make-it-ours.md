@@ -10,8 +10,8 @@ how big text is, which language and quality films play in.
 - For everyone: **Settings → Sources → Hidden → Hide a word**, or an item's
   **Hide**.
 - On this device: **Edit Home** at the foot of Home (or **This device → Home**):
-  each section on or off, **Move up/down**, **Reset to default**; **General →
-  Text size**.
+  each section on or off, **Move up/down**, **Reset to default**; on Home, each
+  section's **…** moves or hides it, with **Undo**; **General → Text size**.
 - On this device: **Add to Home** on a series, programme or channel (its page,
   its menu, or the player while it plays) gives it a section of its own with
   what the source lists there, kept fresh. Edit Home's **Add a section** opens

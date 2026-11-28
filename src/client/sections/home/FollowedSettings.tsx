@@ -48,7 +48,12 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
           // Its line goes: the focus goes on to the next line's Switch, else the one before.
           const line = event.currentTarget.closest("li");
           const next = line?.nextElementSibling ?? line?.previousElementSibling;
-          undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id), undefined, box);
+          undoable(
+            `${follow.name} removed from Home. Saved items and what you played stay.`,
+            removeHomeFollow(follow.id),
+            undefined,
+            box,
+          );
           next?.querySelector<HTMLElement>('[role="switch"]')?.focus();
         }}
       >

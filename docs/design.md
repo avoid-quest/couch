@@ -40,7 +40,7 @@ branch. Phones keep a bottom tab bar for thumb reach.
 - **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
   page, its backdrop blurred and tinted with the artwork's tone. Besides the
   player's Up next panel, it's the one backdrop filter on a page.
-- **Stage** (`components/Stage.tsx`): opens Home and every Details page
+- **Stage** (`components/Stage.tsx`): opens every Details page
   (`DetailHeader`), reaching under the header in its picture's room. The picture
   stands whole at the right as an **object** with a shadow, or as a **mark**
   (a logo on nothing) without one.

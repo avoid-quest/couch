@@ -228,7 +228,7 @@ function DetailLayout({
 }
 
 // Core says why a verb failed; without its answer, Couch wasn't reached.
-function useDetailAction() {
+export function useDetailAction() {
   const name = useSessionGate().state?.installationName;
   return useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
@@ -293,7 +293,7 @@ function QueueDetails({ id }: { id: string }) {
 }
 
 /** Save and Saved for an item kept in For later, matched by its page URL; without one, Save only adds it. */
-function useForLaterToggle(
+export function useForLaterToggle(
   url: string | undefined,
   reference: () => ForLaterReference,
   action: ReturnType<typeof useDetailAction>,
@@ -321,6 +321,18 @@ function useForLaterToggle(
   };
 }
 
+/** What For later keeps of a played item: its page, which its saved copy plays. */
+export const historyReference = (item: HistoryItem): ForLaterReference => ({
+  kind: "web",
+  url: item.url!,
+  title: item.title,
+  ...(/^https?:/.test(item.thumbnail ?? "") ? { thumbnail: item.thumbnail } : {}),
+  ...(item.duration != null && item.duration <= 86_400 ? { duration: item.duration } : {}),
+  ...(item.collection
+    ? { collection: { url: item.collection.url, index: item.collection.index } }
+    : {}),
+});
+
 function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => void }) {
   const shell = useShell();
   const session = useSessionGate();
@@ -329,20 +341,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
   const blocked = !session.connected || action.isPending;
   const playable = shell.available && !!(item.playable || item.queueEntryId);
   // A provider page can be kept in For later; its saved copy plays the same page.
-  const save = useForLaterToggle(
-    item.url,
-    () => ({
-      kind: "web",
-      url: item.url!,
-      title: item.title,
-      ...(/^https?:/.test(item.thumbnail ?? "") ? { thumbnail: item.thumbnail } : {}),
-      ...(item.duration != null && item.duration <= 86_400 ? { duration: item.duration } : {}),
-      ...(item.collection
-        ? { collection: { url: item.collection.url, index: item.collection.index } }
-        : {}),
-    }),
-    action,
-  );
+  const save = useForLaterToggle(item.url, () => historyReference(item), action);
   const remove = async () => {
     const result = await removeFromContinue(shell.credentials, item.mediaId);
     refresh();
