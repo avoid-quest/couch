@@ -185,45 +185,6 @@ export function PlayOnGroup({
   );
 }
 
-/** "Play on…" beside a row's inline verbs: it opens Choose where it plays from itself. */
-export function PlayOnMenu({
-  title,
-  thumbnail,
-  verb,
-  audioOnly,
-  onPlay,
-  disabled,
-  size,
-}: {
-  title: string;
-  thumbnail?: string;
-  /** Play's word in the panel, "Resume" for an item partly played. */
-  verb?: string;
-  audioOnly?: boolean;
-  onPlay: (on: PlayOn) => void;
-  disabled?: boolean;
-  size?: "default" | "lg";
-}) {
-  const [open, setOpen] = useState(false);
-  if (!usePlayOn().devices.length) return null;
-  return (
-    <ChooseWherePlays
-      title={title}
-      thumbnail={thumbnail}
-      verb={verb}
-      audioOnly={audioOnly}
-      onPlay={onPlay}
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <Button variant="ghost" size={size} disabled={disabled} aria-label={`Play ${title} on…`}>
-          Play on…
-        </Button>
-      }
-    />
-  );
-}
-
 /**
  * A Stage's main verb with where it plays (docs/design.md "Stage"): Play or Resume beside its destination ("on this
  * device"), which opens Choose where it plays. Without another device that can play it, the verb stands alone.
