@@ -205,9 +205,14 @@ export function searchRelevance(query: string, typing = false) {
     return found === words.length ? 2 : found ? 1 : 0;
   };
   return {
-    /** Whether every word of the query is in the hit's title, artist, album, show or station details. */
-    close: (hit: Pick<SearchHit, "title" | "meta" | "radio" | "creator" | "context">) =>
+    /**
+     * Whether every word of the query is in the hit's title, artist, album, show or station details. A station's name may
+     * hold them anywhere in a word ("Northw" finds Northwind), as Radio's own filter finds it.
+     */
+    close: (hit: Pick<SearchHit, "title" | "meta" | "radio" | "creator" | "context" | "kind">) =>
       !words.length ||
+      (hit.kind === "Radio" &&
+        words.every((word) => searchWords(hit.title).join(" ").includes(word))) ||
       words.every((word) =>
         mentions(
           [

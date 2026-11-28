@@ -237,7 +237,7 @@ const doors: Door[] = [
   { label: "Anime", meta: "AnimeSaturn, AnimeUnity", to: "/anime" },
   {
     label: "Music",
-    meta: "Spotify, Bandcamp, SoundCloud, Mixcloud, YouTube",
+    meta: "Spotify, Bandcamp, SoundCloud, Mixcloud",
     scope: { kind: "music", source: "All" },
   },
   {
