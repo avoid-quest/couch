@@ -9,6 +9,7 @@ import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 import { applyUndo, undoPlan } from "../src/client/session/undo";
+import { madeWay, undoMadeWay } from "../src/client/session/made-way";
 import { withState } from "./whole-state.fixture";
 
 const hostId = "h".repeat(43),
@@ -682,3 +683,92 @@ for (const [how, end] of [
       }
     },
   );
+
+test(
+  "Undo of Play on stops what it started and gives a Playback that waited its device back",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const film = f.phone.state.playback!;
+      const before = f.phone.state;
+      // The speaker leaves the film for the clip, so the film pauses and waits for a device.
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("clip"),
+        playNow: true,
+        deviceId: phoneId,
+        outputs: [
+          { deviceId: phoneId, picture: true, sound: true },
+          { deviceId: speakerId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "clip");
+      const after = f.phone.state;
+      assert.deepEqual(
+        after.playbacks?.find((playback) => playback.id === film)?.outputs,
+        [],
+        "the film waits for a device",
+      );
+      const plan = madeWay(before, after, true);
+      assert.equal(plan.started, after.playback);
+      assert.deepEqual(plan.restore, [
+        { playbackId: film, outputs: [{ deviceId: speakerId, picture: true, sound: true }] },
+      ]);
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(
+        () =>
+          f.phone.state.playbacks?.find((playback) => playback.id === film)?.outputs.length === 1,
+      );
+      assert.deepEqual(
+        mix({
+          outputs: f.phone.state.playbacks!.find((p) => p.id === film)!.outputs,
+        } as SessionState),
+        [{ deviceId: speakerId, picture: true, sound: true }],
+      );
+      await until(
+        () =>
+          !f.phone.state.playbacks?.some(
+            (playback) =>
+              playback.id === plan.started &&
+              playback.outputs.some((output) => output.deviceId === speakerId),
+          ),
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of Play on that replaced a device's own item plays that item again",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", phoneId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const before = f.phone.state;
+      await f.play(f.phone, "clip", phoneId);
+      await until(() => f.phone.state.currentEntryId === "clip");
+      assert.equal(
+        f.phone.state.playback,
+        before.playback,
+        "Play on its own device keeps its Playback",
+      );
+      const plan = madeWay(before, f.phone.state, true);
+      assert.deepEqual(plan.replaced, { entryId: "film", newEntryId: "clip" });
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(
+        () =>
+          f.phone.state.currentEntryId === "film" &&
+          !f.phone.state.queue.some((entry) => entry.id === "clip"),
+      );
+      assert.equal(f.phone.state.playback, before.playback);
+    } finally {
+      await f.close();
+    }
+  },
+);

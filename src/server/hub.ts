@@ -5360,6 +5360,7 @@ export async function createHub(options: HubOptions) {
               throw new Error("This command addresses another TV. Select it before using Remote.");
             if (
               action.type !== "selectPlayback" &&
+              action.type !== "restoreOutputs" &&
               "playbackId" in action &&
               action.playbackId &&
               servedBy(guardedTarget) !== playing(action.playbackId)
@@ -5713,6 +5714,34 @@ export async function createHub(options: HubOptions) {
             store.playback(target.id).saveInSync(action.inSync);
             target.inSync = action.inSync;
             reconcile(target);
+            broadcast();
+          } else if (action.type === "restoreOutputs") {
+            // Undo gives a Playback back its devices, a paused one waiting for a device too, so it is found by its id
+            // rather than by what this window looks at; each device changes only as setOutput permits it now.
+            const target = playbacks.get(action.playbackId);
+            if (!target) throw new Error("Undo expired. Check where it plays.");
+            const permitted = authorizePlayback(target, authorize, deviceId);
+            permitted();
+            const wanted = new Map(
+              action.outputs
+                .filter((output) => output.picture || output.sound)
+                .map((output) => [output.deviceId, output]),
+            );
+            // Devices come back before the others leave, so the Playback never goes without one on the way.
+            for (const { deviceId: id, picture, sound } of wanted.values()) {
+              const current = target.outputs.find((output) => output.deviceId === id);
+              if (current?.picture !== picture || current.sound !== sound)
+                await setOutput(target, id, { picture, sound }, permitted, deviceId);
+            }
+            for (const output of [...target.outputs])
+              if (!wanted.has(output.deviceId))
+                await setOutput(
+                  target,
+                  output.deviceId,
+                  { picture: false, sound: false },
+                  permitted,
+                  deviceId,
+                );
             broadcast();
           } else if (
             action.type === "solo" ||

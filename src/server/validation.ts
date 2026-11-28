@@ -317,6 +317,19 @@ function validAction(value: unknown): value is Action {
       return value.playbackId === undefined || id(value.playbackId);
     case "undoStop":
       return id(value.stoppedId);
+    case "restoreOutputs":
+      return (
+        id(value.playbackId) &&
+        Array.isArray(value.outputs) &&
+        value.outputs.length <= 64 &&
+        value.outputs.every(
+          (output) =>
+            object(output) &&
+            id(output.deviceId) &&
+            typeof output.picture === "boolean" &&
+            typeof output.sound === "boolean",
+        )
+      );
     case "sharing":
       return isDeviceSharing(value.sharing);
     case "solo":
@@ -639,6 +652,17 @@ export function parseCommand(message: string): ClientMessage {
       },
     };
   }
+  if (value.action.type === "restoreOutputs")
+    return {
+      type: "command",
+      requestId: value.requestId,
+      ...guard,
+      action: {
+        type: "restoreOutputs",
+        playbackId: value.action.playbackId,
+        outputs: value.action.outputs.map(chosenOutput),
+      },
+    };
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
     return {

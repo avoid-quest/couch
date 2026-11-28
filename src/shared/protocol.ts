@@ -360,6 +360,13 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   | { type: "undoStop"; stoppedId: string }
+  // Undo of a change that took devices (Play on, Move here, a device's key): that Playback's devices are these again,
+  // each with its picture and sound, as far as each still may play there.
+  | {
+      type: "restoreOutputs";
+      playbackId: string;
+      outputs: Pick<Output, "deviceId" | "picture" | "sound">[];
+    }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
   // sound. allSpeakers (All, which only older clients offer) trims the Playback's existing sound from 0 to 100,
   // preserving its outputs and every Device's volume and mute.
