@@ -1,5 +1,5 @@
 import type { ClientSessionState } from "./session";
-import type { Action, DeviceSummary, Output, ReceiverState } from "../../shared/protocol";
+import type { Action, DeviceSummary, Output, PlayOn, ReceiverState } from "../../shared/protocol";
 import { heldOutOf } from "../../shared/live-input";
 
 // Where it plays' rules, without React: which devices the picker lists and in what
@@ -344,7 +344,7 @@ export function soleSound(rows: Row[]) {
 }
 
 /** The folded offline line's names, each once, counted where several devices share one: "Desk, Living room TV ×4". */
-export function offlineNames(rows: Row[]) {
+export function offlineNames(rows: Pick<Row, "device">[]) {
   const named = new Map<string, number>();
   for (const row of rows) named.set(row.device.name, (named.get(row.device.name) ?? 0) + 1);
   return [...named].map(([name, count]) => (count > 1 ? `${name} ×${count}` : name)).join(", ");
@@ -388,3 +388,107 @@ export const rowLevel = (row: Row, sounding: boolean) =>
         row.output.state !== "stalled"
       ? "moving"
       : "flat";
+
+/** Choose where it plays: each device's picture and sound chosen before Play on starts anything. */
+export type Choice = Record<string, { picture: boolean; sound: boolean }>;
+/** A device's row in Choose where it plays: the Mixer's, for a playback that hasn't started. */
+export type ChoiceRow = Pick<Row, "device" | "mine" | "status"> & {
+  picture: Control;
+  sound: Control;
+};
+
+/**
+ * The rows Choose where it plays offers, by the Mixer's rules (picker) as though nothing played there yet: a device
+ * that plays something else stays choosable only where Core would let it change. Audio has no picture. This device
+ * comes first.
+ */
+export function choiceRows(
+  state: ClientSessionState,
+  { here, audioOnly = false }: { here: string; audioOnly?: boolean },
+): ChoiceRow[] {
+  return picker({ ...state, playback: null, outputs: [] }, { here })
+    .rows.map(({ device, mine, status, picture, sound }) => ({
+      device,
+      mine,
+      status,
+      picture: audioOnly ? control("No picture") : control(picture.reason),
+      sound: control(sound.reason),
+    }))
+    .sort((a, b) => Number(b.mine) - Number(a.mine));
+}
+
+/** What Choose where it plays starts with: everything this device can play, as Play does. */
+export const firstChoice = (rows: ChoiceRow[]): Choice =>
+  Object.fromEntries(
+    rows
+      .filter((row) => row.mine && (row.picture.enabled || row.sound.enabled))
+      .map((row) => [row.device.id, { picture: row.picture.enabled, sound: row.sound.enabled }]),
+  );
+
+/** A device alone, with everything it can play: what one press on its name plays. */
+export const onlyChoice = (row: ChoiceRow): Choice => ({
+  [row.device.id]: { picture: row.picture.enabled, sound: row.sound.enabled },
+});
+
+const chosenIds = (rows: ChoiceRow[], choice: Choice) =>
+  rows
+    .filter((row) => choice[row.device.id]?.picture || choice[row.device.id]?.sound)
+    .map((row) => row.device.id);
+
+/**
+ * The Play on request for a choice: this device leads where it plays, else the first screen, else the first speaker.
+ * A device alone with everything it can play needs no outputs, as Play on has always sent it.
+ */
+export function playOnOf(rows: ChoiceRow[], choice: Choice): PlayOn | undefined {
+  const ids = chosenIds(rows, choice);
+  const lead =
+    ids.find((id) => rows.find((row) => row.device.id === id)?.mine) ??
+    ids.find((id) => choice[id]!.picture) ??
+    ids[0];
+  if (!lead) return undefined;
+  const row = rows.find((item) => item.device.id === lead)!;
+  const whole =
+    ids.length === 1 &&
+    choice[lead]!.picture === row.picture.enabled &&
+    choice[lead]!.sound === row.sound.enabled;
+  return whole
+    ? { deviceId: lead }
+    : { deviceId: lead, outputs: ids.map((deviceId) => ({ deviceId, ...choice[deviceId]! })) };
+}
+
+const names = (ids: string[], rows: ChoiceRow[]) =>
+  new Intl.ListFormat("en", { type: "conjunction" }).format(
+    ids.map((id) => rows.find((row) => row.device.id === id)?.device.name ?? "a device"),
+  );
+
+/**
+ * The line beside Play: what it changes first ("Blob stops on Kitchen laptop", "Blob keeps playing on Living room
+ * TV"), then where it plays. A device that leaves another playback leaves it whole, picture and sound.
+ */
+export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], choice: Choice) {
+  const ids = chosenIds(rows, choice);
+  if (!ids.length)
+    return { ready: false, lines: ["Choose a screen or speakers.", "Nothing plays until Play."] };
+  const pictures = ids.filter((id) => choice[id]!.picture),
+    sounds = ids.filter((id) => choice[id]!.sound);
+  // Where none of them can show a picture (audio), there is nothing to say apart.
+  const together =
+    (pictures.length === sounds.length && pictures.every((id) => sounds.includes(id))) ||
+    rows.every((row) => !ids.includes(row.device.id) || !row.picture.enabled);
+  const where = together
+    ? `Plays on ${names(ids, rows)}.`
+    : `${pictures.length ? `Picture on ${names(pictures, rows)}` : "No picture"}, ${sounds.length ? `sound on ${names(sounds, rows)}` : "no sound"}.`;
+  const changes = (state.playbacks ?? []).flatMap((playback) => {
+    if (playback.status === "idle") return [];
+    const taken = ids.filter((id) => playback.outputs.some((output) => output.deviceId === id));
+    if (!taken.length) return [];
+    const title = playback.title ?? "What plays there";
+    const rest = playback.outputs
+      .map((output) => output.deviceId)
+      .filter((id) => !taken.includes(id));
+    return rest.length
+      ? [`${title} keeps playing on ${names(rest, rows)}.`]
+      : [`${title} stops${taken.length === 1 ? ` on ${names(taken, rows)}` : ""}.`];
+  });
+  return { ready: true, lines: changes.length ? [changes.join(" "), where] : [where] };
+}

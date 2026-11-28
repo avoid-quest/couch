@@ -21,46 +21,62 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { startHold } from "@/hold";
 import { deviceId } from "@/session/device-id";
+import type { PlayOn } from "../../shared/protocol";
+import { ChooseWherePlays } from "./ChooseWherePlays";
 import { PlayOnGroup, usePlayOn } from "./PlayOn";
 
-/** One verb in a menu. playOn makes it "Play on", a group of the online Devices; node is its own item, such as a link. */
+/**
+ * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture);
+ * a shared source's (sharingDeviceId, liveAudio) is instead a group of the online Devices. node is its own item, such as a link.
+ */
 export type MenuAction = {
   label: string;
   disabled?: boolean;
   pressed?: boolean;
   run?: () => void;
   node?: ReactNode;
-  playOn?: (deviceId: string) => void;
+  playOn?: (on: PlayOn) => void;
+  audioOnly?: boolean;
   sharingDeviceId?: string;
   liveAudio?: boolean;
 };
 
-// Play on's devices are a labelled group, set apart from the verbs on either side.
+// A shared source's Play on devices are a labelled group, set apart from the verbs on either side.
 function Items({
   actions,
   on,
   select,
+  choose,
 }: {
   actions: MenuAction[];
   on: (label: string) => string;
   select: (run?: () => void) => void;
+  choose: (action: MenuAction) => void;
 }) {
   return actions.map((action, index) =>
     action.node ? (
       <DropdownMenuItem key={action.label} asChild>
         {action.node}
       </DropdownMenuItem>
-    ) : action.playOn ? (
+    ) : action.playOn && (action.sharingDeviceId || action.liveAudio) ? (
       <Fragment key={action.label}>
         <PlayOnGroup
           separated={index > 0}
           disabled={action.disabled}
-          onPlay={action.playOn}
+          onPlay={(deviceId) => action.playOn?.({ deviceId })}
           sharingDeviceId={action.sharingDeviceId}
           liveAudio={action.liveAudio}
         />
         {index < actions.length - 1 && <DropdownMenuSeparator />}
       </Fragment>
+    ) : action.playOn ? (
+      <DropdownMenuItem
+        key={action.label}
+        disabled={action.disabled}
+        onSelect={() => choose(action)}
+      >
+        {action.label}…
+      </DropdownMenuItem>
     ) : (
       <DropdownMenuItem
         key={action.label}
@@ -212,6 +228,16 @@ export function ItemMenu({
   const outside = useRef(false);
   const acted = useRef(false);
   const deferred = useRef<(() => void) | undefined>(undefined);
+  // Play on… opens Choose where it plays once the menu has closed, from what opened the menu.
+  const [choosing, setChoosing] = useState<MenuAction | null>(null);
+  const from = useRef<HTMLElement | null>(null);
+  const choose = (action: MenuAction) => {
+    acted.current = true;
+    deferred.current = () => {
+      from.current = menu.opener.current ?? trigger.current;
+      setChoosing(action);
+    };
+  };
   // A verb runs from the item, not the closing menu, so what it records (Details' opener, Up next's removal) is the item.
   const select = (run?: () => void) => {
     acted.current = true;
@@ -294,8 +320,19 @@ export function ItemMenu({
           run?.();
         }}
       >
-        <Items actions={menu.shown} on={menu.on} select={select} />
+        <Items actions={menu.shown} on={menu.on} select={select} choose={choose} />
       </DropdownMenuContent>
+      {/* Not part of the menu: Radix's root draws nothing, so the panel sits here and opens from what opened the menu. */}
+      {choosing?.playOn && (
+        <ChooseWherePlays
+          title={title}
+          audioOnly={choosing.audioOnly}
+          onPlay={choosing.playOn}
+          open
+          onOpenChange={(open) => !open && setChoosing(null)}
+          anchor={from}
+        />
+      )}
     </DropdownMenu>
   );
 }

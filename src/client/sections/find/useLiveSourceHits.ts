@@ -54,7 +54,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
                 disabled: !connected,
                 sharingDeviceId: heldOutOf(source),
                 liveAudio: live,
-                playOn: (deviceId) => {
+                playOn: ({ deviceId }) => {
                   void run({ type: "playLive", sourceId: source.id, deviceId });
                 },
               },

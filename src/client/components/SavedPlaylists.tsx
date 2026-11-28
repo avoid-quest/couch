@@ -27,6 +27,7 @@ import { formatDuration } from "@/time-format";
 import { metaLine } from "@/media-caption";
 import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
+import type { PlayOn } from "../../shared/protocol";
 
 const providerLabels = {
   youtube: "YouTube",
@@ -137,12 +138,12 @@ export function SavedPlaylists({
   const load = async (
     target: { id: string; name: string; revision: number },
     mode: PlaylistLoadMode,
-    deviceId?: string,
+    on?: PlayOn,
   ) => {
-    const send = (on?: string) =>
+    const send = (on?: PlayOn) =>
       write(`${listPath(target.id)}/load${playOnQuery(on)}`, { revision: target.revision, mode });
     await (mode === "play"
-      ? play(async (on) => (await send(on)) ?? false, deviceId)
+      ? play(async (on) => (await send(on)) ?? false, on)
       : session
         ? session.queue(target.name, send)
         : send());
@@ -216,7 +217,7 @@ export function SavedPlaylists({
                     {
                       label: "Play on",
                       disabled: disabled || !canPlay || !item.entryCount,
-                      playOn: (deviceId) => void load(item, "play", deviceId),
+                      playOn: (on) => void load(item, "play", on),
                     },
                     {
                       label: "Queue",
@@ -246,7 +247,7 @@ export function SavedPlaylists({
                   <PlayOnMenu
                     title={playlist.name}
                     disabled={disabled || !canPlay || !playlist.entries.length}
-                    onPlay={(deviceId) => void load(playlist, "play", deviceId)}
+                    onPlay={(on) => void load(playlist, "play", on)}
                   />
                   <Button
                     variant="outline"

@@ -287,9 +287,9 @@ export type Action =
   | { type: "selectPlayback"; playbackId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
-  // With playNow, deviceId plays on that Device, which this window then controls.
-  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
-  | {
+  // With playNow, Play on (PlayOn) chooses where it plays.
+  | ({ type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" } & PlayOn)
+  | ({
       type: "enqueueProvider";
       provider: ProviderId;
       url: string;
@@ -301,17 +301,15 @@ export type Action =
       quality?: VideoQuality;
       placement?: "next";
       collection?: PlaybackCollection;
-      deviceId?: string;
-    }
-  | {
+    } & PlayOn)
+  | ({
       type: "enqueueRadio";
       stationId: string;
       entryId: string;
       playNow?: boolean;
       placement?: "next";
-      deviceId?: string;
-    }
-  | {
+    } & PlayOn)
+  | ({
       type: "enqueueWeb";
       entryId: string;
       url: string;
@@ -321,8 +319,7 @@ export type Action =
       playNow?: boolean;
       fromStart?: boolean;
       placement?: "next";
-      deviceId?: string;
-    }
+    } & PlayOn)
   | { type: "remove"; entryId: string }
   | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
@@ -357,6 +354,15 @@ export type Action =
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the
   // Device's sound out, more sets its volume and puts its sound in.
   | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
+
+/**
+ * Play on: deviceId plays it with what that Device lends, and this window then controls it. With outputs it starts
+ * there instead, deviceId among them, each Device with the picture and sound chosen for it.
+ */
+export type PlayOn = {
+  deviceId?: string;
+  outputs?: Pick<Output, "deviceId" | "picture" | "sound">[];
+};
 
 export type ClientMessage = {
   type: "command";

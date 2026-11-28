@@ -95,6 +95,7 @@ const sections: [string, LucideIcon][] = [
 export type ShellValue = ReturnType<typeof useShellValue>;
 export { useShell } from "./shell-context";
 import { useShell } from "./shell-context";
+import type { PlayOn } from "../../../shared/protocol";
 
 function useShellValue() {
   const {
@@ -280,7 +281,7 @@ function useShellValue() {
   const enqueueProvider = (
     item: ProviderItem,
     playNow: boolean,
-    deviceId?: string,
+    on?: PlayOn,
     quality = videoQualityPreference.quality,
   ) =>
     run({
@@ -293,18 +294,18 @@ function useShellValue() {
       ...(item.collection ? { collection: item.collection } : {}),
       ...(["bandcamp", "soundcloud"].includes(item.provider) ? {} : { quality }),
       playNow,
-      deviceId,
+      ...on,
     });
-  const enqueueRadio = (station: RadioStation, playNow: boolean, deviceId?: string) => {
+  const enqueueRadio = (station: RadioStation, playNow: boolean, on?: PlayOn) => {
     const owner = installationId;
     const result = run(
       station.sourceId
-        ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, deviceId }
+        ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, ...on }
         : {
             type: "enqueue",
             entry: { id: createId(), title: station.name, source: station.url, kind: "radio" },
             playNow,
-            deviceId,
+            ...on,
           },
     );
     // Recents record what actually played, not what was queued or attempted.
@@ -338,7 +339,7 @@ function useShellValue() {
       ...body
     }: {
       mediaId: string;
-      on?: string;
+      on?: PlayOn;
       fromStart: boolean;
       profileId: string;
       selection?: HistorySelection;

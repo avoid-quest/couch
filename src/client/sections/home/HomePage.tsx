@@ -19,7 +19,7 @@ import { Shelf } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
 import { ProgressLine, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
-import { usePlayOn } from "@/components/PlayOn";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { apiSend } from "@/api/client";
@@ -46,7 +46,7 @@ import {
 } from "../../../shared/radio";
 import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
-import type { QueueEntry } from "../../../shared/protocol";
+import type { PlayOn, QueueEntry } from "../../../shared/protocol";
 import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { useOnAir, useStationMenu, useStationShow } from "./on-air";
 import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
@@ -67,7 +67,7 @@ import type { ProviderId } from "../../../shared/providers";
 
 export type HistoryPlayback = (
   item: HistoryItem,
-  options: { fromStart?: boolean; on?: string; selection?: HistorySelection },
+  options: { fromStart?: boolean; on?: PlayOn; selection?: HistorySelection },
 ) => Promise<boolean>;
 
 // A shelf scrolls, so it holds more than fits; a board's list holds its first few. Their headings open the rest.
@@ -136,15 +136,8 @@ export function HomePage() {
     builtIn,
   } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
-    mutationFn: ({
-      item,
-      fromStart,
-      deviceId,
-    }: {
-      item: HistoryItem;
-      fromStart: boolean;
-      deviceId?: string;
-    }) => play((on) => shell.playHistory(item, { fromStart, on }), deviceId),
+    mutationFn: ({ item, fromStart, on }: { item: HistoryItem; fromStart: boolean; on?: PlayOn }) =>
+      play((on) => shell.playHistory(item, { fromStart, on }), on),
   });
   const resumable = (item: HistoryItem) =>
     available && !resume.isPending && !!(item.playable || item.queueEntryId);
@@ -183,12 +176,12 @@ export function HomePage() {
     {
       label: "Play on",
       disabled: !resumable(item) || !item.playable,
-      playOn: (deviceId) => resume.mutate({ item, fromStart: item.position === 0, deviceId }),
+      playOn: (on) => resume.mutate({ item, fromStart: item.position === 0, on }),
     },
   ];
   const savedMenu = (item: ForLaterItem): MenuAction[] => {
-    const start = (deviceId?: string) =>
-      void play((on) => loadForLater(credentials, item.id, "play", on), deviceId).catch((reason) =>
+    const start = (on?: PlayOn) =>
+      void play((on) => loadForLater(credentials, item.id, "play", on), on).catch((reason) =>
         failed(`Couldn't play ${item.title}.`, reason),
       );
     return [
@@ -233,10 +226,10 @@ export function HomePage() {
   // Play replaces the hero's verbs with its playing title. Hand over lost focus,
   // as page entry would, unless the user moved elsewhere while playback started.
   const leading = useRef(false);
-  const playHero = (item: HistoryItem, fromStart: boolean) => {
+  const playHero = (item: HistoryItem, fromStart: boolean, on?: PlayOn) => {
     leading.current = true;
     resume.mutate(
-      { item, fromStart },
+      { item, fromStart, on },
       {
         onSettled: (ok) => {
           if (!ok) leading.current = false;
@@ -244,9 +237,9 @@ export function HomePage() {
       },
     );
   };
-  const playRadioHero = (station: RadioStation) => {
+  const playRadioHero = (station: RadioStation, on?: PlayOn) => {
     leading.current = true;
-    void shell.enqueueRadio(station, true).then((ok) => {
+    void shell.enqueueRadio(station, true, on).then((ok) => {
       if (!ok) leading.current = false;
     });
   };
@@ -406,6 +399,12 @@ export function HomePage() {
       >
         From start
       </Button>
+      <PlayOnMenu
+        size="lg"
+        title={hero.item.title}
+        disabled={!resumable(hero.item) || !hero.item.playable}
+        onPlay={(on) => playHero(hero.item, false, on)}
+      />
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
       <Button
         variant="ghost"
@@ -441,6 +440,13 @@ export function HomePage() {
         <Play aria-hidden="true" />
         {on("Play")}
       </Button>
+      <PlayOnMenu
+        size="lg"
+        title={hero.station.name}
+        audioOnly
+        disabled={!available}
+        onPlay={(on) => playRadioHero(hero.station, on)}
+      />
     </HomeHero>
   ) : null;
 

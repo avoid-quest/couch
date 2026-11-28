@@ -16,6 +16,7 @@ import { failed } from "@/toasts";
 import type { HistoryItem } from "../../../shared/viewing";
 import type { Credentials } from "../../session/session";
 import { SavedEmpty, SavedError, SavedStatus } from "./SavedStatus";
+import type { PlayOn } from "../../../shared/protocol";
 
 /** How far an item got, in the meta line's words: what's left while part watched, else its length. */
 const progress = (item: HistoryItem) =>
@@ -74,7 +75,7 @@ export function PlayedSection({
           {items.map((item) => {
             const href = itemLocation("history", item.mediaId);
             const playable = connected && shell.available && !!(item.playable || item.queueEntryId);
-            const start = (on?: string) =>
+            const start = (on?: PlayOn) =>
               shell.playHistory(item, { fromStart: item.position === 0, on });
             const caption = historyCaption(item);
             return (
@@ -98,7 +99,7 @@ export function PlayedSection({
                   {
                     label: "Play on",
                     disabled: !playable || !item.playable,
-                    playOn: (deviceId) => void play(start, deviceId),
+                    playOn: (on) => void play(start, on),
                   },
                   { label: "Queue", disabled: !connected || !session, run: () => queue(item) },
                   ...browserActions(item.url),

@@ -16,6 +16,7 @@ import type { ArtShape } from "@/art-shape";
 import { metaLine, withoutUrls } from "@/media-caption";
 import { formatDuration } from "@/time-format";
 import { cn } from "@/lib/utils";
+import type { PlayOn } from "../../shared/protocol";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
 
@@ -132,7 +133,7 @@ export function DetailHeader({
   fromStart?: Verb;
   queue?: Verb;
   save?: { saved: boolean; run: () => void; disabled?: boolean };
-  playOn?: { run: (deviceId: string) => void; disabled?: boolean };
+  playOn?: { run: (on: PlayOn) => void; disabled?: boolean; audioOnly?: boolean };
   /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
   more?: MenuAction[];
   /** The page's ancestors (ContentBreadcrumb), above the title. */
@@ -198,7 +199,13 @@ export function DetailHeader({
           )}
           {/* Play on waits for another device that can play it. */}
           {playOn && (
-            <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />
+            <PlayOnMenu
+              size="lg"
+              title={title}
+              audioOnly={playOn.audioOnly}
+              disabled={playOn.disabled}
+              onPlay={playOn.run}
+            />
           )}
           {save && (
             <SaveToggle

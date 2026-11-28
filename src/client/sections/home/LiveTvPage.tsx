@@ -25,6 +25,7 @@ import { failed } from "@/toasts";
 import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "@/sections/find/SearchOnlineResults";
 import { formatClock } from "@/time-format";
+import type { PlayOn } from "../../../shared/protocol";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
 const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) =>
@@ -50,16 +51,16 @@ export function useChannelActions() {
     mutationFn: ({
       channel,
       playNow,
-      deviceId,
+      on,
     }: {
       channel: GuideChannel;
       playNow: boolean;
-      deviceId?: string;
+      on?: PlayOn;
     }) =>
       playNow
         ? play(
             (on) => apiSend(credentials, `/api/iptv/channels/${channel.id}/play${playOnQuery(on)}`),
-            deviceId,
+            on,
           )
         : queue(channel.name, () => apiSend(credentials, `/api/iptv/channels/${channel.id}/queue`)),
     onError: (reason, { channel, playNow }) =>
@@ -73,7 +74,7 @@ export function useChannelActions() {
       {
         label: "Play on",
         disabled,
-        playOn: (deviceId) => action.mutate({ channel, playNow: true, deviceId }),
+        playOn: (on) => action.mutate({ channel, playNow: true, on }),
       },
       {
         label: "Queue",

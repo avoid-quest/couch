@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import type { ForLaterItem } from "../../shared/for-later";
 import { playOnQuery } from "@/components/PlayOn";
 import { apiJson, apiSend, type ApiCredentials } from "./client";
+import type { PlayOn } from "../../shared/protocol";
 
 export const forLaterQuery = (credentials: ApiCredentials) =>
   queryOptions({
@@ -16,7 +17,7 @@ export const loadForLater = (
   credentials: ApiCredentials,
   id: string,
   mode: "play" | "append",
-  on?: string,
+  on?: PlayOn,
 ) =>
   apiSend(
     credentials,

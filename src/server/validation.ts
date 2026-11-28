@@ -9,6 +9,7 @@ import type {
   ClientMessage,
   MediaTrack,
   PlayerState,
+  PlayOn,
   QueueEntry,
 } from "../shared/protocol";
 import type { MediaCollection } from "../shared/media";
@@ -52,6 +53,18 @@ const playOptions = (value: Record<string, unknown>) =>
     (value.playNow === true && typeof value.fromStart === "boolean")) &&
   (value.placement === undefined || (value.placement === "next" && value.playNow !== true)) &&
   (value.deviceId === undefined || (value.playNow === true && id(value.deviceId)));
+// Play on's chosen outputs include the Device it names.
+const playOnOutputs = (value: Record<string, unknown>) =>
+  value.outputs === undefined ||
+  (Array.isArray(value.outputs) &&
+    value.outputs.every(
+      (output) =>
+        object(output) &&
+        id(output.deviceId) &&
+        typeof output.picture === "boolean" &&
+        typeof output.sound === "boolean",
+    ) &&
+    value.outputs.some((output) => output.deviceId === value.deviceId));
 const httpUrl = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value))
     return false;
@@ -173,15 +186,16 @@ function validAction(value: unknown): value is Action {
         )
       );
     case "enqueue":
-      return validEntry(value.entry) && playOptions(value);
+      return validEntry(value.entry) && playOptions(value) && playOnOutputs(value);
     case "enqueueRadio":
-      return id(value.stationId) && id(value.entryId) && playOptions(value);
+      return id(value.stationId) && id(value.entryId) && playOptions(value) && playOnOutputs(value);
     case "enqueueProvider":
       return (
         providerIds.has(String(value.provider)) &&
         mediaShapes.has(String(value.shape)) &&
         httpUrl(value.url) &&
         playOptions(value) &&
+        playOnOutputs(value) &&
         videoQuality(value.quality) &&
         (value.collection === undefined ||
           (validProviderCollection(value.collection, value.provider) &&
@@ -197,6 +211,7 @@ function validAction(value: unknown): value is Action {
         id(value.entryId) &&
         httpUrl(value.url) &&
         playOptions(value) &&
+        playOnOutputs(value) &&
         (value.title === undefined ||
           (typeof value.title === "string" &&
             value.title.length <= 200 &&
@@ -526,6 +541,12 @@ export function parsePlayer(message: string): PlayerState | null {
   };
 }
 
+const chosenOutput = ({ deviceId, picture, sound }: NonNullable<PlayOn["outputs"]>[number]) => ({
+  deviceId,
+  picture,
+  sound,
+});
+
 export function parseCommand(message: string): ClientMessage {
   let value: unknown;
   try {
@@ -575,6 +596,7 @@ export function parseCommand(message: string): ClientMessage {
       placement,
       collection,
       deviceId,
+      outputs,
     } = value.action;
     return {
       type: "command",
@@ -604,6 +626,7 @@ export function parseCommand(message: string): ClientMessage {
         ...(quality === undefined ? {} : { quality }),
         ...(placement === undefined ? {} : { placement }),
         ...(deviceId === undefined ? {} : { deviceId }),
+        ...(outputs === undefined ? {} : { outputs: outputs.map(chosenOutput) }),
       },
     };
   }
@@ -619,6 +642,9 @@ export function parseCommand(message: string): ClientMessage {
         ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }),
         ...(value.action.placement === undefined ? {} : { placement: value.action.placement }),
         ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }),
+        ...(value.action.outputs === undefined
+          ? {}
+          : { outputs: value.action.outputs.map(chosenOutput) }),
       },
     };
   }
