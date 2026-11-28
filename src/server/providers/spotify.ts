@@ -26,6 +26,23 @@ const unavailable = () => new ProviderError("Spotify search is unavailable.");
 const from = "plays from YouTube";
 // A match is the same recording when its length is within this of Spotify's (live and radio edits differ by more).
 const matchSeconds = 10;
+// Words that name another version of a song in an upload's title.
+const versionWords = [
+  "cover",
+  "karaoke",
+  "instrumental",
+  "live",
+  "remix",
+  "nightcore",
+  "sped",
+  "slowed",
+  "reverb",
+  "8d",
+  "acoustic",
+  "reaction",
+  "tutorial",
+  "lesson",
+];
 
 // The public embed page carries its track list as a literal JSON value; no account or script is involved.
 async function embed(
@@ -340,6 +357,10 @@ export function createSpotifyCatalog(
       artistList(entity).length ? artistList(entity) : (artists?.split(", ") ?? [])
     ).map(searchWords);
     const off = (hit: ProviderItem) => Math.abs(hit.duration! - item.duration!);
+    // Another version of the song (a cover, a remix, live…) only stands in when the track itself is that version.
+    const ownWords = new Set(searchWords(item.title));
+    const otherVersion = (words: Set<string>) =>
+      versionWords.some((word) => words.has(word) && !ownWords.has(word));
     const hit = (await searchYouTube({ query }, signal)).items
       .filter((hit) => {
         if (hit.kind !== "media" || hit.live || hit.duration === undefined) return false;
@@ -347,6 +368,7 @@ export function createSpotifyCatalog(
         const words = new Set(searchWords(`${hit.title} ${hit.subtitle ?? ""}`));
         const titled = new Set(searchWords(hit.title));
         return (
+          !otherVersion(titled) &&
           title.every((word) => titled.has(word)) &&
           (!credits.length || credits.some((name) => name.every((word) => words.has(word))))
         );

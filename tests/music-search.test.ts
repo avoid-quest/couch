@@ -443,7 +443,21 @@ test("A Spotify track plays the YouTube upload naming its title and artist, clos
   expect(queries).toEqual(["Pitbull, Sensato Global Warming (feat. Sensato)"]);
   expect(url).toBe("https://www.youtube.com/watch?v=video3abcd");
   expect(item.url).toBe("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2");
-  for (const hits of [[cover], [{ ...cover, channel: "Pitbull", duration: 200 }]])
+  // An upload naming the title and the artist that is another version loses even when its length is closer.
+  const namedCover = {
+    title: "Pitbull - Global Warming (cover)",
+    channel: "Pitbull",
+    duration: 85.4,
+  };
+  expect(
+    (
+      await catalog([
+        namedCover,
+        { title: "Global Warming", channel: "Pitbull - Topic", duration: 94 },
+      ]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2")
+    ).url,
+  ).toBe("https://www.youtube.com/watch?v=video1abcd");
+  for (const hits of [[cover], [{ ...cover, channel: "Pitbull", duration: 200 }], [namedCover]])
     await expect(
       catalog(hits).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
     ).rejects.toThrow("no YouTube upload");
