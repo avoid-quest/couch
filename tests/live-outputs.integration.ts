@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import type { PlaybackCommand } from "../src/shared/protocol";
 import { helper, startHelpers } from "../src/server/helpers";
+import { madeWay, undoMadeWay } from "../src/client/session/made-way";
 import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
 
 // The existing routing suite also locks the opt-in, shared chooser behaviour.
@@ -541,6 +542,53 @@ test(
         false,
       );
       assert.equal(f.receiver.state.player.status, "playing");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of Move here holds its publisher again in its playback",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      await f.publish("screen");
+      await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+      await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id });
+      await until(() => !!f.publisher.state.playback);
+      const screen = f.publisher.state.playback!;
+      const joined = await f.receiver.command({
+        type: "playLive",
+        sourceId: "screen",
+        deviceId: f.receiver.id,
+      });
+      assert.equal(joined.ok, true, joined.error ?? "");
+      await until(() => direct(f.receiver.load()));
+      f.receiver.report();
+      await until(() => f.publisher.state.player.status === "playing");
+      const held = () =>
+        f.publisher.state.playbacks?.find((playback) => playback.id === screen)?.held?.deviceId;
+      assert.equal(held(), f.publisher.id);
+      const before = f.publisher.state;
+      const moved = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
+      assert.equal(moved.ok, true, moved.error ?? "");
+      await until(() => held() === undefined);
+      const plan = madeWay(before, f.publisher.state);
+      assert.deepEqual(plan.undo.restore, [
+        { playbackId: screen, outputs: [], held: f.publisher.id },
+      ]);
+      await undoMadeWay(
+        plan,
+        async (action) => {
+          const result = await f.publisher.command(action);
+          if (!result.ok) throw new Error(result.error);
+        },
+        () => f.publisher.state,
+      );
+      await until(() => held() === f.publisher.id);
+      assert.deepEqual(receivers(f.publisher), [f.receiver.id]);
     } finally {
       await f.close();
     }

@@ -30,7 +30,7 @@ import { playingOnDevice, useScreenWakeLock } from "../screen-wake-lock";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { choosesHere } from "./where-it-plays";
 import { applyUndo, undoPlan } from "./undo";
-import { madeWay, undoMadeWay } from "./made-way";
+import { hasUndo, madeWay, undoMadeWay } from "./made-way";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
 import {
@@ -372,7 +372,7 @@ export function SessionGate({
           (!!after &&
             (after.playback !== before.playback || after.currentEntryId !== before.currentEntryId));
         const plan = shown && after && madeWay(before, after, played);
-        if (plan && (plan.started || plan.replaced || plan.restore.length)) {
+        if (plan && hasUndo(plan)) {
           offerUndo(typeof text === "string" ? text : text(), () =>
             undoMadeWay(plan, command, readObservation),
           );

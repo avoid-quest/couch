@@ -471,6 +471,8 @@ export async function createHub(options: HubOptions) {
     // entered: what a Play changes once the Session admits its item, before anything observes it.
     choosing?: number;
     held?: Output;
+    // released: the held publisher output Move here let go, which its Undo holds again.
+    released?: Output;
     entered?: () => void;
     // inSync: its live inputs play buffered in its Sendspin group when they span Devices (docs/adr/0001).
     // bufferFailure: the buffered stream its relayed receivers waited for failed during this item.
@@ -5360,7 +5362,6 @@ export async function createHub(options: HubOptions) {
               throw new Error("This command addresses another TV. Select it before using Remote.");
             if (
               action.type !== "selectPlayback" &&
-              action.type !== "restoreOutputs" &&
               "playbackId" in action &&
               action.playbackId &&
               servedBy(guardedTarget) !== playing(action.playbackId)
@@ -5716,32 +5717,123 @@ export async function createHub(options: HubOptions) {
             reconcile(target);
             broadcast();
           } else if (action.type === "restoreOutputs") {
-            // Undo gives a Playback back its devices, a paused one waiting for a device too, so it is found by its id
-            // rather than by what this window looks at; each device changes only as setOutput permits it now.
-            const target = playbacks.get(action.playbackId);
-            if (!target) throw new Error("Undo expired. Check where it plays.");
-            const permitted = authorizePlayback(target, authorize, deviceId);
-            permitted();
-            const wanted = new Map(
-              action.outputs
-                .filter((output) => output.picture || output.sound)
-                .map((output) => [output.deviceId, output]),
-            );
-            // Devices come back before the others leave, so the Playback never goes without one on the way.
-            for (const { deviceId: id, picture, sound } of wanted.values()) {
-              const current = target.outputs.find((output) => output.deviceId === id);
-              if (current?.picture !== picture || current.sound !== sound)
-                await setOutput(target, id, { picture, sound }, permitted, deviceId);
-            }
-            for (const output of [...target.outputs])
-              if (!wanted.has(output.deviceId))
-                await setOutput(
-                  target,
-                  output.deviceId,
-                  { picture: false, sound: false },
-                  permitted,
-                  deviceId,
+            // Undo puts back only what its change did, and only while the world is as the change left it: every
+            // device it moved is where it put it, and what it started or replaced still plays its item. Everything is
+            // checked before anything changes, so a refused Undo changes nothing.
+            const stale = (why: string) =>
+              new ControllerError(`Undo isn't possible anymore: ${why}.`, 409);
+            for (const left of action.left) {
+              const member = memberOf(left.deviceId),
+                output = member && mixOf(member).find((item) => item.deviceId === left.deviceId);
+              if ((member?.id ?? null) !== left.playbackId)
+                throw stale(
+                  `${nameOf(left.deviceId)} ${member ? "plays something else" : "stopped playing it"}`,
                 );
+              if (output && (output.picture !== left.picture || output.sound !== left.sound))
+                throw stale(`${nameOf(left.deviceId)} plays it differently now`);
+            }
+            const moved = new Set(action.left.map((left) => left.deviceId));
+            const started = action.started && playbacks.get(action.started.playbackId);
+            if (action.started) {
+              if (!started || stateOf(started).currentEntryId !== action.started.entryId)
+                throw stale("what it started plays something else");
+              requireAction(started, { type: "stop" }, deviceId);
+              const joined = mixOf(started).find((output) => !moved.has(output.deviceId));
+              if (joined) throw stale(`${nameOf(joined.deviceId)} plays it too`);
+            }
+            const replaced = action.replaced && playbacks.get(action.replaced.playbackId);
+            if (
+              action.replaced &&
+              (!replaced ||
+                stateOf(replaced).currentEntryId !== action.replaced.newEntryId ||
+                !stateOf(replaced).queue.some((entry) => entry.id === action.replaced!.entryId))
+            )
+              throw stale("it plays something else");
+            if (replaced && action.replaced)
+              requireAction(replaced, { type: "play", entryId: action.replaced.entryId }, deviceId);
+            const restores = action.restore.map(({ playbackId, outputs, held }) => {
+              const target = playbacks.get(playbackId);
+              if (!target) throw stale("what it took devices from has stopped");
+              const permitted = authorizePlayback(target, authorize, deviceId);
+              permitted();
+              const source = live.source(sourceOf(target) ?? "");
+              for (const output of outputs) {
+                if (!moved.has(output.deviceId))
+                  throw new Error("Undo expired. Check where it plays.");
+                // The same Live guard as a device's own keys: no Undo moves another operator's audience.
+                if (lockedByLive(deviceId, output.deviceId))
+                  throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+                const current = target.outputs.find((item) => item.deviceId === output.deviceId);
+                if (current) requireOutput(current, deviceId);
+                if (!output.picture && !output.sound) continue;
+                requireOutput(output, deviceId);
+                requireReplacement(output.deviceId, deviceId);
+                requireReceiver(target, output.deviceId);
+                if (!newest(output.deviceId)) throw stale(`${nameOf(output.deviceId)} is offline`);
+                if (mpvPlayback === target && output.deviceId !== hostId())
+                  throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
+              }
+              const publisher = held === undefined ? undefined : target.released;
+              if (held !== undefined) {
+                if (publisher?.deviceId !== held || !source || heldOutOf(source) !== held)
+                  throw stale(`${nameOf(held)} shares something else`);
+                if (lockedByLive(deviceId, held))
+                  throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+              }
+              return { target, permitted, outputs, publisher };
+            });
+            const resumed = action.resume.flatMap((id) => {
+              const target = playbacks.get(id);
+              if (!target || stateOf(target).player.status !== "paused") return [];
+              const permitted = authorizePlayback(target, authorize, deviceId);
+              permitted();
+              return [{ target, permitted }];
+            });
+            if (started) {
+              await started.session.command(
+                { type: "stop" },
+                authorizePlayback(started, authorize, deviceId),
+                playedBy,
+              );
+              restoreControllers(started);
+            }
+            if (replaced && action.replaced) {
+              const permitted = authorizePlayback(replaced, authorize, deviceId);
+              await replaced.session.command(
+                { type: "play", entryId: action.replaced.entryId },
+                permitted,
+                playedBy,
+              );
+              inspections.get(action.replaced.newEntryId)?.abort();
+              await replaced.session.command(
+                { type: "remove", entryId: action.replaced.newEntryId },
+                permitted,
+                playedBy,
+              );
+            }
+            // Devices come back before others leave, so no Playback goes without one on the way.
+            for (const { target, permitted, outputs } of restores)
+              for (const { deviceId: id, picture, sound } of outputs)
+                if (picture || sound)
+                  await setOutput(target, id, { picture, sound }, permitted, deviceId);
+            for (const { target, permitted, outputs } of restores)
+              for (const { deviceId: id, picture, sound } of outputs)
+                if (!picture && !sound)
+                  await setOutput(target, id, { picture, sound }, permitted, deviceId);
+            for (const { target, publisher } of restores)
+              if (publisher && !memberOf(publisher.deviceId)) {
+                target.held = publisher;
+                target.released = undefined;
+              }
+            for (const { target, permitted } of resumed) {
+              const { playbackId } = stateOf(target).player;
+              if (playbackId && stateOf(target).player.status === "paused")
+                await target.session.command(
+                  { type: "pause", playbackId, paused: false },
+                  permitted,
+                  playedBy,
+                );
+            }
             broadcast();
           } else if (
             action.type === "solo" ||
@@ -5810,7 +5902,8 @@ export async function createHub(options: HubOptions) {
                 if (output.sound && !target.outputs[0]!.sound)
                   await setOutput(target, action.deviceId, { sound: true }, exclusive, deviceId);
               } else await sendTo(target, output, exclusive, deviceId);
-              // A held publisher output, which exclusive allowed, does not return after the move.
+              // A held publisher output, which exclusive allowed, does not return after the move, unless Undo puts it back.
+              target.released = target.held;
               target.held = undefined;
               follow(left, action.deviceId);
               broadcast();

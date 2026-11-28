@@ -43,6 +43,10 @@ const playOptions = (value: Record<string, unknown>) =>
     (value.playNow === true && typeof value.fromStart === "boolean")) &&
   (value.placement === undefined || (value.placement === "next" && value.playNow !== true)) &&
   (value.deviceId === undefined || (value.playNow === true && id(value.deviceId)));
+const channels = (value: Record<string, unknown>) =>
+  id(value.deviceId) && typeof value.picture === "boolean" && typeof value.sound === "boolean";
+const list = (value: unknown, valid: (item: Record<string, unknown>) => boolean) =>
+  Array.isArray(value) && value.length <= 64 && value.every((item) => object(item) && valid(item));
 // Play on's chosen outputs include the Device it names.
 const playOnOutputs = (value: Record<string, unknown>) =>
   value.outputs === undefined ||
@@ -319,16 +323,27 @@ function validAction(value: unknown): value is Action {
       return id(value.stoppedId);
     case "restoreOutputs":
       return (
-        id(value.playbackId) &&
-        Array.isArray(value.outputs) &&
-        value.outputs.length <= 64 &&
-        value.outputs.every(
-          (output) =>
-            object(output) &&
-            id(output.deviceId) &&
-            typeof output.picture === "boolean" &&
-            typeof output.sound === "boolean",
-        )
+        list(
+          value.left,
+          (left) => channels(left) && (left.playbackId === null || id(left.playbackId)),
+        ) &&
+        (value.started === undefined ||
+          (object(value.started) && id(value.started.playbackId) && id(value.started.entryId))) &&
+        (value.replaced === undefined ||
+          (object(value.replaced) &&
+            id(value.replaced.playbackId) &&
+            id(value.replaced.entryId) &&
+            id(value.replaced.newEntryId))) &&
+        list(
+          value.restore,
+          (restore) =>
+            id(restore.playbackId) &&
+            list(restore.outputs, channels) &&
+            (restore.held === undefined || id(restore.held)),
+        ) &&
+        Array.isArray(value.resume) &&
+        value.resume.length <= 64 &&
+        value.resume.every(id)
       );
     case "sharing":
       return isDeviceSharing(value.sharing);
@@ -659,8 +674,29 @@ export function parseCommand(message: string): ClientMessage {
       ...guard,
       action: {
         type: "restoreOutputs",
-        playbackId: value.action.playbackId,
-        outputs: value.action.outputs.map(chosenOutput),
+        left: value.action.left.map((left) => ({
+          ...chosenOutput(left),
+          playbackId: left.playbackId,
+        })),
+        ...(value.action.started && {
+          started: {
+            playbackId: value.action.started.playbackId,
+            entryId: value.action.started.entryId,
+          },
+        }),
+        ...(value.action.replaced && {
+          replaced: {
+            playbackId: value.action.replaced.playbackId,
+            entryId: value.action.replaced.entryId,
+            newEntryId: value.action.replaced.newEntryId,
+          },
+        }),
+        restore: value.action.restore.map((restore) => ({
+          playbackId: restore.playbackId,
+          outputs: restore.outputs.map(chosenOutput),
+          ...(restore.held === undefined ? {} : { held: restore.held }),
+        })),
+        resume: value.action.resume,
       },
     };
   if (value.action.type === "enqueue") {

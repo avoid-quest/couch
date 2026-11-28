@@ -360,12 +360,21 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   | { type: "undoStop"; stoppedId: string }
-  // Undo of a change that took devices (Play on, Move here, a device's key): that Playback's devices are these again,
-  // each with its picture and sound, as far as each still may play there.
+  // Undo of a change that took devices (Play on, Move here, a device's key, a group), all or nothing, and only while
+  // each device it moved is still where it left it (left; playbackId null: nowhere) and what it started or replaced
+  // still plays its item. started stops; replaced's item plays again; each restore Playback gets back the channels the
+  // change took (only those, an off one leaving) and a publisher it held; resume plays again what it paused.
   | {
       type: "restoreOutputs";
-      playbackId: string;
-      outputs: Pick<Output, "deviceId" | "picture" | "sound">[];
+      left: (Pick<Output, "deviceId" | "picture" | "sound"> & { playbackId: string | null })[];
+      started?: { playbackId: string; entryId: string };
+      replaced?: { playbackId: string; entryId: string; newEntryId: string };
+      restore: {
+        playbackId: string;
+        outputs: Pick<Output, "deviceId" | "picture" | "sound">[];
+        held?: string;
+      }[];
+      resume: string[];
     }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
   // sound. allSpeakers (All, which only older clients offer) trims the Playback's existing sound from 0 to 100,
