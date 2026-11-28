@@ -20,6 +20,7 @@ import {
   groupStatus,
   listed,
   membersOf,
+  planChoice,
   planGroup,
   undoSteps,
   type Change,
@@ -262,8 +263,9 @@ export function GroupChips({
 }
 
 /**
- * Choose where it plays' Groups line: a chip fills the choice with what the group asks that each device can play now,
- * and says what it left out; nothing plays until Play. Save as group saves the choice as it stands.
+ * Choose where it plays' Groups line. Opening a chip shows what the group would change in the choice, as the Mixer's
+ * preview does; Use this group fills the choice with what each device can play now and says what it left out. Nothing
+ * plays until Play. Save as group saves the choice as it stands.
  */
 export function ChoiceGroups({
   state,
@@ -280,46 +282,59 @@ export function ChoiceGroups({
 }) {
   const scope = useContext(Groups);
   const canSave = useCanSave();
+  const [opened, setOpened] = useState<string | null>(null);
   const chips = useRef<HTMLDivElement>(null);
   const { undoing, undo } = useUndo(chips, []);
   const groups = state.groups ?? [];
   if (!scope || (!groups.length && !canSave)) return null;
-  const same = (one: Choice, two: Choice) =>
-    Object.keys(one).length === Object.keys(two).length &&
-    Object.entries(one).every(
-      ([id, chosen]) => two[id]?.picture === chosen.picture && two[id]?.sound === chosen.sound,
-    );
+  const open = groups.find((group) => group.id === opened);
   return (
-    <GroupLine
-      lineRef={chips}
-      connected={connected}
-      outcome={scope.outcome}
-      undoing={undoing}
-      onUndo={undo}
-      onSave={
-        canSave
-          ? () =>
-              scope.edit({
-                name: "",
-                members: Object.entries(choice).map(([deviceId, chosen]) => ({
-                  deviceId,
-                  ...chosen,
-                })),
-              })
-          : undefined
-      }
-      chips={groups.map((group) => {
-        const filled = groupChoice(group, rows);
-        return {
+    <div className="grid">
+      <GroupLine
+        lineRef={chips}
+        connected={connected}
+        outcome={scope.outcome}
+        undoing={undoing}
+        onUndo={undo}
+        onSave={
+          canSave
+            ? () =>
+                scope.edit({
+                  name: "",
+                  members: Object.entries(choice).map(([deviceId, chosen]) => ({
+                    deviceId,
+                    ...chosen,
+                  })),
+                })
+            : undefined
+        }
+        chips={groups.map((group) => ({
           group,
-          on: Object.keys(filled.choice).length > 0 && same(filled.choice, choice),
+          ...groupStatus(planChoice(group, rows, choice, state)),
+          open: group.id === opened,
           onClick: () => {
             scope.say(null);
-            onChoose(filled.choice, filled.left);
+            setOpened(group.id === opened ? null : group.id);
           },
-        };
-      })}
-    />
+        }))}
+      />
+      {open && (
+        <GroupPreview
+          key={open.id}
+          group={open}
+          plan={planChoice(open, rows, choice, state)}
+          connected={connected}
+          onEdit={canSave ? () => scope.edit(open) : undefined}
+          onUse={() => {
+            const filled = groupChoice(open, rows);
+            // Focus goes back to its chip before the preview closes under it.
+            chips.current?.querySelector<HTMLElement>(`[data-group="${open.id}"]`)?.focus();
+            setOpened(null);
+            onChoose(filled.choice, filled.left);
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -337,25 +352,30 @@ const line = (key: string, icon: ReactNode, text: ReactNode, quiet = false) => (
   </li>
 );
 
-/** What applying a group to this playback would do, line by line, with Apply under it. */
+/**
+ * What applying a group to this playback would do, line by line, with Apply under it; for a choice not yet played
+ * (`onUse`), what it would change in the choice, with Use this group.
+ */
 function GroupPreview({
   group,
   plan,
-  rows,
+  rows = [],
   title,
-  playbackId,
+  playbackId = null,
   connected,
   onEdit,
   onApplied,
+  onUse,
 }: {
   group: MixerGroup;
   plan: Plan;
-  rows: Row[];
+  rows?: Row[];
   title?: string | null;
-  playbackId: string | null;
+  playbackId?: string | null;
   connected: boolean;
   onEdit?: () => void;
-  onApplied: (outcome: Outcome) => void;
+  onApplied?: (outcome: Outcome) => void;
+  onUse?: () => void;
 }) {
   const gate = useContext(SessionGateContext);
   const [busy, setBusy] = useState(false);
@@ -399,7 +419,9 @@ function GroupPreview({
       ? "None of it can play here now."
       : plan.left.length
         ? "Everything it may change is already on."
-        : "It already plays like this.";
+        : onUse
+          ? "Already set like this."
+          : "It already plays like this.";
   const apply = async () => {
     if (!gate || !playbackId) return;
     setBusy(true);
@@ -434,7 +456,7 @@ function GroupPreview({
     ];
     // Undo puts back this playback's devices; a device taken from another programme doesn't return to it.
     const moved = applied.some((change) => change.from);
-    onApplied({
+    onApplied?.({
       group: group.id,
       playbackId,
       text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.${moved ? " Undo changes only this playback." : ""}`,
@@ -463,14 +485,20 @@ function GroupPreview({
       </div>
       <ul className="grid gap-1">{lines}</ul>
       <div data-nav-row className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
-        <Button
-          size="sm"
-          disabled={!connected || !count || busy || !playbackId}
-          onClick={() => void apply()}
-          className="max-w-full"
-        >
-          <span className="truncate">{title ? `Apply to ${title}` : "Apply"}</span>
-        </Button>
+        {onUse ? (
+          <Button size="sm" disabled={!connected || !count} onClick={onUse}>
+            Use this group
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={!connected || !count || busy || !playbackId}
+            onClick={() => void apply()}
+            className="max-w-full"
+          >
+            <span className="truncate">{title ? `Apply to ${title}` : "Apply"}</span>
+          </Button>
+        )}
         <span role="status" className="text-sm text-muted-foreground">
           {outcome}
         </span>
