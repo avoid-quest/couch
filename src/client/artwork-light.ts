@@ -8,10 +8,11 @@ import { apiFetch, type ApiCredentials } from "./api/client";
  */
 export type Rgb = readonly [number, number, number];
 /**
- * `a` and `b` light the picture (the backlight and the haze); `room` and `deep` paint the room it stands in (the
- * Stage, the player's Now playing) and `tone` tints the now-playing bar's glass.
+ * `a` lights a tile or a row while it is hovered or focused. `lamp` and `spill` are the lights that light the room from
+ * what plays (RoomLight.tsx): the picture's first hue, and its second, at one even strength, so a dark still and a
+ * bright one light the room alike.
  */
-export type Light = { key: string; a: Rgb; b: Rgb; room: Rgb; deep: Rgb; tone: Rgb };
+export type Light = { key: string; a: Rgb; lamp: Rgb; spill: Rgb };
 /** What a read learns of a picture: its light, if it has colour, and whether its edges are see-through (a logo). */
 export type Art = { light: Light | null; clear: boolean };
 
@@ -46,21 +47,13 @@ function atLuminance(colour: Rgb, target: number): Rgb {
 }
 
 /**
- * How bright each colour may be. The first is a backlight that hugs the artwork and is gone a few rem out; at its
- * brightest white ink keeps 7:1 over it (1.05 / 7 − 0.05 = 0.1). The second is a wide haze that may lie under any
- * text, so it stays dark enough for muted ink (#a3a3a3) to keep 7:1 too (0.416 / 7 − 0.05 = 0.0094), with room for
- * the backlight's last trace where text comes near the artwork.
+ * How bright each colour may be. The item light hugs the artwork and is gone a few rem out; at its brightest white ink
+ * keeps 7:1 over it (1.05 / 7 − 0.05 = 0.1). The lamps are as bright as the stills the design was drawn from; the room
+ * mixes them into its dark at most at 40% and 34% (index.css, Room), where ink and its 70% keep 4.5:1.
  */
-export const peak = 0.07,
-  haze = 0.004;
-/**
- * The room may lie under any text, so muted ink (#bdbdbd, luminance .509) keeps 7:1 over its brightest colour
- * (.559 / 7 − .05 = .03), with room to spare; its second colour is deeper still. The bar's tone is mixed into glass
- * over a dimmed backdrop, and the bar's ink is checked over white behind it (docs/design.md, Glass).
- */
-export const roomPeak = 0.022,
-  deepPeak = 0.01,
-  tonePeak = 0.03;
+export const peak = 0.07;
+const lampPeak = 0.24,
+  spillPeak = 0.14;
 
 /**
  * The two colours of a picture's pixels (RGBA, as getImageData gives them): the strongest hue, by how vivid its pixels
@@ -119,14 +112,12 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
   return [mean(first.bin), mean(second.bin)];
 }
 
-/** Light from two picked colours: the first as the backlight, the second as the haze. */
+/** Light from two picked colours: the first lights items and the room's main lamp, the second its spill. */
 export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({
   key,
   a: atLuminance(a, peak),
-  b: atLuminance(b, haze),
-  room: atLuminance(a, roomPeak),
-  deep: atLuminance(b, deepPeak),
-  tone: atLuminance(a, tonePeak),
+  lamp: atLuminance(a, lampPeak),
+  spill: atLuminance(b, spillPeak),
 });
 
 /** A picture whose edge is mostly see-through (a logo on nothing) stands without a shadow, which would outline its box. */

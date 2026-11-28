@@ -95,6 +95,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -112,10 +113,10 @@
 /* Couch's scales (Design → Tokens). Radius: what you press or type into is a capsule (rounded-full); a picture or a row
    inside a surface has a soft corner (sm, md); a surface that opens over the page has a larger one (lg, xl). */
 @theme {
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.7rem;
+  --radius-lg: 1.2rem;
+  --radius-xl: 1.75rem;
   /* Control heights: a small control, a control (chips too), a verb, the header's search field. Touch raises each to 44px. */
   --spacing-control-sm: 1.75rem;
   --spacing-control: 2rem;
@@ -148,31 +149,35 @@
   --default-transition-timing-function: var(--ease-out);
 }
 
-/* Clock: one dark theme. Black ground, white ink, hairlines; the picture brings the colour. */
+/* One dark theme: a warm dark room, warm white ink, hairlines; what plays brings the colour (Room). Focus is white. */
 :root {
-  --background: #000;
-  --foreground: #fff;
-  --card: #000;
-  --card-foreground: #fff;
-  --popover: #0a0a0a;
-  --popover-foreground: #fff;
-  --primary: #fff;
-  --primary-foreground: #000;
+  --background: #110f13;
+  --foreground: #f6f2ec;
+  --card: #110f13;
+  --card-foreground: #f6f2ec;
+  /* What opens over the page (Surfaces): a warm dark, a little see-through over the light. */
+  --popover: rgb(29 26 32 / 92%);
+  --popover-foreground: #f6f2ec;
+  --primary: #f6f2ec;
+  --primary-foreground: #0c0a0d;
   /* A chip's or a filled control's ground, one step up under a pointer (--fill-hover). */
-  --secondary: rgb(255 255 255 / 10%);
-  --secondary-foreground: #fff;
-  --fill-hover: rgb(255 255 255 / 16%);
-  /* Toasts' ground; the same colour as the bar's glass without a tone (@property --tone). */
-  --bar: #1c1c1e;
-  --muted: #171717;
-  --muted-foreground: #bdbdbd;
+  --secondary: rgb(246 242 236 / 8%);
+  --secondary-foreground: #f6f2ec;
+  --fill-hover: rgb(246 242 236 / 15%);
+  /* A small floating surface's ground (the sharing capsule). */
+  --bar: #1d1a20;
+  --muted: #1d1a20;
+  /* Quieter ink: 70% for meta and secondary text, 48% for what only labels (an unchosen tab, a placeholder). */
+  --muted-foreground: rgb(246 242 236 / 70%);
+  --subtle-foreground: rgb(246 242 236 / 48%);
   /* A list's row under the pointer (menus, the palette, a Select): a quiet fill, the ink unchanged. Keys invert it. */
-  --accent: rgb(255 255 255 / 10%);
-  --accent-foreground: #fff;
+  --accent: rgb(246 242 236 / 8%);
+  --accent-foreground: #f6f2ec;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: rgb(255 255 255 / 14%);
-  --input: rgb(255 255 255 / 16%);
+  --border: rgb(246 242 236 / 11%);
+  --input: rgb(246 242 236 / 15%);
   --ring: #fff;
+  --ring-foreground: #000;
   --gutter: clamp(1rem, 4vw, 3rem);
   color-scheme: dark;
 }
@@ -187,8 +192,9 @@
     font-size: clamp(16px, 1.25vw, 24px);
     font-variant-numeric: tabular-nums;
   }
+  /* The page has no ground of its own: the shell's room (RoomLight.tsx) lies behind it, over html's. */
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
   button,
   [role="button"] {
@@ -218,8 +224,8 @@
 :where([data-keyboard]) :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus) {
   outline: none;
   box-shadow: none;
-  background: var(--foreground);
-  color: var(--background);
+  background: var(--ring);
+  color: var(--ring-foreground);
 }
 [data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
   color-scheme: light;
@@ -228,7 +234,7 @@
     :focus-visible,
     :where([data-keyboard] .tv-presentation) :focus
   )::placeholder {
-  color: color-mix(in srgb, var(--background) 65%, transparent);
+  color: color-mix(in srgb, var(--ring-foreground) 65%, transparent);
 }
 [data-slot="button"][data-variant="default"]:is(
     :focus-visible,
@@ -240,7 +246,7 @@
   :focus-visible,
   :where([data-keyboard] .tv-presentation) :focus
 ) {
-  outline: 2px solid var(--foreground);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
@@ -251,8 +257,8 @@
    and one under the pointer takes the menus' quiet fill (--accent) with its ink unchanged (HeaderSearch marks the list
    data-pointer while a pointer moves over it). */
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] {
-  background: var(--foreground);
-  color: var(--background);
+  background: var(--ring);
+  color: var(--ring-foreground);
   box-shadow: none;
 }
 :is(button, a):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)
@@ -261,7 +267,7 @@
   :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus)
   .text-muted-foreground,
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] .text-muted-foreground {
-  color: color-mix(in srgb, var(--background) 65%, transparent);
+  color: color-mix(in srgb, var(--ring-foreground) 65%, transparent);
 }
 /* Media lights up (Design → Hover). A tile or a row is a picture, never a box: nothing tints, outlines or dims it.
    Hovered or focused, its picture glows in its own first colour (--item-light, AmbientLight.tsx's useItemLight; a
@@ -275,7 +281,7 @@
 :is([data-tile-art], [data-row-art]) {
   --glow: transparent;
   box-shadow: 0 0.75rem 2.75rem -0.5rem var(--glow);
-  outline: 0 solid var(--foreground);
+  outline: 0 solid var(--ring);
   outline-offset: 0.1875rem;
 }
 /* The ring answers as a control does (150 ms); the glow is there at once. A transitioned shadow repaints its blur on
@@ -339,8 +345,8 @@
    padding, so nothing moves. */
 [data-text-link]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
   box-shadow:
-    -0.25rem 0 0 0.125rem var(--foreground),
-    0.25rem 0 0 0.125rem var(--foreground);
+    -0.25rem 0 0 0.125rem var(--ring),
+    0.25rem 0 0 0.125rem var(--ring);
   box-decoration-break: clone;
 }
 /* A shelf's tiles keep their own heights; their captions start level under artwork of one height. */
@@ -804,27 +810,19 @@ html:has(body.tv-presentation),
 .player-timeline [data-slot="slider-track"] {
   background: rgb(255 255 255 / 25%);
 }
-/* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
-   tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
-   before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
-   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page (Up next over the player's room is the other). */
-.bar-glass {
-  border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--tone) 80%, transparent);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  box-shadow: var(--float-shadow);
-  transition: --tone 0.6s var(--ease-out);
-}
-@media (max-width: 39.99rem) {
-  .bar-glass {
-    border-radius: 1rem;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bar-glass {
-    transition: none;
-  }
+/* A lit panel (docs/design.md, Surfaces): what plays, standing in the room, as the now-playing bar. Its warm dark ground
+   takes the lamps' colours as the room does, more while it plays, and throws a little of their light around it. */
+.lit-panel {
+  border-radius: var(--radius-xl);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--lamp) calc(7% + var(--light) * 21%), #18151b),
+    color-mix(in oklab, var(--spill) calc(5% + var(--light) * 15%), #121014)
+  );
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 7.5%),
+    0 1.75rem 4rem -1.75rem rgb(0 0 0 / 90%),
+    0 0 9rem -1.75rem color-mix(in oklab, var(--lamp) calc(var(--light) * 70%), transparent);
 }
 /* The bar's timeline runs along its top edge between its corners: a rounded line whose played part glows a little,
    that thickens and shows its handle under a pointer, with a hit area taller than the line, centred on it. */
@@ -975,11 +973,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
   margin-inline: -0.375rem;
   padding-inline: 0.375rem;
 }
-/* The room's light pools behind the artwork, never behind the copy. */
-.player-page > .room {
-  --room-x: 30%;
-  --room-y: 50%;
-}
 @media (max-width: 959px), (max-aspect-ratio: 5/4) {
   .player-summary {
     --art-h: calc(100cqh - 14rem);
@@ -999,10 +992,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
   }
   [data-player-audio-copy] {
     width: 100%;
-  }
-  .player-page > .room {
-    --room-x: 50%;
-    --room-y: 32%;
   }
   /* Stacked, Info makes room under a smaller artwork, and the whole column scrolls when it still can't fit. */
   .player-page[data-info] .player-summary {
@@ -1179,7 +1168,7 @@ html:has([data-slot="popover-content"]) .player-next-up {
     overflow-y: auto;
   }
   .player-page[data-artwork-stage] .display-title {
-    --glyph: 0.8;
+    --glyph: 0.89;
   }
   .player-header {
     padding-block: 0.25rem;
@@ -1249,65 +1238,148 @@ html[data-cursor-hidden] * {
     transition: none;
   }
 }
-/* The room (Stage.tsx, the player's Now playing; docs/design.md, Room): what a picture stands in, painted with its own
-   colours, sampled and dimmed so muted ink keeps 7:1 anywhere on it (artwork-light.ts, roomPeak). Its first colour pools
-   behind the picture, its second falls from the top corner, and a fine grain keeps the gradients from banding and gives
-   the dark a surface. All static: painted once, and when the picture changes its colours cross-fade (registered custom
-   properties) over 600 ms. Without colour (a white cover, a black-and-white logo) the room is a neutral graphite. */
-@property --room-a {
+/* The room (RoomLight.tsx; docs/design.md, Room): the dark every screen stands in, lit by what plays. Its lamp (the
+   picture's first colour) pools where the player stands and its spill (the second) rises from the bottom left corner.
+   --light says how lit it is: 1 playing, .3 paused, .5 for a page's lead picture while nothing plays, 0 dark. In the
+   full player and behind a lit panel the picture itself, blurred (.room-picture), lies on the wall too. The colours and
+   the level cross-fade over 600 ms (registered custom properties); a fine grain keeps the gradients from banding. The
+   header and the phone's tabs paint the same room fixed to the window (.room-ground), so it runs on under them unbroken. */
+@property --light {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --lamp {
   syntax: "<color>";
   inherits: true;
-  initial-value: #171717;
+  initial-value: #000;
 }
-@property --room-b {
+@property --spill {
   syntax: "<color>";
   inherits: true;
-  initial-value: #0b0b0b;
+  initial-value: #000;
 }
-@property --light-a {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #222;
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-@property --tone {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #1c1c1e;
-}
-.room {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-  pointer-events: none;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      55% 75% at var(--room-x, 78%) var(--room-y, 42%),
-      color-mix(in srgb, var(--light-a) 70%, var(--room-a)),
-      var(--room-a) 38%,
-      transparent 82%
-    ),
-    radial-gradient(70% 90% at 100% 0%, var(--room-b), transparent 70%),
-    linear-gradient(var(--room-b), #000);
+/* Where the lamp stands: by the player at the left on desktops and the TV, by the dock on phones, by the lead while
+   nothing plays, by the artwork in the full player. */
+.app-shell {
+  --room-x: 12%;
+  --room-y: 26%;
   transition:
-    --room-a 0.6s var(--ease-out),
-    --room-b 0.6s var(--ease-out),
-    --light-a 0.6s var(--ease-out);
+    --light 0.6s var(--ease-out),
+    --lamp 0.6s var(--ease-out),
+    --spill 0.6s var(--ease-out);
 }
-.room::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--grain);
-  opacity: 0.06;
+.app-shell[data-light="lead"] {
+  --room-x: 26%;
+  --room-y: 40%;
+}
+.app-shell:has(.player-page[data-artwork-stage]) {
+  --room-x: 30%;
+  --room-y: 48%;
+}
+@media (max-width: 47.99rem) {
+  .app-shell {
+    --room-x: 50%;
+    --room-y: 100%;
+  }
+  .app-shell[data-light="lead"],
+  .app-shell:has(.player-page[data-artwork-stage]) {
+    --room-x: 50%;
+    --room-y: 36%;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .room {
+  .app-shell {
     transition: none;
   }
 }
-:root {
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+.room,
+.room-ground {
+  background:
+    var(--grain),
+    radial-gradient(
+      110% 95% at var(--room-x) var(--room-y),
+      color-mix(in oklab, var(--lamp) calc(var(--light) * 40%), transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      80% 80% at 0% 104%,
+      color-mix(in oklab, var(--spill) calc(var(--light) * 34%), transparent),
+      transparent 62%
+    ),
+    var(--background);
+}
+.room-ground {
+  background-attachment: fixed;
+}
+.room-light {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.room-picture {
+  display: none;
+  position: absolute;
+  z-index: -1;
+  object-fit: cover;
+  filter: blur(38px) saturate(1.7) brightness(0.6);
+  opacity: calc(var(--light) * 0.78);
+  pointer-events: none;
+}
+/* In the full player the picture's light fills the room, its own wall; the header is hidden there, so nothing has to
+   repeat it. Dimmed, as the lamps are, so a bright sky keeps the title's ink readable. */
+.app-shell:has(.player-page[data-artwork-stage]) .room-light > .room-picture {
+  display: block;
+  inset: -10% -14%;
+  width: 128%;
+  height: 130%;
+  filter: blur(70px) saturate(1.7) brightness(0.45);
+  opacity: calc(var(--light) * 0.6);
+}
+/* A lit panel that shows the picture (the side player) throws it on the wall behind it. */
+.lit-panel:has(> .room-picture) {
+  isolation: isolate;
+  overflow: hidden;
+}
+.lit-panel > .room-picture {
+  display: block;
+  left: -7%;
+  top: 2%;
+  width: 114%;
+  height: 118%;
+}
+/* Surfaces (docs/design.md): what opens over the page is a warm dark, a little see-through, blurring the light behind
+   it, with a hairline of light at its edge and a deep shadow under it. */
+:is(
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"]
+) {
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 10%),
+    0 1.5rem 4rem -0.75rem rgb(0 0 0 / 90%);
+}
+[data-slot="sheet-content"] {
+  background-color: var(--popover);
+  border: 0;
+}
+[data-slot="sheet-content"][data-side="bottom"] {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+/* A toast is ink on the room, the one light surface, so it reads at a glance; its verb is a dark capsule. */
+[data-sonner-toast]
+  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  outline-color: var(--ring-foreground);
 }
 /* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
 :root {
@@ -1318,16 +1390,16 @@ html[data-cursor-hidden] * {
   --float-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 9%);
 }
 
-/* Display type (docs/design.md, Type): Mona Sans at its normal width for every title, so short and long read as one
+/* Display type (docs/design.md, Type): Mona Sans, expanded, for every title, so short and long read as one
    voice. Length (titleLength in Stage.tsx) steps the size and, a little, the weight down: a long title wraps to more
    lines instead of condensing. Its size never lets its longest word (--word, in characters; --glyph is a lowercase
    character's width in em at this width, measured on real titles) overflow its column (cqi), so a word never breaks
    or clips; only a word longer than any column could hold breaks. */
 .display-title {
-  --glyph: 0.7;
+  --glyph: 0.78;
   font-family: var(--font-display);
   font-weight: var(--title-weight);
-  font-stretch: 100%;
+  font-stretch: 114%;
   line-height: 0.94;
   letter-spacing: -0.012em;
   overflow-wrap: break-word;
@@ -1393,11 +1465,17 @@ html[data-cursor-hidden] * {
   font-size: inherit;
 }
 
-/* Page titles and the headings of shelves, lists and sections are display type too, at their own sizes and normal width. */
+/* Mona Sans is always expanded (Type): page titles widest, then headings, then everything else set in it. */
+:is(.font-display, .font-heading) {
+  font-stretch: 112%;
+}
 :is(h1, h2):is(.text-heading, .text-page),
 :is(h1, h2).text-heading .text-heading {
   font-family: var(--font-display);
-  font-stretch: 100%;
+  font-stretch: 114%;
+}
+:is(h1, h2).text-page {
+  font-stretch: 120%;
 }
 
 /* Unlayered, so a page's spacing utilities (space-y) never undo the stage's reach under the header. */
@@ -1426,12 +1504,6 @@ html[data-cursor-hidden] * {
   --title-medium: 3.5rem;
   --title-long: 2.75rem;
   --title-xlong: 2.25rem;
-}
-/* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the
-   next section); its light pools behind the picture. */
-.stage > .room {
-  --room-x: 80%;
-  mask-image: linear-gradient(#000 50%, transparent);
 }
 /* Picture and copy share a baseline in normal flow, so long titles can grow the Stage without colliding. */
 .stage-picture {
@@ -1542,10 +1614,6 @@ html[data-cursor-hidden] * {
   .stage:not(:has(> [data-stage-picture] > *)) {
     padding-top: calc(var(--top-bar, 4rem) + 1.25rem);
   }
-  .stage > .room {
-    --room-x: 50%;
-    --room-y: 25%;
-  }
   .stage-copy {
     grid-area: 2 / 1;
     max-width: none;
@@ -1554,10 +1622,6 @@ html[data-cursor-hidden] * {
   .stage:has(> [data-stage-picture] > *) .stage-copy {
     margin-top: 1.75rem;
   }
-}
-/* Over a stage, while the page is at its top, the header is see-through, its ink kept by the dimmed room; scrolled, black again. */
-html[data-stage-under-header] .app-header {
-  background: transparent;
 }
 
 /* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (`--tile-ratio`,
@@ -1645,9 +1709,6 @@ html[data-stage-under-header] .app-header {
 }
 [data-stage="home"] .stage-copy > [data-nav-row]:last-child {
   margin-top: 0.25rem;
-}
-[data-stage="home"] > .room {
-  --room-x: 20%;
 }
 /* Whole pictures share a height; captions and progress share their visible edges. */
 .home-shelves [data-natural],

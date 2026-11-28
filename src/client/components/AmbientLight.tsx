@@ -1,4 +1,11 @@
-import { useContext, useEffect, useState, type CSSProperties, type SyntheticEvent } from "react";
+import {
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type SyntheticEvent,
+} from "react";
 import { cachedArt, readArt, type Art, type Light, type Rgb } from "@/artwork-light";
 import { SessionGateContext } from "@/session/gate-context";
 
@@ -29,17 +36,42 @@ export const useArtworkLight = (src: string | undefined): Light | null =>
   useArtwork(src)?.light ?? null;
 
 const rgb = (colour: Rgb) => `rgb(${colour.join(" ")})`;
-/** The room's colours and the light behind its picture as custom properties (index.css, .room); none keeps the neutral room. */
-export const roomStyle = (light: Light | null | undefined) =>
-  light
-    ? ({
-        "--room-a": rgb(light.room),
-        "--room-b": rgb(light.deep),
-        "--light-a": rgb(light.a),
-        "--light-b": rgb(light.b),
-        "--tone": rgb(light.tone),
-      } as CSSProperties)
-    : undefined;
+/**
+ * The room's lamps as custom properties (index.css, Room): the picture's two colours and how lit the room is, 0 to 1.
+ * A picture without light leaves the room dark.
+ */
+export const roomStyle = (light: Light | null, level: number) =>
+  ({
+    "--light": light ? level : 0,
+    ...(light && { "--lamp": rgb(light.lamp), "--spill": rgb(light.spill) }),
+  }) as CSSProperties;
+
+// The picture a page leads with (a Stage), which lights the room a little while nothing plays (RoomLight.tsx).
+let lead: string | undefined;
+const leadListeners = new Set<() => void>();
+const setLead = (src: string | undefined) => {
+  lead = src;
+  for (const listener of leadListeners) listener();
+};
+/** Offers `src` as the page's lead picture while the caller is shown. */
+export function useRoomLead(src: string | undefined) {
+  useEffect(() => {
+    if (!src) return;
+    setLead(src);
+    return () => {
+      if (lead === src) setLead(undefined);
+    };
+  }, [src]);
+}
+/** The picture the page leads with, if it offers one. */
+export const useLeadPicture = () =>
+  useSyncExternalStore(
+    (listener) => {
+      leadListeners.add(listener);
+      return () => leadListeners.delete(listener);
+    },
+    () => lead,
+  );
 
 /**
  * A tile's or a row's light (Design → Hover), read the first time a pointer or focus reaches it: `--item-light`, the

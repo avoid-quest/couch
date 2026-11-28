@@ -15,7 +15,6 @@ import { detailHref, queueItemLocation, useDetailNavigation } from "@/detail-nav
 import { useShell } from "./shell-context";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { focusPageControl } from "@/navigation";
@@ -152,8 +151,6 @@ export function NowPlayingBar({
   const programme = useStationShow();
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
-  // The glass takes the playing artwork's colour (docs/design.md, Glass).
-  const light = useArtworkLight(programme?.artworkUrl || current?.thumbnail);
   if (!current) return null;
   const playback = state.playbacks?.find((item) => item.id === state.playback);
   const settings =
@@ -189,8 +186,8 @@ export function NowPlayingBar({
   // (--player-target) and x; the timeline is the line along its top edge. Phones (below sm) keep Play/Pause,
   // Where it plays and Open player so choosing devices stays one tap away while browsing.
   const desktop = "max-sm:hidden";
-  // The bar is the player's band, minimized: a capsule of tinted glass floating over the page, its corners and its
-  // shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
+  // The bar is the player's band, minimized: a lit panel floating over the page (index.css, .lit-panel), its corners and
+  // its shadow saying it lies above whatever scrolls under it; its picture, title and controls are a mini-player's.
   return (
     <div className="px-[max(.5rem,calc(var(--gutter)-1rem))] pb-[max(.5rem,env(safe-area-inset-bottom))] max-sm:pb-1.5">
       <footer
@@ -202,8 +199,7 @@ export function NowPlayingBar({
           focusWithin.current = false;
         }}
         aria-label="Now playing"
-        style={roomStyle(light)}
-        className="bar-glass relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target)"
+        className="lit-panel relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 py-3 pr-4 pl-3 [--muted-foreground:rgb(255_255_255/80%)] max-sm:grid-cols-[minmax(0,1fr)_auto_auto] max-sm:gap-x-0 max-sm:py-2 max-sm:pr-2 max-sm:pl-2 [&_[data-size=icon-lg]]:size-(--player-target)"
       >
         <PlaybackTimeline
           state={state}

@@ -190,7 +190,7 @@ function Capsule({
     </button>
   );
   const panel = <SharingPanel sharing={sharing} viewers={viewers} onClose={() => setOpen(false)} />;
-  // Toasts' floating surface, without the bar's filter: the bar's glass is a page's one backdrop filter (design.md, Glass).
+  // Toasts' floating surface (docs/design.md, Surfaces).
   return (
     <div
       data-live-sharing
