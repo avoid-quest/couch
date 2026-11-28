@@ -82,16 +82,19 @@ export function ShareButton({
   const { ask } = useShareView();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<string | undefined>();
-  // Share again, from the message that the capture ended: the panel opens on the kind that was shared.
+  // Share again, from the message that the capture ended: the panel opens on the kind that was shared. The request
+  // stands until the panel closes, since it alone keeps Share in a header that hides it (a TV's).
   useEffect(() => {
     if (!header || !ask) return;
     setKind(ask.kind);
     setOpen(true);
-    answeredShare();
   }, [header, ask?.at]);
+  useEffect(() => () => void (header && answeredShare()), [header]);
   const change = (next: boolean) => {
     setOpen(next);
-    if (!next) setKind(undefined);
+    if (next) return;
+    setKind(undefined);
+    if (header) answeredShare();
   };
   const name = useLocalDeviceName();
   const title = name ? `Share from ${name}` : "Share this device";
