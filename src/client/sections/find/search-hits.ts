@@ -4,6 +4,7 @@ import { mediaSubtitle } from "@/components/MediaContext";
 import { collectionSubtitle, metaLine } from "@/media-caption";
 import { formatDay, formatRuntime } from "@/time-format";
 import { foldCopies, searchRelevance } from "../../search";
+import { spotifyLink } from "../../../shared/providers";
 import { stationSources } from "../../../shared/radio";
 import type { SearchHit, SearchResultSummary } from "./SearchOnlineResults";
 
@@ -48,7 +49,18 @@ export const shapeOf = (hit: SearchHit): ArtShape =>
             : "media",
   );
 
+// A radio archive's list is one of a station's shows (its residents, series and styles read as shows too); a Spotify
+// list is an artist, an album or a playlist.
+const collectionName = (hit: SearchHit) =>
+  hit.collection !== "List"
+    ? hit.collection
+    : hit.source === "Radio archives"
+      ? "show"
+      : hit.source === "Spotify"
+        ? (spotifyLink(hit.url ?? "")?.kind ?? hit.collection)
+        : hit.collection;
 const day = /^\d{4}-\d{2}-\d{2}$/;
+// The byline, without what the collection's name already says (a Spotify artist's "Artist").
 export const hitContext = (hit: SearchHit) =>
   metaLine(
     ...(collectionSubtitle(hit.meta, hit.collection, hit.source) ?? "")
@@ -56,13 +68,11 @@ export const hitContext = (hit: SearchHit) =>
       .filter(
         (part) =>
           part !== hit.source &&
+          part.toLowerCase() !== collectionName(hit)?.toLowerCase() &&
           mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context }),
       )
       .map((part) => (day.test(part) ? formatDay(part) : part)),
   );
-// A radio archive's list is one of a station's shows (its residents, series and styles read as shows too).
-const collectionName = (hit: SearchHit) =>
-  hit.source === "Radio archives" && hit.collection === "List" ? "show" : hit.collection;
 /** One meta line by the caption rules: the byline the links don't already give, what an openable hit is, its length, then where else it is. */
 export const hitMeta = (hit: SearchHit, showCollection = true) =>
   metaLine(
