@@ -129,7 +129,7 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
   held: { recents: string[]; saved: T[]; played: P[]; stations: S[] },
   limit = 3,
 ) {
-  const { strong } = searchRelevance(text);
+  const { strong } = searchRelevance(text, true);
   const typed = fold(text.trim());
   const radio = !current.kind || current.kind === "radio";
   const titled = <I extends Titled>(items: I[]) =>

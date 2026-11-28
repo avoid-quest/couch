@@ -162,18 +162,20 @@ export function useTopHit(
   query: string,
   waiting: boolean,
   frozen: boolean,
+  typing = false,
 ) {
-  const { strength } = searchRelevance(query);
+  const { strength, credited } = searchRelevance(query, typing);
   const [late, setLate] = useState<string | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => setLate(key), topWait);
     return () => clearTimeout(timer);
   }, [key]);
-  // Between equal titles, what plays leads a channel or a list, and the title as typed (accents too) leads a folded one.
+  // The searched artist's own item leads any title match by someone else, and a live stream leads only on its exact
+  // title. Between equal titles, what plays leads a channel or a list, and the title as typed (accents too) a folded one.
   const typed = query.trim().toLocaleLowerCase();
   const rank = (hit: SearchHit) => {
-    const words = strength(hit.title);
-    if (words < 2) return 0;
+    const words = credited(hit) ? 4 : strength(hit.title);
+    if (words < 2 || (hit.live && words !== 3)) return 0;
     return words * 4 + (hit.collection ? 0 : 2) + (hit.title.toLocaleLowerCase() === typed ? 1 : 0);
   };
   const best = Math.max(0, ...hits.map(rank));

@@ -85,10 +85,10 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   const key = JSON.stringify([query, scope]);
   const { order, hits } = useSourceHits(key, summaries, query);
   // Only what names every word of the query in its title, artist or album, so the palette stays a glance.
-  const { close } = searchRelevance(query);
+  const { close } = searchRelevance(query, true);
   const relevant = hits.filter(close);
   const asking = asked.filter((source) => !summaries[source] || summaries[source].loading);
-  const top = useTopHit(key, relevant, query, asking.length > 0, moved);
+  const top = useTopHit(key, relevant, query, asking.length > 0, moved, true);
   const sections = order
     .map((source) => ({
       source,

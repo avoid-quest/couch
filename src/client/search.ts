@@ -147,20 +147,26 @@ export function linkOf(value: string) {
 }
 export const isLink = (value: string) => !!linkOf(value);
 
-export function searchRelevance(query: string) {
+/**
+ * How hits answer a query. A word matches a whole word of the hit, folded; while `typing`, the last word may be the start
+ * of one, so "dj al" already finds DJ Alé and a submitted "dj ale" doesn't find DJ Alex.
+ */
+export function searchRelevance(query: string, typing = false) {
   const words = searchWords(query);
+  const matches = (part: string, word: string) =>
+    part === word || (typing && word === words.at(-1) && part.startsWith(word));
   const mentions = (text: string, word: string) =>
-    searchWords(text).some((part) => part.startsWith(word));
-  /** How well a title answers the query: 3 when it is the query, 2 when every word starts one of its words, 1 when some word does. */
+    searchWords(text).some((part) => matches(part, word));
+  /** How well a title answers the query: 3 when it is the query, 2 when it has every word, 1 when it has some. */
   const strength = (title: string) => {
     if (!words.length) return 0;
     const parts = searchWords(title);
     if (parts.join(" ") === words.join(" ")) return 3;
-    const found = words.filter((word) => parts.some((part) => part.startsWith(word))).length;
+    const found = words.filter((word) => parts.some((part) => matches(part, word))).length;
     return found === words.length ? 2 : found ? 1 : 0;
   };
   return {
-    /** Whether every word of the query starts a word of the hit's title, artist, album, show or station details. */
+    /** Whether every word of the query is in the hit's title, artist, album, show or station details. */
     close: (hit: Pick<SearchHit, "title" | "meta" | "radio" | "creator" | "context">) =>
       !words.length ||
       words.every((word) =>
@@ -180,5 +186,13 @@ export function searchRelevance(query: string) {
       ),
     strong: (hit: Pick<SearchHit, "title">) => strength(hit.title) >= 2,
     strength,
+    /** Whether the query names the hit's artist and its title has the rest ("miles davis kind of blue"). */
+    credited: (hit: Pick<SearchHit, "title" | "creator">) => {
+      const artist = searchWords(hit.creator?.title ?? "");
+      if (!artist.length || !artist.every((part) => words.includes(part))) return false;
+      const rest = words.filter((word) => !artist.includes(word));
+      const parts = searchWords(hit.title);
+      return !!rest.length && rest.every((word) => parts.some((part) => matches(part, word)));
+    },
   };
 }

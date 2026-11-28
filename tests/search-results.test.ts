@@ -9,8 +9,9 @@ test("one-character words participate in close and strong matches", () => {
   const x = searchRelevance("x");
   expect(x.close({ title: "Unrelated", meta: "YouTube" })).toBe(false);
   expect(x.strong({ title: "X" })).toBe(true);
-  const query = searchRelevance("a b");
+  const query = searchRelevance("a b", true);
   expect(query.strong({ title: "A beautiful day" })).toBe(true);
+  expect(searchRelevance("a b").strong({ title: "A beautiful day" })).toBe(false);
   expect(query.close({ title: "Radio", meta: "NTS" })).toBe(false);
   expect(searchRelevance("nts").close({ title: "Quints", meta: "" })).toBe(false);
   expect(searchRelevance("café").strong({ title: "Café live" })).toBe(true);
@@ -49,7 +50,10 @@ test("title strength: the query itself, then every word, then some word", () => 
   const { strength } = searchRelevance("dj ale");
   expect(strength("DJ Alé")).toBe(3);
   expect(strength("DJ Alé (One Off Lyon)")).toBe(2);
-  expect(strength("Alessandro's DJ set")).toBe(2);
+  expect(strength("Alessandro's DJ set")).toBe(1);
+  // While typing, the last word may still be the start of one.
+  expect(searchRelevance("dj ale", true).strength("Alessandro's DJ set")).toBe(2);
+  expect(searchRelevance("ale dj", true).strength("Alessandro's DJ set")).toBe(1);
   expect(strength("DJ Spel")).toBe(1);
   expect(strength("Ghettology")).toBe(0);
 });
@@ -114,6 +118,9 @@ test("a hit by the searched artist or from the searched album counts as close", 
     }),
   ).toBe(true);
   expect(close({ title: "Verme" })).toBe(false);
+  // A submitted name is whole words: "dj ale" is not DJ Alex.
+  expect(searchRelevance("dj ale").close({ title: "Voices In My Head w/ DJ Alex" })).toBe(false);
+  expect(searchRelevance("dj ale", true).close({ title: "Dj Alexis" })).toBe(true);
   // One shared word isn't enough: another artist with one of the words waits under the fold.
   expect(close({ title: "Aisha Devi", meta: "NTS" })).toBe(false);
   expect(
@@ -122,6 +129,19 @@ test("a hit by the searched artist or from the searched album counts as close", 
       creator: { title: "Ultima Frontiera", url: "https://open.spotify.com/artist/y" },
     }),
   ).toBe(false);
+});
+
+test("the searched artist's own album is credited, and their name alone or someone else's playlist isn't", () => {
+  const { credited } = searchRelevance("miles davis kind of blue");
+  const miles = { title: "Miles Davis", url: "https://open.spotify.com/artist/m" };
+  expect(credited({ title: "Kind Of Blue", creator: miles })).toBe(true);
+  expect(
+    credited({
+      title: "Miles Davis - Kind Of Blue",
+      creator: { title: "aliocha", url: "https://open.spotify.com/user/a" },
+    }),
+  ).toBe(false);
+  expect(searchRelevance("miles davis").credited({ title: "So What", creator: miles })).toBe(false);
 });
 
 test("a known host pasted without its scheme is its https link, and words never are", () => {
