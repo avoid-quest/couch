@@ -1,7 +1,8 @@
 import { app, Notification } from "electron";
 import updater from "electron-updater";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   isUpdateChannel,
@@ -13,6 +14,13 @@ import {
   type UpdateOutcome,
   type UpdateState,
 } from "../src/shared/updates";
+import {
+  appUpdateLeftOver,
+  discardAppUpdate,
+  downloadAppUpdate,
+  findAppUpdate,
+  swapAppOnExit,
+} from "./app-update";
 import { appDiagnostic, logAppError } from "./diagnostics";
 
 const every = 4 * 60 * 60 * 1000;
@@ -35,6 +43,7 @@ type Options = {
 // Checks at start and every 4 hours on the chosen channel, the build's own by
 // default. electron-updater downloads and installs, through Squirrel.Mac on
 // macOS, which takes only builds signed like the running one (docs/ci.md).
+// Windows replaces only app.asar when a release allows it (app-update.ts).
 // The TV runs as an account that can't install packages: root's
 // couch-update.timer installs overnight while nothing plays, and Restart to
 // update starts couch-update@<version>.service (docs/native-tv.md).
@@ -56,6 +65,17 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   try {
     saved = readFileSync(channelPath, "utf8").trim();
   } catch {}
+  const windows = process.platform === "win32" && !tv;
+  // The version whose app.asar waits in resources/app.next.
+  let appOnly: string | null = null;
+  if (windows && app.isPackaged && appUpdateLeftOver()) {
+    logAppError("update", "The last update didn't install.");
+    try {
+      discardAppUpdate();
+    } catch (error) {
+      logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+    }
+  }
   let state: UpdateState = {
     version: app.getVersion(),
     channel: isUpdateChannel(saved) ? saved : own,
@@ -120,11 +140,65 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     }).show();
   };
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
-  autoUpdater.on("update-downloaded", ({ version }) => ready(version));
-  autoUpdater.on("error", () => {
-    if (state.status === "installing")
-      set({ status: "ready", error: "Couldn't install the update. Try again later." });
+  // The installer electron-updater runs at Quit, whatever Settings shows meanwhile.
+  let staged: string | null = null;
+  autoUpdater.on("update-downloaded", ({ version }) => {
+    staged = version;
+    // electron-updater registers its quit-time install right after this event. Arming it
+    // only now on Windows means a replaced or failed download never installs the old one.
+    if (windows) autoUpdater.autoInstallOnAppQuit = true;
+    ready(version);
   });
+  // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
+  // the launch fails with UNKNOWN, which the patched updater keeps through its elevation
+  // retry. Only someone at this computer can install that release, so it stops counting
+  // as ready, across restarts too.
+  const blockedError =
+    "Windows blocked the update. Download Couch from couch.avoid.quest/download and install it.";
+  const blockedPath = join(dirname(channelPath), "update-blocked");
+  let blocked: string | null = null;
+  try {
+    blocked = readFileSync(blockedPath, "utf8").trim();
+    // That release installed after all, so a later return to it shouldn't stay refused.
+    if (blocked === app.getVersion()) {
+      blocked = null;
+      rmSync(blockedPath);
+    }
+  } catch {}
+  autoUpdater.on("error", (error: Error & { code?: string }) => {
+    if (state.status !== "installing") return;
+    if (!windows || error.code !== "UNKNOWN")
+      return set({ status: "ready", error: "Couldn't install the update. Try again later." });
+    remember(state.available!);
+    autoUpdater.autoInstallOnAppQuit = false;
+    set({ status: "error", available: null, error: blockedError });
+  });
+  const remember = (version: string) => {
+    blocked = version;
+    try {
+      writeFileSync(blockedPath, version);
+    } catch (error) {
+      logAppError("update", `Couldn't remember the blocked update: ${(error as Error).message}`);
+    }
+  };
+  // An app-only update also installs when Couch quits.
+  let swapping: Promise<void> | null = null;
+  const swap = (relaunch: boolean) =>
+    (swapping ??= swapAppOnExit(relaunch).catch((error) => {
+      swapping = null;
+      throw error;
+    }));
+  if (windows)
+    app.on("quit", (_event, code) => {
+      if (code !== 0) return;
+      if (appOnly)
+        return void swap(false).catch((error) =>
+          logAppError("update", `Couldn't start the update: ${error.message}`),
+        );
+      // electron-updater starts the installer as Couch exits, too late to hear a refusal.
+      // If Couch then starts on this version again, that release counts as refused.
+      if (staged && autoUpdater.autoInstallOnAppQuit) remember(staged);
+    });
 
   async function install(expected: string, delay: number, interrupt = false) {
     if (state.status !== "ready" || state.available !== expected)
@@ -153,6 +227,13 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   async function finishInstall(version: string, delay: number, interrupt: boolean) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     if (!interrupt && (await playing?.())) throw new Error(UPDATE_INTERRUPTS_PLAYBACK);
+    if (appOnly === version) {
+      await swap(true).catch((error) => {
+        logAppError("update", `Couldn't start the update: ${error.message}`);
+        throw new Error("Couldn't install the update. Try again later.");
+      });
+      return app.quit();
+    }
     if (!tv) return autoUpdater.quitAndInstall(true, true);
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", [
@@ -182,11 +263,21 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
       set({ checkedAt: Date.now() });
       if (waiting && !tv) ready(waiting);
       else if (!found) return set({ status: "up-to-date", available: null });
+      else if (found.version === blocked)
+        return set({ status: "error", available: null, error: blockedError });
       else if (!tv) {
         set({ status: "downloading", available: found.version, progress: 0 });
-        // Updates install on quit only if this is on when their download finishes.
-        autoUpdater.autoInstallOnAppQuit = true;
-        await autoUpdater.downloadUpdate();
+        const manifest = windows ? await findAppUpdate(found.version) : null;
+        if (manifest) {
+          autoUpdater.autoInstallOnAppQuit = false;
+          await downloadAppUpdate(manifest);
+          appOnly = found.version;
+          ready(found.version);
+        } else {
+          // Updates install on quit only if this is on when their download finishes.
+          autoUpdater.autoInstallOnAppQuit = !windows;
+          await autoUpdater.downloadUpdate();
+        }
       } else ready(found.version);
     } catch (error) {
       logAppError("update", `Update failed: ${error instanceof Error ? error.message : error}`);
@@ -223,6 +314,15 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     writeFileSync(channelPath, channel);
     // Squirrel.Mac still installs an update it staged; the next check corrects the channel.
     autoUpdater.autoInstallOnAppQuit = false;
+    // The new channel is saved, so the old channel's update must not install even if its file stays.
+    const pending = appOnly;
+    appOnly = null;
+    if (pending)
+      try {
+        discardAppUpdate();
+      } catch (error) {
+        logAppError("update", `Couldn't remove the last update: ${(error as Error).message}`);
+      }
     follow(channel);
     set({ channel, status: "checking", available: null, progress: null, error: null });
     void check();

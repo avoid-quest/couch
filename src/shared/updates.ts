@@ -29,6 +29,14 @@ export type UpdateAction =
 export const UPDATE_INTERRUPTS_PLAYBACK =
   "Updating will stop playback. Choose Stop playback and update to continue.";
 export type UpdateTarget = { id: string; name: string; tv: boolean };
+// A Windows release's app-only update (app/app-update.ts), published by scripts/package.ts.
+export type AppManifest = {
+  version: string;
+  asar: { sha256: string; size: number };
+  // Every other installed file's SHA-256, except the exe, whose only change is its version label.
+  files: Record<string, string>;
+};
+export const appUpdateName = (version: string) => `Couch-${version}-x64.app`;
 export type UpdateOutcome = {
   version: string | null;
   outcome: (typeof outcomes)[number];
