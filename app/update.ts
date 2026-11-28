@@ -273,6 +273,8 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
         } else {
           // Updates install on quit only if this is on when their download finishes.
           autoUpdater.autoInstallOnAppQuit = true;
+          // Starting a download drops the installer staged before, even if this one fails.
+          staged = null;
           await autoUpdater.downloadUpdate();
         }
       } else ready(found.version);

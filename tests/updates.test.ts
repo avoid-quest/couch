@@ -22,6 +22,7 @@ let available: string | null;
 let disabled: boolean;
 let checkError: Error | null;
 let installError: Error | null;
+let downloadError: Error | null;
 let downloads: string[];
 let armed: boolean[];
 let temporary: string;
@@ -50,6 +51,7 @@ const autoUpdater = Object.assign(new EventEmitter(), {
     };
   },
   async downloadUpdate() {
+    if (downloadError) throw downloadError;
     downloads.push(available!);
     armed.push(this.autoInstallOnAppQuit);
     this.emit("update-downloaded", { version: available });
@@ -119,6 +121,7 @@ beforeEach(() => {
   disabled = false;
   checkError = null;
   installError = null;
+  downloadError = null;
   windowsUpdater = undefined;
   shellError = "";
   app.isPackaged = false;
@@ -206,6 +209,26 @@ test("a Windows installer tried at Quit counts as refused if Couch starts on the
   expect(requests.length).toBe(checked);
   expect(reopened.state()).toMatchObject({ status: "error", available: null });
   expect(reopened.state().error).toContain("Windows blocked the update");
+});
+
+test("a Windows installer a failed download replaced isn't counted as refused at Quit", async () => {
+  appRelease({ "resources/live-relay/couch-relay.exe": sha256("new relay") });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  expect(updates.state().status).toBe("ready");
+  // A Preview release without an app-only manifest, whose installer download fails.
+  globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+  available = "0.3.2-preview.1";
+  downloadError = new Error("Connection reset");
+  await updates.action({ op: "channel", channel: "preview" });
+  await updates.check();
+  expect(updates.state()).toMatchObject({
+    status: "error",
+    error: "Couldn't download the update. Try again later.",
+  });
+  app.emit("quit", {}, 0);
+  expect(existsSync(join(temporary, "update-blocked"))).toBe(false);
 });
 
 test("a refused release that later installed is offered again", async () => {
