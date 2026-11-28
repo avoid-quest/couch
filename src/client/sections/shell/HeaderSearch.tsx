@@ -23,7 +23,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { focusPageControl } from "@/navigation";
-import { isLink, readSearchState, searchLocation } from "@/search";
+import { isLink, linkOf, readSearchState, searchLocation } from "@/search";
 import {
   chipScopes,
   chooseScope,
@@ -51,11 +51,12 @@ import { radioFavoritesListQuery, radioSearchQuery } from "@/api/radio";
 import { cn } from "@/lib/utils";
 import { metaLine } from "@/media-caption";
 import { linkTarget, providerForUrl, providerNames } from "../../../shared/providers";
-import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
+import { linkAction, useListCommand, type LinkVerb } from "@/pasted-link";
 import type { RadioStation } from "../../../shared/radio";
 import { readSearchRecents, rememberSearch } from "./search-recents";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HitRow, PaletteFoot, TopHero, rowMenu, usePaletteHits } from "./PaletteResults";
+import { PaletteLink } from "./PaletteLink";
 import type { SearchHit } from "@/sections/find/SearchOnlineResults";
 
 /** What a typed palette's rows answer to besides Enter: Shift+Enter queues, → opens a row's menu and ← closes it. */
@@ -95,7 +96,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   if (draft.route !== routeKey) setDraft({ route: routeKey, value: routeQuery });
   const value = draft.value;
   const text = value.trim();
-  const link = isLink(text);
+  const url = linkOf(text);
+  const link = !!url;
+  const listCommand = useListCommand(run);
   // The field spins only while the submitted query's sources answer.
   const fetching = useIsFetching({ queryKey: ["search", "providers"] });
   const [open, setOpen] = useState(false);
@@ -105,14 +108,12 @@ export function HeaderSearch({ className }: { className?: string }) {
   const moved = useRef(false);
   const rowKeys = useRef<RowKeys | null>(null);
   // A pasted list opens on Play all, a page (a channel, a series) on Open, anything else on Play.
-  const first = (next: string) =>
-    !next.trim()
-      ? none
-      : isLink(next.trim()) && connected
-        ? linkTarget(next.trim())?.shape === "page"
-          ? "link:open"
-          : "link:play"
-        : "query";
+  const first = (next: string) => {
+    const pasted = linkOf(next.trim());
+    if (!next.trim()) return none;
+    if (!pasted || !connected) return "query";
+    return linkTarget(pasted)?.shape === "page" ? "link:open" : "link:play";
+  };
   const type = (next: string) => {
     moved.current = false;
     setDraft((current) => ({ ...current, value: next }));
@@ -569,7 +570,7 @@ export function HeaderSearch({ className }: { className?: string }) {
             )}
             {text ? (
               <Typed
-                text={text}
+                text={url ?? text}
                 link={link}
                 scope={scope}
                 labels={labels}
@@ -589,14 +590,16 @@ export function HeaderSearch({ className }: { className?: string }) {
                 onPlayStation={(station) => leave(() => void shell.enqueueRadio(station, true))}
                 onLink={(verb, list) =>
                   leave(() => {
-                    void run(
+                    void listCommand(
                       linkAction(
-                        text,
-                        linkTarget(text),
+                        url!,
+                        linkTarget(url!),
                         verb,
                         videoQualityPreference?.quality ?? "auto",
                         list,
                       ),
+                      list,
+                      url!.replace(/^https?:\/\//i, ""),
                     );
                     setDraft((current) => ({ ...current, value: "" }));
                     input.current?.blur();
@@ -897,9 +900,6 @@ function Typed({
   const toggle = (hit: SearchHit) => () =>
     setMenu(opened === hit.id ? null : { query: remote.query, id: hit.id });
   const held = useHeld();
-  const { credentials } = useSessionGate();
-  const target = link ? linkTarget(text) : undefined;
-  const list = usePastedList(credentials, text, target);
   // Suggestions follow the typing once it pauses; the query row follows every key.
   const [settled] = useDebouncedValue(text, { wait: 120 });
   // The top row shows once: what Couch holds of the same page doesn't repeat it below.
@@ -911,65 +911,16 @@ function Typed({
     played: held.played.filter(notTop),
     stations: held.stations,
   });
-  if (link) {
-    const where = text.replace(/^https?:\/\//i, "");
-    const shape = target?.shape ?? "atom";
-    // The first row reads as the link itself; the verbs after it are plain rows.
-    const lead = "min-h-11! text-title! font-medium tv:min-h-14! tv:text-2xl! tv:tracking-tight";
-    const open = target && (
-      <CommandItem
-        value="link:open"
-        className={cn(shape === "page" && lead)}
-        onSelect={() => onOpen(collectionLocation({ provider: target.provider, url: text }))}
-      >
-        <span className="shrink-0">Open</span>
-        {shape === "page" && (
-          <span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span>
-        )}
-      </CommandItem>
-    );
-    const verb = (value: LinkVerb, label: string, className?: string) => (
-      <CommandItem
-        value={`link:${value}`}
-        disabled={!connected}
-        onSelect={() => onLink(value, list)}
-        className={className}
-      >
-        <span className="shrink-0">{label}</span>
-        {value === "play" && (
-          <span className="min-w-0 truncate font-normal text-muted-foreground">
-            {shape === "playlist" ? (list.title ?? where) : where}
-          </span>
-        )}
-        {shape === "playlist" && listLimit(list.count, value === "play" ? 0 : list.queued) && (
-          <span className="ml-auto shrink-0 font-normal text-muted-foreground">
-            {listLimit(list.count, value === "play" ? 0 : list.queued)}
-          </span>
-        )}
-      </CommandItem>
-    );
+  if (link)
     return (
-      <CommandGroup>
-        {shape === "page" && open}
-        {shape === "playlist" ? (
-          <>
-            {verb("play", listLabel("Play all", list.count), lead)}
-            {verb("queue", listLabel("Queue all", list.count))}
-          </>
-        ) : (
-          <>
-            {verb("play", "Play", shape === "page" ? undefined : lead)}
-            {shape !== "page" && verb("queue", "Queue")}
-          </>
-        )}
-        {shape !== "page" && verb("next", "Play next")}
-        {shape !== "page" && open}
-        <CommandItem value="query" onSelect={onSearch}>
-          Choose how to play
-        </CommandItem>
-      </CommandGroup>
+      <PaletteLink
+        url={text}
+        connected={connected}
+        onOpen={onOpen}
+        onLink={onLink}
+        onSearch={onSearch}
+      />
     );
-  }
   return (
     <>
       {top &&

@@ -29,12 +29,13 @@ import {
 import { providerNames, type ProviderId } from "../../../shared/providers";
 
 // While typing, the palette asks only the quick sources, never one that takes a yt-dlp slot from playback; See all
-// results asks the rest.
-const fastProviders = (Object.keys(providerNames) as ProviderId[]).filter((provider) =>
+// results asks the rest. A source the person chose is asked whatever it is, since it's the only one.
+const allProviders = Object.keys(providerNames) as ProviderId[];
+const fastProviders = allProviders.filter((provider) =>
   quickSources.includes(providerNames[provider]),
 );
-// A source's first few hits keep the palette a glance.
-const perSource = 3;
+// A source's first few hits keep the palette a glance, and hold an artist's top four songs, as Spotify leads with.
+const perSource = 4;
 // The sources are asked once typing pauses a quarter second, from three characters, so a word in progress asks nobody.
 const pause = 250;
 const shortest = 3;
@@ -60,7 +61,7 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   const [settled] = useDebouncedValue(text.trim(), { wait: pause });
   const query = settled.length >= shortest ? settled : "";
   const providers = query
-    ? fastProviders.filter(
+    ? (scope.source === "All" ? fastProviders : allProviders).filter(
         (provider) =>
           (scope.source === "All" || scope.source === providerNames[provider]) &&
           canReturn(providerNames[provider], scope.kind),
@@ -83,9 +84,9 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   );
   const key = JSON.stringify([query, scope]);
   const { order, hits } = useSourceHits(key, summaries, query);
-  // Only what names every word of the query, so the palette stays a glance.
-  const { strong } = searchRelevance(query);
-  const relevant = hits.filter(strong);
+  // Only what names every word of the query in its title, artist or album, so the palette stays a glance.
+  const { close } = searchRelevance(query);
+  const relevant = hits.filter(close);
   const asking = asked.filter((source) => !summaries[source] || summaries[source].loading);
   const top = useTopHit(key, relevant, query, asking.length > 0, moved);
   const sections = order

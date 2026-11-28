@@ -5,7 +5,7 @@ import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import {
   canReturn,
-  isLink,
+  linkOf,
   searchLocation,
   searchRelevance,
   type SearchKind,
@@ -39,10 +39,8 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { usePlayOn } from "@/components/PlayOn";
 import type { Action } from "../../../shared/protocol";
 import {
   linkTarget,
@@ -65,13 +63,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 import { SearchRadioResults } from "./SearchRadioResults";
+import { PastedLink } from "./PastedLink";
 import { ScopeChips } from "./ScopeChips";
-import {
-  supportsWebVideoQuality,
-  useEnqueueVideoQuality,
-  videoQualityOptions,
-} from "../../video-quality";
-import { createId } from "../../session/session";
+import { useEnqueueVideoQuality } from "../../video-quality";
 import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { RadioSlot } from "@/components/RadioSchedule";
@@ -96,7 +90,15 @@ import {
   useSourceHits,
   useTopHit,
 } from "./search-hits";
-import { linkAction, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
+import {
+  linkAction,
+  listLabel,
+  listLimit,
+  listUnit,
+  useListCommand,
+  usePastedList,
+  type LinkVerb,
+} from "@/pasted-link";
 
 export type Props = {
   origin: string;
@@ -220,7 +222,7 @@ export function SearchPanel(props: Props) {
     props.defaultQuality ?? "auto",
   );
   const panel = useRef<HTMLElement>(null);
-  const url = isLink(query) ? query : undefined;
+  const url = linkOf(query);
   const filter = searchState.source;
   // Only the sources that can return the kind are asked, waited on, or report a problem.
   const inScope = (source: string) =>
@@ -244,7 +246,7 @@ export function SearchPanel(props: Props) {
         ] as ProviderId[]
       ).filter((provider) => inScope(providerNames[provider]));
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
-  // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query.
+  // What the search asked for, and what merely came back: a hit is close when it mentions every word of the query.
   const { close } = searchRelevance(query);
   const { order, hits } = useSourceHits(resultsKey, summaries, query);
   const focusedHit = useRef<string | null>(null);
@@ -268,7 +270,8 @@ export function SearchPanel(props: Props) {
   const waiting = quickSources.some((source) => inScope(source) && pending(source));
   const top = useTopHit(`${resultsKey}:${kind ?? "all"}`, relevant, query, waiting, !!lit);
   const litHit = relevant.find((hit) => hit.id === lit) ?? top;
-  useFirstVerb(panel, !!top && !top.primary.disabled);
+  // The focus freezes the hero, so it waits for the quick sources a stronger match could still come from.
+  useFirstVerb(panel, !!top && !top.primary.disabled && !waiting);
   const [expanded, setExpanded] = useState<{ key: string; sources: string[] }>({
     key: resultsKey,
     sources: [],
@@ -482,7 +485,7 @@ export function SearchPanel(props: Props) {
                 )}
               </Empty>
             )}
-          {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
+          {/* What came back without every word of the query waits behind one line, so a stray hit never leads. */}
           {loose.length > 0 && (
             <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
               <CollapsibleTrigger asChild>
@@ -978,140 +981,6 @@ export function SourcesUnanswered({ summaries }: { summaries: Entry[] }) {
   );
 }
 
-function PastedLink({
-  url,
-  quality,
-  onQualityChange,
-  onDone,
-  ...props
-}: Props & {
-  url: string;
-  quality: VideoQuality;
-  onQualityChange: (quality: VideoQuality) => void;
-  onDone: () => void;
-}) {
-  const [mode, setMode] = useState<"Webpage" | "Direct media">("Webpage");
-  const [pending, setPending] = useState(false);
-  const lifetime = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    lifetime.current = controller;
-    setPending(false);
-    return () => controller.abort();
-  }, [props.origin, props.token, props.connected]);
-  const { hostname, pathname } = new URL(url);
-  const { on } = usePlayOn();
-  const target = linkTarget(url);
-  async function send(verb: LinkVerb, deviceId?: string) {
-    if (!props.onCommand || pending || !lifetime.current) return;
-    const signal = lifetime.current.signal;
-    setPending(true);
-    // The command reports its own failure on the page.
-    try {
-      if (
-        (await props.onCommand(
-          mode === "Direct media"
-            ? {
-                type: "enqueue",
-                entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url },
-                ...(verb === "play" ? { playNow: true } : {}),
-                ...(verb === "next" ? { placement: "next" as const } : {}),
-                deviceId,
-              }
-            : linkAction(url, target, verb, quality, {}, deviceId),
-        )) &&
-        !signal.aborted
-      )
-        onDone();
-    } finally {
-      if (!signal.aborted) setPending(false);
-    }
-  }
-  const navigation = useDetailNavigation();
-  const disabled = !props.connected || pending;
-  return (
-    <section className="max-w-3xl space-y-4">
-      <h1 className="sr-only">{hostname + pathname}</h1>
-      <SettingsSection>
-        <SettingsRow label="Open as">
-          <ChoiceGroup
-            label="Open link as"
-            value={mode}
-            onValueChange={setMode}
-            disabled={disabled}
-            options={[
-              { value: "Webpage", label: "Webpage" },
-              { value: "Direct media", label: "Direct media" },
-            ]}
-          />
-        </SettingsRow>
-        {mode === "Webpage" && supportsWebVideoQuality(url) && (
-          <SettingsRow label="Quality">
-            <ChoiceGroup
-              label="Video quality"
-              value={quality}
-              onValueChange={onQualityChange}
-              disabled={disabled}
-              options={videoQualityOptions}
-            />
-          </SettingsRow>
-        )}
-      </SettingsSection>
-      <div className="flex flex-wrap gap-2">
-        {/* Open shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage. */}
-        {target && (
-          <Button
-            variant="outline"
-            onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
-          >
-            Open page
-          </Button>
-        )}
-        <Button
-          disabled={disabled || !props.canPlay || !props.onCommand}
-          onClick={() => void send("play")}
-        >
-          {on("Play")}
-        </Button>
-        <PlayOnMenu
-          title={hostname + pathname}
-          disabled={disabled || !props.canPlay || !props.onCommand}
-          onPlay={(deviceId) => void send("play", deviceId)}
-        />
-        <Button
-          variant="ghost"
-          disabled={disabled || !props.onCommand}
-          onClick={() => void send("queue")}
-        >
-          Queue
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={disabled || !props.onCommand}
-          onClick={() => void send("next")}
-        >
-          Play next
-        </Button>
-        {/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && (
-          <Button variant="ghost" onClick={() => props.onManageSources?.("streaming-community")}>
-            StreamingCommunity settings
-          </Button>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// What a list holds, by its source: radio shows' episodes, videos, else tracks.
-const listUnit = (provider: ProviderId, count: number) => {
-  const unit = ["archives", "mixcloud"].includes(provider)
-    ? "episode"
-    : ["youtube", "twitch", "raiplay"].includes(provider)
-      ? "video"
-      : "track";
-  return `${count.toLocaleString()} ${unit}${count === 1 ? "" : "s"}`;
-};
-
 /**
  * A pasted list (a set, an album, a show, a station's style page) as its own page on the room: its title set large, what
  * it holds, then Play all (focused first), Queue all, Play next and Open; then its items, a shelf per show when a radio
@@ -1147,11 +1016,12 @@ function PastedList({
     page?.subtitle,
     list.count !== undefined && listUnit(target.provider, list.count),
   );
+  const listCommand = useListCommand(props.onCommand);
   async function send(verb: LinkVerb) {
     if (!props.onCommand || pending) return;
     setPending(true);
     try {
-      if (await props.onCommand(linkAction(url, target, verb, quality, list))) onDone();
+      if (await listCommand(linkAction(url, target, verb, quality, list), list, title)) onDone();
     } finally {
       setPending(false);
     }

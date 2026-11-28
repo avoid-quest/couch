@@ -1,3 +1,4 @@
+import { providerForUrl } from "../shared/providers";
 import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
@@ -128,14 +129,23 @@ export function searchLocation(state: SearchRouteState) {
     params.set("source", state.source);
   return `/search${params.size ? `?${params}` : ""}`;
 }
-/** A pasted web address, which opens as a page or as media rather than searching. */
-export const isLink = (value: string) => {
-  try {
-    return /^https?:\/\//i.test(value) && !!new URL(value).hostname;
-  } catch {
-    return false;
+/**
+ * A pasted web address, which opens as a page or as media rather than searching: as typed with its scheme, or as https
+ * when it starts with a host one of Couch's sources knows (`soundcloud.com/…`), as people copy it. Words are never a link.
+ */
+export function linkOf(value: string) {
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      return new URL(value).hostname ? value : undefined;
+    } catch {
+      return;
+    }
   }
-};
+  if (/\s/.test(value)) return;
+  const url = `https://${value}`;
+  return providerForUrl(url) ? url : undefined;
+}
+export const isLink = (value: string) => !!linkOf(value);
 
 export function searchRelevance(query: string) {
   const words = searchWords(query);
@@ -150,9 +160,10 @@ export function searchRelevance(query: string) {
     return found === words.length ? 2 : found ? 1 : 0;
   };
   return {
+    /** Whether every word of the query starts a word of the hit's title, artist, album, show or station details. */
     close: (hit: Pick<SearchHit, "title" | "meta" | "radio" | "creator" | "context">) =>
       !words.length ||
-      words.some((word) =>
+      words.every((word) =>
         mentions(
           [
             hit.title,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { foldCopies, searchRelevance } from "../src/client/search";
+import { foldCopies, linkOf, searchRelevance } from "../src/client/search";
 import { completeScope } from "../src/client/search-palette";
 import type { SearchHit } from "../src/client/sections/find/SearchOnlineResults";
 import { radioMatches, type RadioStation } from "../src/shared/radio";
@@ -114,4 +114,26 @@ test("a hit by the searched artist or from the searched album counts as close", 
     }),
   ).toBe(true);
   expect(close({ title: "Verme" })).toBe(false);
+  // One shared word isn't enough: another artist with one of the words waits under the fold.
+  expect(close({ title: "Aisha Devi", meta: "NTS" })).toBe(false);
+  expect(
+    close({
+      title: "Alta Tensione",
+      creator: { title: "Ultima Frontiera", url: "https://open.spotify.com/artist/y" },
+    }),
+  ).toBe(false);
+});
+
+test("a known host pasted without its scheme is its https link, and words never are", () => {
+  for (const link of [
+    "soundcloud.com/bubble_wrap/sets/imballata-on-radio-blackout",
+    "www.nts.live/shows/minimal-effort",
+    "lyl.live/shows/residents?styles=Baile%20Funk",
+    "open.spotify.com/intl-it/artist/2enCZC6FjkZDdEW7rKBfw0",
+    "twitch.tv/monstercat/clip/SassyObliquePandaChefFrank",
+  ])
+    expect(linkOf(link)).toBe(`https://${link}`);
+  expect(linkOf("https://example.com/a")).toBe("https://example.com/a");
+  for (const words of ["devi tensione", "dj.ale", "example.com/a", "soundcloud"])
+    expect(linkOf(words)).toBeUndefined();
 });
