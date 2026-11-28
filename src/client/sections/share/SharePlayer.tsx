@@ -16,7 +16,7 @@ import { formatClock } from "@/time-format";
 import { liveTitle } from "../../../shared/live-input";
 import { LiveMetadataEditor } from "./LiveMetadata";
 import { SharingPill } from "./ShareControl";
-import { LiveListeners, ShareTargets, useRoutes } from "./ShareDesk";
+import { elsewhereRows, LiveListeners, ShareTargets, useRoutes } from "./ShareDesk";
 import { MuteInput, ShareGear, ShareLevel } from "./ShareSettings";
 import { openShareFull, useShareView } from "./share-view";
 import { shareKindOf, viewersOf, type Viewer } from "./share";
@@ -82,6 +82,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
           run={run}
           open={open || !parts.viewers.length}
           onOpen={setOpen}
+          elsewhere={elsewhereRows(parts.viewers, routes, playback.id)}
         />
       ) : (
         <ShareTargets state={state} sharing={sharing} />

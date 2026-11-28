@@ -88,6 +88,7 @@ export function WhereList({
   heading = "Where it plays",
   fixed = false,
   extra,
+  elsewhere,
 }: Props & {
   open: boolean;
   onOpen: (open: boolean) => void;
@@ -96,9 +97,15 @@ export function WhereList({
   fixed?: boolean;
   /** Rows after the playback's devices (Live audio's guests). */
   extra?: ReactNode;
+  /** A share's receivers in its other playbacks, after this one's (ShareDesk's): their devices leave the other rows. */
+  elsewhere?: { ids: string[]; rows: ReactNode };
 }) {
   const here = deviceId();
-  const { inSync, rows } = picker(state, { here });
+  const picked = picker(state, { here });
+  const { inSync } = picked;
+  const rows = elsewhere
+    ? picked.rows.filter((row) => !elsewhere.ids.includes(row.device.id))
+    : picked.rows;
   // Rows keep their order while it is open, so nothing jumps under a press; it is taken again as it opens or folds.
   const [order, setOrder] = useState<Order | null>(null);
   const [details, setDetails] = useState<string | null>(null);
@@ -135,7 +142,8 @@ export function WhereList({
   const sole = soleSound(rows);
   const sounds = sounding(state, connected);
   const audioOnly = !!playback?.audioOnly;
-  const count = (state.outputs ?? []).length;
+  const count = (state.outputs ?? []).length + (elsewhere?.ids.length ?? 0),
+    total = rows.length + (elsewhere?.ids.length ?? 0);
   const fold = () => onOpen(!open);
   const row = (item: Row) => (
     <DeskRow
@@ -182,7 +190,7 @@ export function WhereList({
       <span className="min-w-0 flex-1 font-semibold text-muted-foreground">{heading}</span>
       {find}
       <span className="text-subtle-foreground">
-        {count} of {rows.length} devices
+        {count} of {total} devices
       </span>
     </div>
   ) : (
@@ -204,7 +212,7 @@ export function WhereList({
         onClick={fold}
         className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2 whitespace-nowrap text-subtle-foreground outline-none hover:bg-(--fill) hover:text-foreground"
       >
-        {count} of {rows.length} devices
+        {count} of {total} devices
         {open ? (
           <ChevronDown aria-hidden="true" className="size-4" />
         ) : (
@@ -220,6 +228,7 @@ export function WhereList({
         <Scroller key="folded" rows={top.length + (small ? others.length : 0)}>
           <ul aria-label="Playing" className="grid">
             {top.map(row)}
+            {elsewhere?.rows}
             {extra}
             {small && others.map(row)}
           </ul>
@@ -264,12 +273,13 @@ export function WhereList({
               </ToggleGroup>
             </div>
           )}
-          {!extra && !publisher && (
+          {!extra && (
             <GroupChips state={state} connected={connected} rows={rows} title={playback?.title} />
           )}
           <ul aria-label="Playing" className="grid">
             {nothing}
             {top.map(row)}
+            {elsewhere?.rows}
             {extra}
           </ul>
           {others.length > 0 && (

@@ -10,14 +10,15 @@ import type { ClientSessionState } from "@/session/session";
 import { useSessionGate } from "@/session/session-context";
 import { choiceRows, offlineNames } from "@/session/where-it-plays";
 import { Folds, GuestRow } from "@/sections/shell/DeskRows";
+import { ChoiceGroups } from "@/sections/shell/MixerGroups";
 import { viewerLine, type Viewer } from "./share";
 
 // The share's desk, on the device that shares (SharePlayer.tsx): its rows are who watches or listens and how, with the
 // house's other screens and speakers one press away. The share's own Where it plays takes over once anyone plays it.
 
 /**
- * A share nobody plays yet: "On no screens yet…" and every device that lends a screen or speakers, each with its keys;
- * turning one on plays the share there.
+ * A share nobody plays yet: "On no screens yet…", the groups, and every device that lends a screen or speakers, each
+ * with its keys; turning one on, or using a group, plays the share there.
  */
 export function ShareTargets({
   state,
@@ -35,7 +36,7 @@ export function ShareTargets({
     (row) => row.device.online && (row.picture.enabled || row.sound.enabled),
   );
   const play = (id: string, picture: boolean, sound: boolean) =>
-    void run({ type: "playLive", sourceId: source.id, deviceId: id, picture, sound });
+    run({ type: "playLive", sourceId: source.id, deviceId: id, picture, sound });
   return (
     <>
       <div className="flex h-10 shrink-0 items-center justify-between text-meta">
@@ -48,6 +49,21 @@ export function ShareTargets({
           {source.video ? "screen or speakers" : "speaker"} below, or leave it in Shared sources for
           people to play.
         </p>
+        <ChoiceGroups
+          state={state}
+          connected={connected}
+          rows={
+            source.audio
+              ? rows
+              : rows.map((row) => ({ ...row, sound: { enabled: false, reason: "No sound" } }))
+          }
+          choice={{}}
+          onChoose={async (choice) => {
+            // One device at a time: the first starts the share's playback and the others join it.
+            for (const [id, { picture, sound }] of Object.entries(choice))
+              if (!(await play(id, picture, sound))) return;
+          }}
+        />
         <h4 className="flex h-9 items-end border-t pb-1.5 text-caption text-subtle-foreground">
           Other devices
         </h4>
@@ -75,7 +91,7 @@ export function ShareTargets({
                 on={false}
                 control={source.audio ? row.sound : { enabled: false }}
                 disabled={!connected}
-                onPress={() => play(row.device.id, false, true)}
+                onPress={() => void play(row.device.id, false, true)}
               />
               {source.video && (
                 <MixerKey
@@ -84,7 +100,7 @@ export function ShareTargets({
                   on={false}
                   control={row.picture}
                   disabled={!connected}
-                  onPress={() => play(row.device.id, true, false)}
+                  onPress={() => void play(row.device.id, true, false)}
                 />
               )}
             </li>
@@ -106,6 +122,37 @@ export function ShareTargets({
       </div>
     </>
   );
+}
+
+/**
+ * The share's receivers in its other playbacks (one a receiver plays privately, say), as the desk lists them after the
+ * selected playback's own: each device and how it gets the share.
+ */
+export function elsewhereRows(
+  viewers: Viewer[],
+  routes: Record<string, LiveRoute>,
+  playbackId: string | null | undefined,
+) {
+  const others = viewers.filter((viewer) => viewer.playbackId !== playbackId);
+  return {
+    ids: others.map((viewer) => viewer.device.id),
+    rows: others.map((viewer) => (
+      <li
+        key={viewer.device.id}
+        data-nav-row
+        className="flex min-h-(--desk-row) min-w-0 items-center gap-1"
+      >
+        <span className="min-w-0 flex-1 py-1">
+          <DeviceCell
+            device={viewer.device}
+            status={viewerLine(viewer, routes[viewer.device.id])}
+            failed={!!viewer.error}
+            active
+          />
+        </span>
+      </li>
+    )),
+  };
 }
 
 /**
