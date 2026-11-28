@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { collectionLocation } from "@/detail-navigation";
 import { providerCollectionCursor } from "@/collection-pagination";
-import type { Action } from "../../../shared/protocol";
+import type { Action, PlayOn } from "../../../shared/protocol";
 import type { CollectionLink, MediaCollection } from "../../../shared/media";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
 import { pageSection, providerShape } from "../../../shared/providers";
@@ -89,7 +89,7 @@ export type SearchCollection = {
   duration?: number | null;
   fromStart?: () => void;
   playAll?: () => void;
-  playOn?: (deviceId: string) => void;
+  playOn?: (on: PlayOn) => void;
   playNext?: () => void;
   queueAll?: () => void;
   save?: () => void;
@@ -172,7 +172,7 @@ type Props = SearchPlaybackProps & {
   context?: MediaCollection;
   onPlayHistory?: (
     item: HistoryItem,
-    options: { fromStart?: boolean; on?: string },
+    options: { fromStart?: boolean; on?: PlayOn },
   ) => Promise<boolean>;
 };
 export function SearchOnlineResults(props: Props) {
@@ -331,7 +331,7 @@ function OnlineResults(props: Props) {
     item: ProviderItem,
     playNow: boolean,
     placement?: "next",
-    deviceId?: string,
+    on?: PlayOn,
     fromStart = false,
   ) {
     void action(`Couldn't ${playNow ? "play" : "queue"} ${item.title}.`, async (signal) => {
@@ -347,7 +347,7 @@ function OnlineResults(props: Props) {
         playNow,
         ...(fromStart ? { fromStart } : {}),
         ...(placement ? { placement } : {}),
-        ...(deviceId ? { deviceId } : {}),
+        ...on,
       });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
@@ -479,7 +479,7 @@ function OnlineResults(props: Props) {
                 {
                   label: "Play on",
                   disabled: !props.canPlay || busy || !props.onCommand,
-                  playOn: (deviceId: string) => play(item, true, undefined, deviceId),
+                  playOn: (on: PlayOn) => play(item, true, undefined, on),
                 },
                 {
                   label: "Play next",
@@ -565,7 +565,7 @@ function OnlineResults(props: Props) {
         (start.collection.index != null && start.collection.index !== resume.collection?.index))
         ? { collection: start.collection, ...(!music ? { quality: props.quality } : {}) }
         : undefined;
-    const startItem = (fromStart = false, deviceId?: string) => {
+    const startItem = (fromStart = false, on?: PlayOn) => {
       if (resume && props.onPlayHistory)
         void action(`Couldn't play ${resume.title}.`, () =>
           playOn.play(
@@ -575,10 +575,10 @@ function OnlineResults(props: Props) {
                 on,
                 ...(resumeSelection ? { selection: resumeSelection } : {}),
               }),
-            deviceId,
+            on,
           ),
         );
-      else if (start) play(start, true, undefined, deviceId, fromStart);
+      else if (start) play(start, true, undefined, on, fromStart);
     };
     const selectedSaved =
       !!selected &&
@@ -588,7 +588,7 @@ function OnlineResults(props: Props) {
     // Without the season's episodes yet, Play plays the season from its first.
     const playSeason =
       season && props.onCommand && !start
-        ? (deviceId?: string) =>
+        ? (on?: PlayOn) =>
             void action(
               `Couldn't play ${season.title}.`,
               () =>
@@ -600,7 +600,7 @@ function OnlineResults(props: Props) {
                   ...(season.collection ? { collection: season.collection } : {}),
                   playNow: true,
                   quality: props.quality,
-                  ...(deviceId ? { deviceId } : {}),
+                  ...on,
                 }) ?? Promise.resolve(false),
             )
         : undefined;
@@ -615,7 +615,7 @@ function OnlineResults(props: Props) {
             : playSeason
               ? episodeLabel({ title: "", collection: { ...season!, index: 0 } })
               : undefined;
-    const list = (playNow: boolean, deviceId?: string) =>
+    const list = (playNow: boolean, on?: PlayOn) =>
       props.onCommand && props.url && page?.items.some((item) => item.kind === "media")
         ? () =>
             void action(
@@ -632,7 +632,7 @@ function OnlineResults(props: Props) {
                   ...(selected?.collection ? { collection: selected.collection } : {}),
                   playNow,
                   quality: props.quality,
-                  ...(deviceId ? { deviceId } : {}),
+                  ...on,
                 }) ?? Promise.resolve(false),
             )
         : undefined;
@@ -672,8 +672,8 @@ function OnlineResults(props: Props) {
                 start || resume ? () => startItem() : playSeason ? () => playSeason() : list(true),
               playOn:
                 start || resume
-                  ? (deviceId) => startItem(false, deviceId)
-                  : (playSeason ?? (list(true) && ((deviceId) => list(true, deviceId)?.()))),
+                  ? (on) => startItem(false, on)
+                  : (playSeason ?? (list(true) && ((on) => list(true, on)?.()))),
               queueAll:
                 selected?.kind === "media" && props.onCommand
                   ? () => play(selected, false)

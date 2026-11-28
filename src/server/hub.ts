@@ -37,6 +37,7 @@ import type {
   PlaybackClock,
   PlaybackCommand,
   PlaybackSummary,
+  PlayOn,
   PlayerState,
   QueueEntry,
   ReceiverState,
@@ -88,6 +89,7 @@ import { createPassThrough } from "./pass-through";
 import { createRepacks } from "./ts-repack";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
+import { createMixerGroups } from "./mixer-groups";
 import { createPlaylists } from "./playlists";
 import { upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
@@ -799,11 +801,29 @@ export async function createHub(options: HubOptions) {
       target && shares(target, actorId) ? target : memberOf(actorId) ? actorId : hostId();
     return memberOf(choice) || newest(choice) ? choice : actorId;
   };
-  // The Device a request's Play on names (the WS action's deviceId, or REST's ?on=).
-  const playOn = new WeakMap<PlaybackActor, string>();
-  const playingOn = (actor: PlaybackActor | undefined, on: string | null | undefined) => {
-    if (actor && on) playOn.set(actor, on);
+  // The Device a request's Play on names (the WS action's deviceId, or REST's ?on=), and where it chose to start.
+  const playOn = new WeakMap<PlaybackActor, PlayOn & { deviceId: string }>();
+  const playingOn = (
+    actor: PlaybackActor | undefined,
+    on: string | null | undefined,
+    { outputs }: PlayOn = {},
+  ) => {
+    if (actor && on) playOn.set(actor, { deviceId: on, outputs });
     return actor;
+  };
+  // REST's Play on outputs: ?picture= and ?sound=, once for each Device that shows or sounds it.
+  const playOnChoice = (query: URLSearchParams): PlayOn => {
+    const picture = query.getAll("picture"),
+      sound = query.getAll("sound");
+    return picture.length || sound.length
+      ? {
+          outputs: [...new Set([...picture, ...sound])].map((deviceId) => ({
+            deviceId,
+            picture: picture.includes(deviceId),
+            sound: sound.includes(deviceId),
+          })),
+        }
+      : {};
   };
   // A window looks at the Playback in whose mix its selected Device is (a held publisher included). An idle
   // one looks at the newest Playback waiting for a Device (a saved Up next, or one whose last output was switched off),
@@ -1427,7 +1447,8 @@ export async function createHub(options: HubOptions) {
   const assign = (
     playback: Playback,
     outputs: Output[],
-    source = live.source(sourceOf(playback) ?? ""),
+    // null: what plays is about to be replaced, so its source doesn't limit the outputs.
+    source: ReturnType<typeof live.source> | null = live.source(sourceOf(playback) ?? ""),
   ) => {
     playback.generation = (playback.generation ?? 0) + 1;
     // Its publisher leaves, or was chosen while it waited in Where it plays.
@@ -2532,24 +2553,47 @@ export async function createHub(options: HubOptions) {
     playbacks.set(id, playback);
     return playback;
   };
+  // Where Play on chose to start, each Device once, with only what it lends and whose place there it may change.
+  const chosen = (choice: PlayOn | undefined, actor: string) => {
+    if (!choice?.outputs) return undefined;
+    const outputs = new Map<string, Output>();
+    for (const { deviceId, picture, sound } of choice.outputs) {
+      if (!picture && !sound) continue;
+      known(deviceId);
+      const output = { deviceId, picture, sound, local: deviceId === actor };
+      requireOutput(output, actor);
+      requireReplacement(deviceId, actor);
+      outputs.set(deviceId, output);
+    }
+    if (!outputs.has(choice.deviceId ?? ""))
+      throw new ControllerError("Choose a picture or a sound where it plays.", 400);
+    return [...outputs.values()];
+  };
   // Every Play reserves here once its item has checked out. Ordinary Play keeps the selected mix, a held
   // publisher included; Play on isolates its named Device, held or in a mix, which the actor then selects.
   const own = (actor: PlaybackActor | undefined) => {
     const actorId = actor?.deviceId ?? hostId(),
-      on = actor && playOn.get(actor);
+      choice = actor && playOn.get(actor),
+      on = choice?.deviceId;
     if (on) {
       requireControl(on, actorId);
       requireReplacement(on, actorId);
     }
     const deviceId = on ?? selected(actorId);
     requireControl(deviceId, actorId);
+    const outputs = chosen(choice, actorId) ?? [outputFor(deviceId, actorId)];
     let playback = on ? servedBy(deviceId) : memberOf(deviceId);
-    if (!playback || (on && (playback.outputs.length > 1 || intentOf(playback) === "live"))) {
+    // Its Device keeps a playback only where nothing else is in its mix: a held publisher stays with its programme.
+    if (!playback || (on && (mixOf(playback).length > 1 || intentOf(playback) === "live"))) {
       if (playback && intentOf(playback) !== "live") requireProgramme(playback, actorId);
       playback = createPlayback();
       playback.createdFor = actor;
-      assign(playback, [outputFor(deviceId, actorId)]);
-    } else requireProgramme(playback, actorId);
+      assign(playback, outputs);
+    } else {
+      requireProgramme(playback, actorId);
+      // Its Device, alone there, keeps that playback and starts where Play on chose.
+      if (choice?.outputs) assign(playback, outputs, null);
+    }
     if (on) selectDevice(actorId, on);
     playback.outputs = playback.outputs.map((output) => ({
       ...output,
@@ -2960,6 +3004,7 @@ export async function createHub(options: HubOptions) {
     broadcast();
   };
 
+  const groups = createMixerGroups(options.databasePath);
   // What every window shares, whichever Playback it looks at.
   const common: Pick<
     SessionState,
@@ -2968,12 +3013,14 @@ export async function createHub(options: HubOptions) {
     | "setupStep"
     | "appearance"
     | "askEveryDevice"
+    | "groups"
     | "administratorClaimed"
     | "activeProfile"
     | "preferences"
     | "systemAudio"
   > = {
     askEveryDevice: store.askEveryDevice(),
+    groups: groups.list(),
     versions: {},
     installationName: store.installationName(),
     setupStep: store.setupStep(),
@@ -3756,12 +3803,16 @@ export async function createHub(options: HubOptions) {
     prepare: async (entry) => {
       if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
     },
-    reservePlay: (playedBy) => own(playedBy).session.reservePlay(),
-    enqueue: (entry, intent, authorize, playedBy) => {
-      const playback = mediaPlayback(playedBy, intent !== undefined),
+    // Play reserves and starts on the one Session it owns.
+    enqueue: (entry, play, authorize, playedBy) => {
+      const playback = mediaPlayback(playedBy, play),
         permitted = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
-      if (intent !== undefined)
-        playback.session.playNewEntries([entry], { intent, authorize: permitted, playedBy });
+      if (play)
+        playback.session.playNewEntries([entry], {
+          intent: playback.session.reservePlay(),
+          authorize: permitted,
+          playedBy,
+        });
       else playback.session.command({ type: "enqueue", entry }, permitted, playedBy);
     },
   });
@@ -3779,6 +3830,10 @@ export async function createHub(options: HubOptions) {
     shared.delete(id);
     targets.delete(id);
     remoteControllers.delete(id);
+    if (groups.forget(id)) {
+      common.groups = groups.list();
+      broadcast();
+    }
     for (const socket of sockets)
       if (socket.data.deviceId === id) {
         live.disconnect(socket, name);
@@ -4701,6 +4756,7 @@ export async function createHub(options: HubOptions) {
       const playedBy = playingOn(
         playbackActor(trusted ? null : caller.device!.id),
         !websocket && /\/(?:load|play)$/.test(url.pathname) ? url.searchParams.get("on") : null,
+        playOnChoice(url.searchParams),
       );
       const currentIdentity = identity;
       const authorize = () => {
@@ -5227,6 +5283,7 @@ export async function createHub(options: HubOptions) {
           playedBy = playingOn(
             playbackActor(socket.data.deviceId),
             "playNow" in action && action.playNow ? action.deviceId : null,
+            "outputs" in action ? action : undefined,
           );
           const deviceId = deviceOf(socket);
           const authorize = socket.data.authorize;
@@ -5292,6 +5349,19 @@ export async function createHub(options: HubOptions) {
               throw new ControllerError(ADMIN_ONLY, 403);
             store.saveAskEveryDevice(action.enabled);
             common.askEveryDevice = action.enabled;
+            broadcast();
+          } else if (action.type === "saveGroup" || action.type === "deleteGroup") {
+            // Groups are the Couch's: the host and admins keep them. Applying one is the Mixer's own changes, checked as those are.
+            authorize();
+            if (
+              socket.data.deviceId &&
+              store.device(socket.data.deviceId)?.role !== "administrator"
+            )
+              throw new ControllerError(ADMIN_ONLY, 403);
+            if (action.type === "saveGroup")
+              groups.save(action.group, (id) => id === hostId() || !!store.device(id));
+            else groups.delete(action.id);
+            common.groups = groups.list();
             broadcast();
           } else if (action.type === "publishLive") {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
@@ -5610,6 +5680,13 @@ export async function createHub(options: HubOptions) {
             requireAction(target, action, deviceId);
             if (action.type === "output" && lockedByLive(deviceId, action.deviceId))
               throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+            // A Group's changes name the item its preview showed, so they never land on another playback.
+            if (
+              action.type === "output" &&
+              action.playbackId &&
+              stateOf(target).player.playbackId !== action.playbackId
+            )
+              throw new Error("The playing item changed. Try again.");
             if (action.type === "solo") {
               // Only this Device keeps the Playback: its picture, when it shows one, and its sound.
               requireControl(action.deviceId, deviceId);
@@ -6017,6 +6094,7 @@ export async function createHub(options: HubOptions) {
       playlists.close();
       forLater.close();
       hidden.close();
+      groups.close();
       radioProgramme?.close();
       radioRecognition.close();
       radio.close();

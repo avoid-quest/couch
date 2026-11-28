@@ -27,7 +27,7 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import type { Action } from "../../../shared/protocol";
+import type { Action, PlayOn } from "../../../shared/protocol";
 import {
   providerForUrl,
   type ProviderId,
@@ -1041,7 +1041,7 @@ function PastedLink({
   }, [props.origin, props.token, props.connected]);
   const { hostname, pathname } = new URL(url);
   const { on } = usePlayOn();
-  async function send(playNow: boolean, deviceId?: string) {
+  async function send(playNow: boolean, on?: PlayOn) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
@@ -1054,9 +1054,9 @@ function PastedLink({
                 type: "enqueue",
                 entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url },
                 playNow,
-                deviceId,
+                ...on,
               }
-            : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, deviceId },
+            : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, ...on },
         )) &&
         !signal.aborted
       )
@@ -1114,7 +1114,7 @@ function PastedLink({
         <PlayOnMenu
           title={hostname + pathname}
           disabled={disabled || !props.canPlay || !props.onCommand}
-          onPlay={(deviceId) => void send(true, deviceId)}
+          onPlay={(on) => void send(true, on)}
         />
         <Button
           variant="ghost"

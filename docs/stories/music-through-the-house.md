@@ -14,12 +14,17 @@ and then takes it into the bathroom on their phone while they shower.
 4. In the bathroom, turn on this phone's **Sound** (**Tap to hear** if the
    browser asks).
 5. Set each device's level, or the top **Volume** to scale them all together.
+6. Next time, pick a group at the top of **Where it plays** ("Everywhere"),
+   check what it would change, and **Apply**. An admin saves one with
+   **Save as group**.
 
 ## Done when
 
 - Adding a device's Sound brings it in, in step with the others.
 - Each device keeps its own level; **Volume** moves them all in proportion.
 - Removing a device leaves the others playing.
+- Applying a group changes only what you could change by hand, says what it
+  left out ("except Bedroom TV sound (private)") and offers **Undo**.
 
 ## Demo
 

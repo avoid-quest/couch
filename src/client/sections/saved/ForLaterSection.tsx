@@ -18,6 +18,7 @@ import { forLaterQuery } from "@/api/for-later";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
+import type { PlayOn } from "../../../shared/protocol";
 
 type Mode = "play" | "append" | "remove";
 
@@ -58,17 +59,9 @@ export function ForLaterSection({
   });
   const { play } = usePlayOn();
   const action = useMutation({
-    mutationFn: ({
-      item,
-      mode,
-      deviceId,
-    }: {
-      item: ForLaterItem;
-      mode: Mode;
-      deviceId?: string;
-    }) => {
+    mutationFn: ({ item, mode, on }: { item: ForLaterItem; mode: Mode; on?: PlayOn }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
-      const send = (on?: string) =>
+      const send = (on?: PlayOn) =>
         apiSend<{ undoToken?: string } | undefined>(
           credentials,
           mode === "remove" ? path : `${path}/load${playOnQuery(on)}`,
@@ -77,7 +70,7 @@ export function ForLaterSection({
           30_000,
         );
       return mode === "play"
-        ? play(send, deviceId)
+        ? play(send, on)
         : mode === "append" && session
           ? session.queue(item.title, send)
           : send();
@@ -119,10 +112,10 @@ export function ForLaterSection({
     list,
     () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current,
   );
-  const act = (item: ForLaterItem, mode: Mode, index: number, deviceId?: string) => {
+  const act = (item: ForLaterItem, mode: Mode, index: number, on?: PlayOn) => {
     if (!connected || pending) return;
     if (mode === "remove") removing(item.id, index);
-    action.mutate({ item, mode, deviceId });
+    action.mutate({ item, mode, on });
   };
   // Move up and Move down, as the ordered ids the server persists.
   const order = (index: number, offset: number) =>
@@ -201,7 +194,7 @@ export function ForLaterSection({
                     {
                       label: "Play on",
                       disabled: !connected || !canPlay || pending,
-                      playOn: (deviceId) => act(item, "play", index, deviceId),
+                      playOn: (on) => act(item, "play", index, on),
                     },
                     {
                       label: "Queue",

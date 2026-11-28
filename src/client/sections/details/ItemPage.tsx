@@ -35,7 +35,7 @@ import {
   radioShowLabels,
   type RadioStation,
 } from "../../../shared/radio";
-import type { PlaybackCollection } from "../../../shared/protocol";
+import type { PlaybackCollection, PlayOn } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
@@ -356,7 +356,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         result.expiresAt - Date.now(),
       );
   };
-  const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
+  const start = (on?: PlayOn) => shell.playHistory(item, { fromStart: item.position === 0, on });
   return (
     <>
       <DetailLayout
@@ -401,7 +401,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         save={item.url ? save : undefined}
         playOn={{
           disabled: blocked || !playable || !item.playable,
-          run: (deviceId) => action.mutate(() => play(start, deviceId)),
+          run: (on) => action.mutate(() => play(start, on)),
         }}
         more={[
           ...browserActions(item.url),
@@ -471,7 +471,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     );
     await refresh();
   };
-  const load = async (mode: "play" | "append", on?: string) => {
+  const load = async (mode: "play" | "append", on?: PlayOn) => {
     const send = () => loadForLater(shell.credentials, item.id, mode, on);
     await (mode === "append" ? queue(item.title, send) : send());
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
@@ -500,7 +500,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
         }}
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
-          run: (deviceId) => action.mutate(() => play((on) => load("play", on), deviceId)),
+          run: (on) => action.mutate(() => play((on) => load("play", on), on)),
         }}
         more={[
           ...browserActions(item.url),
@@ -597,8 +597,8 @@ function RadioDetails({ item }: { item: RadioStation }) {
         save={{ ...save, disabled: save.disabled || action.isPending }}
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
-          run: (deviceId) =>
-            action.mutate(() => play((on) => shell.enqueueRadio(item, true, on), deviceId)),
+          audioOnly: true,
+          run: (on) => action.mutate(() => play((on) => shell.enqueueRadio(item, true, on), on)),
         }}
         more={browserActions(programme?.programmeUrl ?? item.homepage)}
       >

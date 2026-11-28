@@ -133,7 +133,8 @@ export function useStationMenu() {
       {
         label: "Play on",
         disabled: !available,
-        playOn: (deviceId) => void play((on) => enqueueRadio(station, true, on), deviceId),
+        audioOnly: true,
+        playOn: (on) => void play((on) => enqueueRadio(station, true, on), on),
       },
     ];
   };

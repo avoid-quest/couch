@@ -550,6 +550,98 @@ test(
   },
 );
 
+test(
+  "Play on starts where it was chosen, and refuses a channel a device doesn't lend before anything moves",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("chosen"),
+        playNow: true,
+        deviceId: speakerId,
+        outputs: [
+          { deviceId: speakerId, picture: true, sound: false },
+          { deviceId: phoneId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "chosen");
+      const chosen = f.phone.state.playback;
+      assert.equal(f.phone.state.controlling, speakerId);
+      assert.deepEqual(
+        f.phone.state.outputs?.map(({ deviceId, picture, sound }) => ({
+          deviceId,
+          picture,
+          sound,
+        })),
+        [
+          { deviceId: speakerId, picture: true, sound: false },
+          { deviceId: phoneId, picture: false, sound: true },
+        ],
+      );
+      await f.speaker.command({ type: "sharing", sharing: { audio: true, video: false } });
+      await assert.rejects(
+        f.phone.command({
+          type: "enqueue",
+          entry: f.entry("refused"),
+          playNow: true,
+          deviceId: phoneId,
+          outputs: [
+            { deviceId: phoneId, picture: false, sound: true },
+            { deviceId: speakerId, picture: true, sound: false },
+          ],
+        }),
+        /not sharing video/,
+      );
+      assert.equal(f.phone.state.playback, chosen);
+      assert.equal(f.phone.state.currentEntryId, "chosen");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+const mix = (state: SessionState) =>
+  state.outputs?.map(({ deviceId, picture, sound }) => ({
+    deviceId,
+    picture,
+    sound,
+  }));
+
+test(
+  "Play on from For later reserves and starts its chosen devices on the same playback",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.speaker, "radio", speakerId);
+      await until(() => f.speaker.state.currentEntryId === "radio");
+      await f.speaker.command({ type: "enqueue", entry: f.entry("clip") });
+      const { item } = await f.rest("/api/for-later", {
+        reference: { kind: "queue", id: "clip" },
+      });
+      await f.rest(
+        `/api/for-later/${item.id}/load?on=${speakerId}&picture=${speakerId}&sound=${phoneId}`,
+        { mode: "play" },
+      );
+      await until(
+        () => f.phone.state.currentEntryId !== null && f.phone.state.currentEntryId !== "radio",
+      );
+      assert.equal(
+        f.phone.state.queue.find((entry) => entry.id === f.phone.state.currentEntryId)?.title,
+        "clip",
+      );
+      assert.deepEqual(mix(f.phone.state), [
+        { deviceId: speakerId, picture: true, sound: false },
+        { deviceId: phoneId, picture: false, sound: true },
+      ]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 for (const [how, end] of [
   [
     "withdrawing consent",

@@ -10,6 +10,8 @@ import {
   reopens,
   soundActions,
 } from "../src/client/session/where-it-plays";
+import { applySteps, groupStatus, planGroup, undoSteps } from "../src/client/session/groups";
+import type { MixerGroup } from "../src/shared/mixer-groups";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 import type { LiveSource } from "../src/shared/live-input";
 
@@ -427,5 +429,148 @@ describe("the chooser", () => {
     expect(chooserFor(null, "film", "film:here:1")).toBe("film:here:1");
     expect(chooserFor(null, "other", "film:here:1")).toBeNull();
     expect(chooserFor(null, null, "film:here:1")).toBeNull();
+  });
+});
+
+describe("groups", () => {
+  // Living room: the TV's picture and the kitchen's sound.
+  const livingRoom: MixerGroup = {
+    id: "g",
+    name: "Living room",
+    members: [
+      { deviceId: "tv", picture: true, sound: false },
+      { deviceId: "kitchen", picture: false, sound: true },
+    ],
+  };
+  const plan = (state: ClientSessionState, group = livingRoom) =>
+    planGroup(group, rows(state), state);
+  const lines = (items: { deviceId: string; channel: string }[]) =>
+    items.map((item) => `${item.deviceId} ${item.channel}`);
+
+  test("applying asks for each missing channel and takes out the rest, gaining devices before any leaves", () => {
+    const state = session({ outputs: [both(here)] });
+    const result = plan(state);
+    expect(lines(result.changes)).toEqual([
+      "here picture",
+      "here sound",
+      "tv picture",
+      "kitchen sound",
+    ]);
+    expect(applySteps(result, rows(state), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: "tv", picture: true, playbackId: "p" },
+      { type: "output", deviceId: "kitchen", level: 50, playbackId: "p" },
+      { type: "output", deviceId: here, picture: false, level: 0, playbackId: "p" },
+    ]);
+    expect(groupStatus(result)).toEqual({ on: false });
+    expect(groupStatus(plan(session({ outputs: [picture("tv"), sound("kitchen")] })))).toEqual({
+      on: true,
+    });
+  });
+
+  test("a device's consent, an offline device and another device's private playback stay as they are", () => {
+    const state = session({
+      outputs: [picture("tv"), sound(here)],
+      devices: [
+        device(here, { sharing: { audio: false, video: false } }),
+        device("tv"),
+        device("kitchen", { sharing: { audio: false, video: true } }),
+      ],
+    });
+    const result = plan(state);
+    expect(result.left).toEqual([
+      { deviceId: "kitchen", name: "Kitchen", channel: "sound", reason: "private", stays: false },
+    ]);
+    // This device's own sound is its own to take out.
+    expect(lines(result.changes)).toEqual(["here sound"]);
+    expect(
+      plan(
+        session({
+          outputs: [picture("tv")],
+          devices: [device("tv"), device("kitchen", { online: false })],
+        }),
+      ).left.map((item) => item.reason),
+    ).toEqual(["offline"]);
+    // The kitchen plays something of its own elsewhere: the group leaves it there.
+    const own = session({
+      outputs: [picture("tv")],
+      devices: [
+        device(here),
+        device("tv"),
+        device("kitchen", { sharing: { audio: false, video: true } }),
+      ],
+      others: [{ id: "own", status: "playing", outputs: [sound("kitchen")] } as PlaybackSummary],
+    });
+    expect(plan(own).left.map((item) => `${item.deviceId} ${item.reason}`)).toEqual([
+      "kitchen private",
+    ]);
+    expect(groupStatus(plan(own))).toEqual({ on: false, part: "1 of 2" });
+  });
+
+  test("says which programme it takes a device from, and asks no picture of media without one", () => {
+    const state = session({
+      outputs: [picture("tv")],
+      others: [radio([sound("kitchen")])],
+    });
+    expect(plan(state).changes).toEqual([
+      { deviceId: "kitchen", name: "Kitchen", channel: "sound", on: true, from: "avoid radio" },
+    ]);
+    const listening = session({ outputs: [sound("kitchen")], film: { audioOnly: true } });
+    expect(plan(listening).wanted).toBe(1);
+    expect(groupStatus(plan(listening))).toEqual({ on: true });
+    // An offline screen's picture isn't counted for radio either.
+    const offline = session({
+      outputs: [sound("kitchen")],
+      devices: [device("tv", { online: false }), device("kitchen")],
+      film: { audioOnly: true },
+    });
+    expect(groupStatus(plan(offline))).toEqual({ on: true });
+  });
+
+  test("a device the group leaves out leaves whole, its picture on radio too", () => {
+    const radio = session({ outputs: [both("tv")], film: { audioOnly: true } });
+    const kitchen: MixerGroup = {
+      ...livingRoom,
+      members: [{ deviceId: "kitchen", picture: false, sound: true }],
+    };
+    const leave = applySteps(plan(radio, kitchen), rows(radio), "p").at(-1)!;
+    expect(leave.actions).toEqual([
+      { type: "output", deviceId: "tv", picture: false, level: 0, playbackId: "p" },
+    ]);
+    // Undo puts its picture back too, so a video after the radio shows on it again.
+    expect(leave.undone.map(({ channel, on }) => ({ channel, on }))).toEqual([
+      { channel: "sound", on: false },
+      { channel: "picture", on: false },
+    ]);
+  });
+
+  test("while none of the group can play here, it takes nothing out", () => {
+    const state = session({
+      outputs: [both("tv")],
+      devices: [device("tv"), device("kitchen", { sharing: { audio: false, video: false } })],
+    });
+    const kitchen: MixerGroup = {
+      ...livingRoom,
+      members: [{ deviceId: "kitchen", picture: false, sound: true }],
+    };
+    expect(plan(state, kitchen).changes).toEqual([]);
+  });
+
+  test("Undo turns back only the sound it added beside a radio's hidden picture", () => {
+    const added = [{ deviceId: "tv", name: "TV", channel: "sound" as const, on: true }];
+    const after = session({ outputs: [both("tv")], film: { audioOnly: true } });
+    expect(undoSteps(added, rows(after), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: "tv", level: 0, playbackId: "p" },
+    ]);
+  });
+
+  test("Undo turns back exactly the channels it changed", () => {
+    const before = session({ outputs: [both(here)] });
+    const applied = plan(before).changes;
+    const after = session({ outputs: [picture("tv"), sound("kitchen")] });
+    expect(undoSteps(applied, rows(after), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: here, picture: true, level: 50, playbackId: "p" },
+      { type: "output", deviceId: "tv", picture: false, playbackId: "p" },
+      { type: "output", deviceId: "kitchen", level: 0, playbackId: "p" },
+    ]);
   });
 });

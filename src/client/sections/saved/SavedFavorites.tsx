@@ -21,10 +21,11 @@ import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedSta
 import { savedNotice } from "@/copy";
 import { collectionSubtitle, metaLine } from "@/media-caption";
 import { collectionLabel, providerNames } from "@/sections/find/SearchOnlineResults";
+import type { PlayOn } from "../../../shared/protocol";
 
 export type SavedFavoriteActions = {
-  onEnqueueProvider: (item: ProviderItem, playNow: boolean, deviceId?: string) => Promise<boolean>;
-  onEnqueueRadio: (station: RadioStation, playNow: boolean, deviceId?: string) => Promise<boolean>;
+  onEnqueueProvider: (item: ProviderItem, playNow: boolean, on?: PlayOn) => Promise<boolean>;
+  onEnqueueRadio: (station: RadioStation, playNow: boolean, on?: PlayOn) => Promise<boolean>;
   onOpenProvider: (item: ProviderItem) => void;
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
@@ -169,15 +170,15 @@ export function SavedFavorites({
     () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current,
   );
   const { play } = usePlayOn();
-  const enqueue = async (favorite: Favorite, playNow: boolean, deviceId?: string) => {
+  const enqueue = async (favorite: Favorite, playNow: boolean, on?: PlayOn) => {
     if (!connected || pending) return;
     setEnqueueing(true);
     try {
-      const work = (on?: string) =>
+      const work = (on?: PlayOn) =>
         favorite.kind === "provider"
           ? onEnqueueProvider(favorite.item, playNow, on)
           : onEnqueueRadio(favorite.item, playNow, on);
-      await (playNow ? play(work, deviceId) : work());
+      await (playNow ? play(work, on) : work());
     } finally {
       setEnqueueing(false);
     }
@@ -253,7 +254,8 @@ export function SavedFavorites({
           {
             label: "Play on",
             disabled: !connected || !canPlay || pending,
-            playOn: (deviceId) => void enqueue(favorite, true, deviceId),
+            playOn: (on) => void enqueue(favorite, true, on),
+            audioOnly: favorite.kind === "radio",
           },
           {
             label: "Queue",

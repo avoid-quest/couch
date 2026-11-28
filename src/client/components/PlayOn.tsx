@@ -1,17 +1,17 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ChooseWherePlays } from "./ChooseWherePlays";
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
 import { playbackControls } from "@/session/playback-controls";
+import type { PlayOn } from "../../shared/protocol";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
 export function usePlayOn(sharingDeviceId?: string, liveAudio = false) {
@@ -32,17 +32,25 @@ export function usePlayOn(sharingDeviceId?: string, liveAudio = false) {
     queueAllowed: playbackControls(state).queue,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
     on: (label: string) => (target ? `${label} on ${target.name}` : label),
-    /** Plays, with Play on's Device passed to `work` for its request, then says where it plays. */
-    play: async <T,>(work: (on?: string) => Promise<T>, id?: string) => {
-      const result = await work(id);
-      if (result !== false) announcePlay(state, id);
+    /** Plays, with Play on's choice passed to `work` for its request, then says where it plays. */
+    play: async <T,>(work: (on?: PlayOn) => Promise<T>, on?: PlayOn) => {
+      const result = await work(on);
+      if (result !== false) announcePlay(state, on?.deviceId);
       return result;
     },
   };
 }
 
-/** Play on for a REST play request: Core isolates that Device when it reserves the play. */
-export const playOnQuery = (on?: string) => (on ? `?on=${encodeURIComponent(on)}` : "");
+/** Play on for a REST play request: Core isolates that Device, or starts where it was chosen, as it reserves the play. */
+export const playOnQuery = (on?: PlayOn) => {
+  if (!on?.deviceId) return "";
+  const query = new URLSearchParams({ on: on.deviceId });
+  for (const output of on.outputs ?? []) {
+    if (output.picture) query.append("picture", output.deviceId);
+    if (output.sound) query.append("sound", output.deviceId);
+  }
+  return `?${query}`;
+};
 
 // sharingDeviceId: a shared source's publisher. It never plays its own capture: choosing it opens Where it plays.
 function Devices({
@@ -79,7 +87,7 @@ function Devices({
   ));
 }
 
-/** "Play on" inside an item's menu; nothing when only this Device is online. */
+/** A shared source's "Play on" inside its menu: it plays at once on the Device chosen. Nothing when only this Device is online. */
 export function PlayOnGroup({
   onPlay,
   disabled,
@@ -110,31 +118,34 @@ export function PlayOnGroup({
   );
 }
 
-/** "Play on" beside a row's inline verbs. */
+/** "Play on…" beside a row's inline verbs: it opens Choose where it plays from itself. */
 export function PlayOnMenu({
   title,
+  audioOnly,
   onPlay,
   disabled,
-  sharingDeviceId,
   size,
 }: {
   title: string;
-  onPlay: (deviceId: string) => void;
+  audioOnly?: boolean;
+  onPlay: (on: PlayOn) => void;
   disabled?: boolean;
-  sharingDeviceId?: string;
   size?: "default" | "lg";
 }) {
+  const [open, setOpen] = useState(false);
   if (!usePlayOn().devices.length) return null;
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size={size} disabled={disabled} aria-label={`Play ${title} on`}>
-          Play on
+    <ChooseWherePlays
+      title={title}
+      audioOnly={audioOnly}
+      onPlay={onPlay}
+      open={open}
+      onOpenChange={setOpen}
+      trigger={
+        <Button variant="ghost" size={size} disabled={disabled} aria-label={`Play ${title} on…`}>
+          Play on…
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <Devices onPlay={onPlay} sharingDeviceId={sharingDeviceId} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      }
+    />
   );
 }

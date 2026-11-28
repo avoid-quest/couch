@@ -20,6 +20,7 @@ import {
   type SearchHit,
 } from "./SearchOnlineResults";
 import { failed } from "@/toasts";
+import type { PlayOn } from "../../../shared/protocol";
 
 type Props = SearchPlaybackProps & {
   query: string;
@@ -98,8 +99,7 @@ function RadioResults(props: Props) {
       if (!signal.aborted) setBusy(false);
     }
   }
-  function play(station: RadioStation, playNow: boolean, deviceId?: string) {
-    const on = deviceId ? { deviceId } : {};
+  function play(station: RadioStation, playNow: boolean, on?: PlayOn) {
     void action(
       `Couldn't ${playNow ? "play" : "queue"} ${station.name}.`,
       async () =>
@@ -202,7 +202,8 @@ function RadioResults(props: Props) {
           {
             label: "Play on",
             disabled: !props.canPlay || busy || !props.onCommand,
-            playOn: (deviceId: string) => play(station, true, deviceId),
+            audioOnly: true,
+            playOn: (on: PlayOn) => play(station, true, on),
           },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
           ...browserActions(station.homepage),
