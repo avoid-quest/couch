@@ -390,12 +390,21 @@ export function QueuePanel({
                           Save as list
                         </Button>
                       </DialogTrigger>
-                      {/* Up next's menu: Clear Up next, undone from its toast as Remove is. */}
+                      {/* Up next's menu: Clear Up next, undone from its toast as Remove is. Its "…" goes with
+                          the list, so the focus waits on the heading. */}
                       <RowOptions
                         title="Up next"
                         disabled={!connected}
                         actions={[
-                          { label: "Clear Up next", run: () => void run({ type: "clearUpNext" }) },
+                          {
+                            label: "Clear Up next",
+                            run: () => {
+                              panelRef.current
+                                ?.querySelector<HTMLElement>("#queue-title")
+                                ?.focus({ preventScroll: true });
+                              void run({ type: "clearUpNext" });
+                            },
+                          },
                         ]}
                       />
                     </div>
