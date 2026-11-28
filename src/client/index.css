@@ -1064,7 +1064,7 @@ html:has([data-slot="popover-content"]) .player-next-up {
 /* A phone's player, stacked as the prototype's (PlayerPage.tsx, data-stacked): the artwork and the title at the top,
    then Where it plays and Up next filling the room down to the band, as the side player's panel does. */
 .player-page[data-stacked] .player-workspace {
-  inset: 4.25rem var(--gutter) calc(var(--bottom-bar, 10rem) + 0.5rem);
+  inset: 5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 0.5rem);
 }
 .player-page[data-stacked]:not([data-info], [data-queue-open]) .player-summary {
   --art-h: 34cqh;

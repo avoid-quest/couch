@@ -44,12 +44,18 @@ branch. Phones keep a bottom tab bar for thumb reach.
   wall; the full video player stays black. Artwork colour is the only colour
   besides danger's red. Artwork Core can't read (an SVG logo) gives no light.
 - **Now playing** (`NowPlaying.tsx`, `.now-playing`): while something plays it
-  stands at the left of every screen on desktops and the TV, a panel the
-  window's height that the page steps beside (`--side-player`). **Minimise
-  player** folds it to a capsule at the bottom left, for this window only; a
-  phone keeps it as a dock above its tabs. Play/Pause, Next and a labelled Stop
-  start from its bottom-left corner at every size, the full player's too. It is
-  a lit panel (below), the side player with its picture on the wall behind it.
+  stands at one side of every screen on desktops and the TV, a panel the
+  window's height that the page steps beside: the right unless This device →
+  **Player side** says the left (`player-side.ts`). The page's inset at each
+  edge is `--content-inset-left` and `--content-inset-right` (0 without a side
+  player), which messages keep clear of; its panels open toward the page, and
+  the room's lamp stands by it. Its picture and title open the full player
+  ("Open player" on hover and focus); **Minimise player** (a chevron) folds it
+  to a capsule in that side's bottom corner, for this window only, which shows
+  it again when pressed. A phone keeps it as a dock above its tabs, which opens
+  the full player. Play/Pause, Next and a labelled Stop start from its
+  bottom-left corner at every size, the full player's too. It is a lit panel
+  (below), the side player with its picture on the wall behind it.
 - **Surfaces**: Now playing is a **lit panel** (`.lit-panel`): a warm
   dark that takes the lamps' colours, with a hairline edge, a deep shadow and a
   little of the light around it; a panel that shows the picture (the side

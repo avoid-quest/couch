@@ -14,7 +14,7 @@ phone or laptop meanwhile, and later move it to the TV.
    I pick the one I control. **Play** and **Play on** control what they start.
 3. Later, in my player's **Where it plays**, the TV's row → **Move here**.
 4. My Playback, with its position and Up next, moves to the TV; my device stops.
-5. **Stop** stops only what I control and says so ("Stopped on Living room TV.
+5. **Stop** stops only what I control and says so ("Stopped on This device.
    It's in Continue.", with **Undo**). Then I control what still plays on my
    device, else the newest thing playing.
 

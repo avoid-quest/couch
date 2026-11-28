@@ -11,7 +11,8 @@ how big text is, which language and quality films play in.
   **Hide**.
 - On this device: **Edit Home** at the foot of Home (or **This device → Home**):
   each section on or off, **Move up/down**, **Reset to default**; **General →
-  Text size**.
+  Text size**; **General → Player side**, where Now playing stands (**Right**
+  unless I choose **Left**).
 - On this device: **Add to Home** on a series, programme or channel (its page,
   its menu, or the player while it plays) gives it a section of its own with
   what the source lists there, kept fresh. Edit Home's **Add a section** opens
