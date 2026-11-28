@@ -890,7 +890,7 @@ function Typed({
     hit?.actions.find(
       (action) => action.label.startsWith("Queue") && action.run && !action.disabled,
     );
-  rowKeys.current = {
+  const keys: RowKeys = {
     // Shift+Enter on a result only ever queues; where there is nothing to queue it does nothing.
     queue: (value) => {
       const hit = rowOf(value);
@@ -916,6 +916,13 @@ function Typed({
       };
     },
   };
+  // The field's keys reach the rows that show: a render React sets aside never publishes its own.
+  useLayoutEffect(() => {
+    rowKeys.current = keys;
+    return () => {
+      rowKeys.current = null;
+    };
+  });
   const toggle = (hit: SearchHit) => () =>
     setMenu(opened === hit.id ? null : { query: remote.query, id: hit.id });
   const held = useHeld();
@@ -1036,11 +1043,7 @@ function Typed({
           )}
         </CommandItem>
       </CommandGroup>
-      <PaletteFoot
-        asking={remote.asking}
-        failed={remote.failed}
-        keys={rowKeys.current.hint(selected)}
-      />
+      <PaletteFoot asking={remote.asking} failed={remote.failed} keys={keys.hint(selected)} />
       {remote.sources}
     </>
   );
