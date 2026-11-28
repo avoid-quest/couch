@@ -331,7 +331,12 @@ export function PlaybackTransport({
       data-page-first={first(1)}
       variant="ghost"
       size={quiet ? "default" : "icon-lg"}
-      className={cn(transportInk, moreClassName, quiet && "h-(--player-target)")}
+      className={cn(
+        transportInk,
+        moreClassName,
+        // The narrowest phones trim its padding, so its name still fits the band's row.
+        quiet && "h-(--player-target) max-[23rem]:gap-1 max-[23rem]:px-2",
+      )}
       aria-label="Stop"
       title="Stop"
       disabled={!enabled[1]}
@@ -342,8 +347,7 @@ export function PlaybackTransport({
         data-icon={quiet ? "inline-start" : undefined}
         className="fill-current"
       />
-      {/* The narrowest phones keep the glyph alone, so the band's row still fits without scrolling. */}
-      {quiet && <span className="max-[23rem]:sr-only">Stop</span>}
+      {quiet && <span>Stop</span>}
     </Button>
   );
   const next = (
