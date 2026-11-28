@@ -89,20 +89,21 @@ export function ScopeChips({
     if (revealed && !palette && document.activeElement === document.body)
       row.current?.querySelector<HTMLElement>(`[data-chip="${CSS.escape(revealed)}"]`)?.focus();
   }, [revealed]);
-  // A row that scrolls keeps its chosen chip in view; only the row scrolls, never the page.
-  const checked = chips
-    .filter((chip) => chip.checked)
-    .map((chip) => chip.label)
-    .join("|");
+  // A row that scrolls keeps the chip just chosen in view (a scope checks a kind and a source), else the first chosen;
+  // only the row scrolls, never the page.
+  const checked = chips.filter((chip) => chip.checked).map((chip) => chip.label);
+  const before = useRef<string[]>([]);
   useLayoutEffect(() => {
+    const label = checked.find((each) => !before.current.includes(each)) ?? checked[0];
+    before.current = checked;
     const line = row.current;
-    const chosen = line?.querySelector<HTMLElement>('[aria-pressed="true"], [data-checked="true"]');
+    const chosen = label && line?.querySelector<HTMLElement>(`[data-chip="${CSS.escape(label)}"]`);
     if (wraps || !line || !chosen) return;
     const bounds = line.getBoundingClientRect(),
       option = chosen.getBoundingClientRect();
     line.scrollLeft +=
       Math.min(0, option.left - bounds.left) || Math.max(0, option.right - bounds.right);
-  }, [signature, checked, wraps]);
+  }, [signature, checked.join("|"), wraps]);
   const arrived = useArrivals(
     query,
     chips.map((chip) => chip.label),
@@ -128,6 +129,7 @@ export function ScopeChips({
           <CommandItem
             key={chip.label}
             value={`chip:${chip.label}`}
+            data-chip={chip.label}
             data-checked={chip.checked}
             onSelect={chip.onPress}
             className={cn(
