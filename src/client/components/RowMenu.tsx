@@ -140,8 +140,9 @@ function Items({
             disabled={action.disabled}
             onSelect={(event) => {
               if (!action.playOn) return select(action);
-              // Play on… keeps the menu open, its rows swapped for the places.
-              event.preventDefault();
+              // Play on… keeps the menu open, its rows swapped for the places; a shared source's opens its devices
+              // once the menu has closed.
+              if (!sharedPlayOn(action)) event.preventDefault();
               choose(action);
             }}
           >
