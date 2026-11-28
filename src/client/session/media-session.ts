@@ -105,20 +105,24 @@ export function useMediaSession() {
       ? liveTitle(source)
       : "Couch Live"
     : (programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "");
+  const station = current?.station?.name;
+  const otherStation = station && station !== title ? station : "";
+  // A show or song with no artist names its station or channel instead, and then not again as its album.
   const artist = listening
     ? (source?.metadata?.description ?? "")
     : (programme?.artist ??
       player?.nowPlaying?.artist ??
       current?.subtitle ??
       current?.creator?.title ??
-      "");
-  const station = current?.station?.name;
+      otherStation);
   // A station's show or song names the station as its album; an episode names its series.
   const album = listening
     ? ""
     : (programme?.album ??
-      (station && station !== title
-        ? station
+      (otherStation
+        ? otherStation === artist
+          ? ""
+          : otherStation
         : (current?.collection?.parent?.title ?? current?.collection?.title ?? "")));
   const artwork = listening ? null : (programme?.artworkUrl ?? current?.thumbnail ?? null);
   const live = listening || !!current?.endless || isRadio(current);

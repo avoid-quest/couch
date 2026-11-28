@@ -5,7 +5,7 @@ The app window's title is `Couch · instance · current item`, falling back to
 
 Couch feeds the [Media Session API](https://developer.mozilla.org/docs/Web/API/Media_Session_API)
 from the session state (`src/client/session/media-session.ts`): title, artist
-(the programme's host, the song's artist or the channel), album (the station or
+(the programme's host, the song's artist, else the station or channel), album (the station or
 the series) and artwork, playback state and position, and play, pause, stop,
 next and seek handlers that run the existing session actions. Chromium maps it
 to macOS Now Playing, the Windows media controls and Linux MPRIS, but only while
