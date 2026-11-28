@@ -295,7 +295,8 @@ export function SearchPanel(props: Props) {
     {
       label: "All",
       checked: !hasScope(current),
-      count: found.length,
+      // All clears the kind too, Audio's included.
+      count: hits.filter(close).length,
       onPress: () => props.onSearchChange({ query, source: "All" }),
     },
     ...chipScopes(current).flatMap((scope) => {
