@@ -141,7 +141,8 @@ test(
         2,
         "local zero volume keeps audience membership",
       );
-      assert.equal((await f.receiver.command({ type: "leave", playbackId })).ok, true);
+      // Home's Shared sources leaves by the Playback's own id (the player by its item's, live-lifecycle).
+      assert.equal((await f.receiver.command({ type: "leave", playbackId: playback! })).ok, true);
       await until(() => other.state.outputs?.length === 1);
       assert.equal(other.state.playback, playback);
       assert.equal(
