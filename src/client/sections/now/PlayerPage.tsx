@@ -1,3 +1,4 @@
+import { SharedPlate } from "@/sections/shell/NowPlaying";
 import { Description } from "@/components/DetailHeader";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
@@ -969,7 +970,12 @@ export function PlayerPage({
           {current && artworkStage && (
             <div data-player-summary className="player-summary">
               <div ref={artFrame} data-player-art aria-hidden="true" className="player-art">
-                {artwork || <Music2 className="size-12 text-muted-foreground" />}
+                {artwork ||
+                  (current.liveSourceId && state ? (
+                    <SharedPlate state={state} entry={current} />
+                  ) : (
+                    <Music2 className="size-12 text-muted-foreground" />
+                  ))}
               </div>
               {/* The media title leads, then where it comes from; Info adds the rest under them in place. Then what's wrong, if anything. */}
               <div
@@ -1194,6 +1200,7 @@ export function PlayerPage({
                     run={run}
                     pageFirst
                     quiet
+                    onLeft={shell.leavePlayer}
                     className="player-transport"
                   />
                 )}

@@ -13,7 +13,6 @@ import {
   Plus,
   Settings,
   SlidersVertical,
-  Square,
   Volume2,
 } from "lucide-react";
 import { Level } from "@/components/Level";
@@ -30,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { PlayOnGroup } from "@/components/PlayOn";
+import { usePlayOn } from "@/components/PlayOn";
 import { toolPanel } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
 import type { LiveSharing } from "@/session/live";
@@ -49,10 +48,10 @@ import {
   type LiveVideoQuality,
 } from "../../../shared/live-input";
 import type { Action } from "../../../shared/protocol";
-import { InputLevel } from "./InputLevel";
+import { InputLevel, useInputStream } from "./InputLevel";
 import { LiveMetadataEditor } from "./LiveMetadata";
 import { LiveSettings } from "./LiveOperator";
-import { SharingPill, useStop } from "./ShareControl";
+import { SharingPill } from "./ShareControl";
 import { openShareFull } from "./share-view";
 import {
   frameRateLabels,
@@ -73,8 +72,9 @@ type Props = {
 /**
  * The player as the share's place, on the device that shares (docs/live-inputs.md): where a programme has its picture,
  * what goes out, silent here; where Up next stands, who watches or listens and how each gets it; where Play starts,
- * Stop sharing, and Mute audio input for an input. No Play, timeline or Volume: this device never plays its own share.
- * The side player, its capsule, the phone's dock and the full view (Live audio's console) show the same parts.
+ * Mute audio input for an input. No Play, timeline or Volume: this device never plays its own share. Stop sharing is
+ * the header's pill's alone, one press from every screen, this one's full view included. The side player, its capsule,
+ * the phone's dock and the full view (Live audio's console) show the same parts.
  */
 export function SharePlayer({ state, size, side, onSize }: Props) {
   const { liveSharing, localLiveSourceId, run, connected } = useSessionGate();
@@ -91,7 +91,10 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       void run({ type: "selectPlayback", playbackId: playback.id });
   }, [playback?.id]);
   const routes = useRoutes(sharing);
+  // A native input's level, read from the same device as the browser names it.
+  const meter = useInputStream(sharing?.meterId);
   if (!sharing || !source) return null;
+  const input = sharing.input ?? meter ?? undefined;
   const parts = shareParts(
     state,
     sharing,
@@ -99,6 +102,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
     run,
     changed,
     playback?.id === state.playback,
+    input,
   );
   const shell = { "data-now-playing": "", "data-share-player": "", "data-tv-local-only": "" };
   const audience = (
@@ -110,13 +114,13 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       className={size === "full" ? undefined : "min-h-0 flex-1"}
     />
   );
+  // The line that says how it goes (or that the input is muted), with Mute audio input before it for an input.
   const foot = (
-    <div className="flex min-h-(--player-target) items-center gap-1.5">
+    <div className="flex min-h-(--player-target) min-w-0 items-center gap-2.5">
       {parts.mute}
-      <StopSharing />
-      {size === "full" && (
-        <span className="ml-2 min-w-0 truncate text-sm text-muted-foreground">{parts.since}</span>
-      )}
+      <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        {parts.since}
+      </span>
     </div>
   );
 
@@ -128,7 +132,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label={`Sharing ${parts.title}`}
-        className="share-full room-ground fixed inset-0 z-40 flex flex-col overflow-y-auto px-(--gutter) pt-3 pb-3"
+        className="share-full now-playing room-ground fixed inset-0 z-40 flex flex-col overflow-y-auto px-(--gutter) pt-3 pb-3"
         onKeyDown={(event) => {
           if (event.key !== "Escape" || event.defaultPrevented) return;
           event.preventDefault();
@@ -160,6 +164,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
         <div className="flex flex-wrap items-center gap-3">
           {foot}
           <span className="flex-1" />
+          {parts.tool}
           {parts.gear}
         </div>
       </div>
@@ -212,16 +217,11 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
             {audience}
           </div>
         </div>
-        <div className="relative grid shrink-0 gap-1 px-3.5 pb-3.5">
-          <p className="flex min-w-0 items-center gap-2 px-0.5 text-xs text-muted-foreground">
-            {parts.since}
-          </p>
-          {foot}
-        </div>
+        <div className="relative shrink-0 px-3.5 pb-3.5">{foot}</div>
       </aside>
     );
 
-  // The capsule and the dock: the share's name and where it goes, which shows it again or opens it full; Stop sharing.
+  // The capsule and the dock: the share's name and where it goes, which shows it again or opens it full.
   const identity = (
     <button
       type="button"
@@ -251,7 +251,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
           side === "left" ? "ml-3" : "mr-3 ml-auto",
         )}
       >
-        <StopSharing />
+        {parts.mute}
         {identity}
         {parts.tool}
       </aside>
@@ -264,10 +264,10 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       className="now-playing lit-panel now-dock relative mx-2 mb-1 grid gap-2 overflow-hidden rounded-3xl pt-2.5 pr-2 pb-2 pl-3"
     >
       <div className="relative flex min-w-0 items-center gap-1">
+        {parts.mute}
         {identity}
         {parts.tool}
       </div>
-      {foot}
     </aside>
   );
 }
@@ -280,6 +280,7 @@ function shareParts(
   run: (action: Action) => Promise<boolean>,
   changed: () => void,
   selected: boolean,
+  input: MediaStream | undefined,
 ) {
   const source = sharing.source;
   const live = source.intent === "live";
@@ -320,6 +321,7 @@ function shareParts(
         what={what}
         capture={live ? capture : undefined}
         live={live}
+        input={source.kind === "microphone" ? input : undefined}
       />
     ),
     where: (
@@ -379,7 +381,7 @@ function What({
     return (
       <span
         className={cn(
-          "relative block overflow-hidden rounded-[0.875rem] bg-black",
+          "relative block aspect-video overflow-hidden rounded-[0.875rem] bg-black",
           small && "rounded-lg",
           className,
         )}
@@ -392,7 +394,7 @@ function What({
           ref={(video) => {
             if (video && video.srcObject !== sharing.stream) video.srcObject = sharing.stream;
           }}
-          className="block aspect-video w-full object-contain"
+          className="block size-full object-contain"
         />
         {!small && (
           <span className="absolute bottom-2.5 left-2.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-medium text-white">
@@ -440,9 +442,6 @@ function What({
           {kind}
           {from ? `, from ${from}` : ""}
         </span>
-        {sharing.source.kind === "microphone" && !large && (
-          <InputLevel stream={sharing.input} muted={sharing.muted} className="mt-2" />
-        )}
       </span>
     </span>
   );
@@ -455,12 +454,14 @@ function ShareHeading({
   what,
   capture,
   live,
+  input,
 }: {
   sharing: LiveSharing;
   title: string;
   what: string;
   capture?: string;
   live: boolean;
+  input?: MediaStream;
 }) {
   const [editing, setEditing] = useState(false);
   const source = sharing.source;
@@ -475,11 +476,7 @@ function ShareHeading({
         <span className={cn(live && "text-foreground")}>{what}</span>
         {capture && <span>{capture}</span>}
       </p>
-      {sharing.source.kind === "microphone" && sharing.input && (
-        <span className="mt-1 grid gap-1">
-          <InputLevel stream={sharing.input} muted={sharing.muted} />
-        </span>
-      )}
+      {input && <InputLevel stream={input} muted={sharing.muted} className="my-1" />}
       {live && (
         <Button
           variant="ghost"
@@ -715,9 +712,13 @@ function Audience({
   );
 }
 
-/** Choose where it plays, for a share nobody plays yet: Play on's devices; it plays at once on the one chosen. */
+/**
+ * Choose where it plays, for a share nobody plays yet: Play on's devices but this one, which never plays its own share;
+ * it plays at once on the one chosen.
+ */
 function ChooseWhere({ sharing, icon = false }: { sharing: LiveSharing; icon?: boolean }) {
   const { run, connected } = useSessionGate();
+  const { devices } = usePlayOn();
   const label = "Choose where it plays";
   return (
     <DropdownMenu modal={false}>
@@ -735,13 +736,20 @@ function ChooseWhere({ sharing, icon = false }: { sharing: LiveSharing; icon?: b
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent data-tv-local-only align="start" className="max-w-80">
-        <PlayOnGroup
-          separated={false}
-          sharingDeviceId={sharing.source.deviceId}
-          onPlay={(target) =>
-            void run({ type: "playLive", sourceId: sharing.source.id, deviceId: target })
-          }
-        />
+        <DropdownMenuLabel>Play on</DropdownMenuLabel>
+        {devices
+          .filter((device) => device.id !== sharing.source.deviceId)
+          .map((device) => (
+            <DropdownMenuItem
+              key={device.id}
+              className="break-words"
+              onSelect={() =>
+                void run({ type: "playLive", sourceId: sharing.source.id, deviceId: device.id })
+              }
+            >
+              {device.name}
+            </DropdownMenuItem>
+          ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -787,7 +795,7 @@ function AddSpeakers({
           {...toolPanel(trigger.current)}
           data-tv-local-only
           aria-label="Speakers that listen"
-          className="w-[min(24rem,calc(100vw-2rem))] gap-2 p-3"
+          className="max-h-(--radix-popover-content-available-height) w-[min(24rem,calc(100vw-2rem))] gap-2 overflow-y-auto p-3"
         >
           <p className="font-heading text-base font-semibold">Speakers that listen</p>
           <p className="text-xs text-muted-foreground">
@@ -958,23 +966,6 @@ function MuteInput({
       }}
     >
       {muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
-    </Button>
-  );
-}
-
-function StopSharing() {
-  const stop = useStop();
-  return (
-    <Button
-      variant="secondary"
-      className="h-(--player-target) rounded-full"
-      aria-label={stop.pending ? "Stopping…" : "Stop sharing"}
-      title="Stop sharing"
-      disabled={stop.pending}
-      onClick={() => void stop.run()}
-    >
-      <Square aria-hidden="true" className="fill-current" />
-      {stop.pending ? "Stopping…" : "Stop sharing"}
     </Button>
   );
 }

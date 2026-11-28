@@ -7,12 +7,21 @@
   can change them. The hosting app shares its own while **Share on network** is
   on.
 - **Publishing**: press **Share** in the header and choose **Screen**,
-  **Window**, **System audio** or **Audio input**, optionally devices under
-  **Play on**, then **Start sharing**. On the Couch computer an **Audio input**
-  is always [Live audio](live-audio.md), and **System audio** is Live when
-  **Playback** is **Live**. Without a destination the source waits in
-  Home's **Shared sources**. A browser without screen capture offers audio inputs
-  only.
+  **Window**, **System audio** or **Audio input**, then **Start sharing**. On
+  the Couch computer an **Audio input** is always [Live audio](live-audio.md),
+  and **System audio** is Live when **Playback** is **Live**. The source waits
+  in Home's **Shared sources**, where others **Play** or **Join** it. A browser
+  without screen capture offers audio inputs only; a chosen input shows its
+  level before and while it goes out (a native Live input's level isn't read).
+- **While sharing**, the header's Share is the share's pill on every screen
+  ("Sharing, 2", "Live, 10", hollow "Still sharing, on no screens" while nobody
+  receives it) with the share's one **Stop**. The player follows the share as it
+  starts, even with no receivers (a client view, `share-view.ts`, beside the
+  Playbacks): what goes out, who receives it and how, Mute audio input, the gear
+  for Picture or Live audio's Codec, Capture buffer and Input channels. Once a
+  Playback plays it, the player controls that Playback, so **Where it plays** is
+  the share's. Choosing another Playback shows that one; the pill shows the share
+  again. The capture ending by itself is a message with **Share again**.
 - **Picture**: 1080p and 60 FPS by default, with 720p or original resolution and
   30/60/120 FPS targets, changeable while sharing. Targets are ceilings, not
   guarantees. Captured audio turns off echo cancellation, noise suppression and
@@ -20,8 +29,10 @@
 - **The publisher never plays its own capture**, except a Live audio input,
   which the Couch computer's own outputs can play like any other device's.
   Otherwise it stays a controller, listed as **Sharing this source** in **Where it plays**.
-- **Stop sharing** ends the source on every receiver. Closing the publishing
+- **Stop** ends the source on every receiver. Closing the publishing
   window, disconnecting it or stopping capture through the OS does too.
+- **Names** say what and whose: "Studio Mac screen", "Chess on Studio Mac" (a
+  window), "Studio Mac sound", "Pixel 8 audio input", "AirPlay from Ana's iPhone".
 - macOS system audio needs 14.2+. Including system audio sends the whole mix,
   even when the picture is one window.
 

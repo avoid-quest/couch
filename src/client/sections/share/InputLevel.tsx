@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,7 +35,7 @@ export function InputLevel({
     }, 66);
     return () => {
       clearInterval(timer);
-      bar.style.removeProperty("transform");
+      bar.style.transform = "scaleX(0)";
       source.disconnect();
       void context.close().catch(() => {});
     };
@@ -49,8 +49,41 @@ export function InputLevel({
     >
       <span
         ref={fill}
-        className="absolute inset-0 origin-left scale-x-0 bg-foreground/70 motion-safe:transition-transform motion-safe:duration-75"
+        style={{ transform: "scaleX(0)" }}
+        className="absolute inset-0 origin-left bg-foreground/70 motion-safe:transition-transform motion-safe:duration-75"
       />
     </span>
   );
+}
+
+/**
+ * An input's own sound, read only for its level: the panel's chosen input, or a native input while it goes out (the
+ * desktop app sends its sound itself). Nothing before the browser may use inputs; released when the device changes or
+ * the level goes.
+ */
+export function useInputStream(audioDeviceId: string | null | undefined) {
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  useEffect(() => {
+    if (!audioDeviceId || audioDeviceId.startsWith("native:")) return;
+    let open = true;
+    let held: MediaStream | undefined;
+    void navigator.mediaDevices
+      ?.getUserMedia({
+        audio: audioDeviceId === "default" ? true : { deviceId: { exact: audioDeviceId } },
+        video: false,
+      })
+      .then(
+        (next) => {
+          if (open) setStream((held = next));
+          else next.getTracks().forEach((track) => track.stop());
+        },
+        () => {},
+      );
+    return () => {
+      open = false;
+      held?.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    };
+  }, [audioDeviceId]);
+  return stream;
 }

@@ -5,7 +5,7 @@ import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronRight, Settings } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -378,6 +378,11 @@ function Picture({
     >
       {video ? (
         <span ref={into} className="block size-full" />
+      ) : entry.liveSourceId && !thumbnail ? (
+        // A shared sound has no artwork: its mark, plainly, never a letter that pretends to be one.
+        <span className="grid size-full place-items-center bg-black/40 text-foreground">
+          <AudioLines className={small ? "size-5" : "size-8"} />
+        </span>
       ) : (
         <MediaArtwork
           bare={!!thumbnail && !shown}
@@ -414,6 +419,40 @@ function SharedNote({ state, entry }: { state: ClientSessionState; entry: QueueE
           : `It follows ${from}: no timeline, nothing to skip. Pause and Stop work on these devices only; only ${from} can stop sharing.`}
       </p>
     </div>
+  );
+}
+
+/**
+ * The full player's plate for a shared sound, which has no artwork, so nothing pretends: its mark, Live audio's clock
+ * set large, and who shares it.
+ */
+export function SharedPlate({ state, entry }: { state: ClientSessionState; entry: QueueEntry }) {
+  const source = state.liveSources?.find((item) => item.id === entry.liveSourceId);
+  const from = sharedFrom(state, entry);
+  const live = source?.intent === "live";
+  return (
+    <span className="bg-black/35">
+      <span className="flex size-full flex-col justify-between p-5 text-left">
+        <AudioLines aria-hidden="true" className="size-6" />
+        <span className="grid gap-1">
+          {live && (
+            <LiveClock
+              time
+              startedAt={source?.startedAt}
+              className="font-heading text-[clamp(2.5rem,12vw,4.5rem)] leading-none font-semibold tracking-[-0.03em] tabular-nums"
+            />
+          )}
+          <span className="text-sm text-muted-foreground">
+            {live
+              ? "Live audio"
+              : source?.kind === "system-audio"
+                ? "System audio"
+                : "Shared sound"}
+            {from ? `, from ${from}` : ""}
+          </span>
+        </span>
+      </span>
+    </span>
   );
 }
 

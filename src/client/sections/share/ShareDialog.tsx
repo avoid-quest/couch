@@ -15,7 +15,7 @@ import { useNativeInputBufferPreference, useNativeInputChannelPreference } from 
 import { errorText, useSessionGate } from "@/session/session-context";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { CaptureBufferSelect } from "./LiveOperator";
-import { InputLevel } from "./InputLevel";
+import { InputLevel, useInputStream } from "./InputLevel";
 import {
   nativeInputChannelMap,
   nativeInputChannelOptions,
@@ -324,6 +324,9 @@ function ShareForm({
           sound,
         }),
         ...(kind.intent === "live" ? { metadata } : {}),
+        ...(audioDeviceId.startsWith("native:")
+          ? { meterId: inputs?.find((input) => input.deviceId === audioDeviceId)?.meterId }
+          : {}),
         ...(inputChannels && inputChannels > 2
           ? { nativeChannelMap: nativeInputChannelMap(channelPreference) }
           : {}),
@@ -660,7 +663,11 @@ function Inputs({
   disabled: boolean;
   onFind: () => void;
 }) {
-  const stream = useInputPreview(inputs ? value : null);
+  // A native input's level is read from the same device as the browser names it.
+  const chosen = inputs?.find((input) => input.deviceId === value);
+  const stream = useInputStream(
+    !inputs ? null : value.startsWith("native:") ? (chosen?.meterId ?? null) : value,
+  );
   const named = inputs?.filter((input) => input.deviceId !== "default") ?? [];
   return (
     <div className="grid gap-2">
@@ -733,37 +740,6 @@ function Inputs({
       </Button>
     </div>
   );
-}
-
-/**
- * The chosen input's own sound, for its level while the panel is open; nothing for a native input (the desktop app
- * reads those itself) or before the browser may use inputs. Released when the choice changes or the panel closes.
- */
-function useInputPreview(audioDeviceId: string | null) {
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  useEffect(() => {
-    if (audioDeviceId === null || !audioDeviceId || audioDeviceId.startsWith("native:")) return;
-    let open = true;
-    let held: MediaStream | undefined;
-    void navigator.mediaDevices
-      ?.getUserMedia({
-        audio: audioDeviceId === "default" ? true : { deviceId: { exact: audioDeviceId } },
-        video: false,
-      })
-      .then(
-        (next) => {
-          if (open) setStream((held = next));
-          else next.getTracks().forEach((track) => track.stop());
-        },
-        () => {},
-      );
-    return () => {
-      open = false;
-      held?.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    };
-  }, [audioDeviceId]);
-  return stream;
 }
 
 /**

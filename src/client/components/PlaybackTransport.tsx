@@ -344,11 +344,14 @@ export function PlaybackTransport({
   className,
   participation = true,
   quiet = false,
+  onLeft,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
   participation?: boolean;
   quiet?: boolean;
+  /** Leaving Live audio closes the player that showed it. */
+  onLeft?: () => void;
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
@@ -363,6 +366,7 @@ export function PlaybackTransport({
         run={run}
         pageFirst={pageFirst}
         quiet={quiet}
+        onLeft={onLeft}
         className={className}
       />
     ) : null;
@@ -468,8 +472,9 @@ export function LiveParticipation({
   run,
   pageFirst,
   quiet = false,
+  onLeft,
   className,
-}: Props & { pageFirst?: boolean; quiet?: boolean; className?: string }) {
+}: Props & { pageFirst?: boolean; quiet?: boolean; onLeft?: () => void; className?: string }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const busy = useRef(false);
@@ -525,7 +530,10 @@ export function LiveParticipation({
                 : { type: "playLive", sourceId: source.id, deviceId: deviceId() },
             );
             setFailed(!done);
-            if (done && receiving) leftLive(liveTitle(source), join);
+            if (done && receiving) {
+              leftLive(liveTitle(source), join);
+              onLeft?.();
+            }
           } catch {
             setFailed(true);
           } finally {

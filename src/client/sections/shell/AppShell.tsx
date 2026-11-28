@@ -1,3 +1,4 @@
+import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { useRadioClock } from "@/radio-clock";
 import {
   defaultStringifySearch,
@@ -712,9 +713,13 @@ function ShellChrome({ children }: PropsWithChildren) {
     if (playback && playback.liveSourceId !== localLiveSourceId) showShare(false);
   }, [state?.playback]);
   const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
+  // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again.
+  const outside = livePlayback(state) && !playbackControls(state).leave;
   const nowPlaying =
     (sharing ||
-      (!!current && (active || player?.status === "error" || player?.status === "ended"))) &&
+      (!!current &&
+        !outside &&
+        (active || player?.status === "error" || player?.status === "ended"))) &&
     !playerVisible &&
     !remoteVisible;
   // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and

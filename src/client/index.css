@@ -510,7 +510,7 @@
    share's pill, which takes the room it needs from the search. Container units follow interface zoom as well as the
    window's available width. */
 .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(0, 1fr) auto;
+  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(9rem, 1fr) auto;
 }
 .app-header-couch {
   grid-area: 1 / 1;
@@ -573,7 +573,7 @@
   }
 }
 .tv-presentation .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(0, 1fr) auto auto;
+  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto minmax(9rem, 1fr) auto auto;
 }
 .tv-presentation .app-header-couch {
   display: flex;

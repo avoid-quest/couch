@@ -41,6 +41,8 @@ export type LiveSelection = {
   surface?: "monitor" | "window";
   /** The shared window's own name, for the source's title ("Chess on Studio Mac"). */
   windowName?: string;
+  /** A native input's device as the browser names it, to show its level while it goes out. */
+  meterId?: string;
   intent?: "relaxed" | "live";
   metadata?: LiveMetadata;
 };

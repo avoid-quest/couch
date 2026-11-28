@@ -38,8 +38,9 @@ type Publication = {
   frameRate: LiveVideoFrameRate;
   pictureWork?: Promise<void>;
   preview: MediaStream;
-  // An audio input's sound alone, for its level meter; none for a native input or a picture.
+  // An audio input's sound alone, for its level meter; for a native input, its device as the browser names it.
   input?: MediaStream;
+  meterId?: string;
   surface?: LiveSelection["surface"];
   since: number;
   uploadId?: string;
@@ -58,13 +59,15 @@ type Peer = {
 };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
- * silent preview; input: an audio input's sound, for its level meter; relay: a TURN relay is offered to its connections.
+ * silent preview; input: an audio input's sound, for its level meter (meterId: a native input's device, to read its
+ * level from); relay: a TURN relay is offered to its connections.
  */
 export type LiveSharing = {
   captureFormat?: AudioCaptureFormat;
   source: LiveSource;
   stream: MediaStream;
   input?: MediaStream;
+  meterId?: string;
   quality: LiveVideoQuality;
   frameRate: LiveVideoFrameRate;
   muted: boolean;
@@ -670,13 +673,25 @@ export function createLiveSession(options: {
           if (!native.length) throw error;
         }
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
+        // A device the desktop app reads natively is listed once, as its native input.
         return [
           ...native.map((input) => ({
             deviceId: `native:${input.uid}`,
-            label: `${input.name} · Native`,
+            label: input.name,
             nativeChannels: input.channels,
+            meterId: inputs.find(
+              (item) =>
+                item.kind === "audioinput" &&
+                item.deviceId !== "default" &&
+                item.label.includes(input.name),
+            )?.deviceId,
           })),
-          ...inputs.filter((input) => input.kind === "audioinput" && input.deviceId),
+          ...inputs.filter(
+            (input) =>
+              input.kind === "audioinput" &&
+              input.deviceId &&
+              !native.some((item) => input.label.includes(item.name)),
+          ),
         ];
       } finally {
         if (probe) stopTracks(probe);
@@ -845,6 +860,7 @@ export function createLiveSession(options: {
           ...(selection.kind === "microphone" && audioTracks.length
             ? { input: new MediaStream(audioTracks) }
             : {}),
+          ...(nativeAudioId && selection.meterId ? { meterId: selection.meterId } : {}),
           surface: selection.surface,
           since: Date.now(),
         };
@@ -904,6 +920,7 @@ export function createLiveSession(options: {
         frameRate: current.frameRate,
         stream: current.preview,
         input: current.input,
+        meterId: current.meterId,
         surface: current.surface,
         since: current.since,
         relay: options.iceServers.some((server) =>

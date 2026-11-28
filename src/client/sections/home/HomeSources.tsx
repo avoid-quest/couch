@@ -220,7 +220,7 @@ function SharedSourceRow({
   ) : source.intent === "live" ? (
     <LiveClock prefix={listening ? "Listening, live" : "Live"} startedAt={source.startedAt} />
   ) : named.length ? (
-    `Playing on ${list.format(named.slice(0, 2))}${named.length > 2 ? ` and ${named.length - 2} more` : ""}`
+    `Playing on ${named.length > 2 ? `${named.slice(0, 2).join(", ")} and ${named.length - 2} more` : list.format(named)}`
   ) : (
     "Not playing anywhere yet"
   );

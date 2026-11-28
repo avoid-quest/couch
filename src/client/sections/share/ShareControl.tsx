@@ -38,7 +38,8 @@ export function ShareControl() {
 
 /**
  * The share as a fact in the header, the full player's band and the full share: what it is, how many get it, and Stop
- * sharing, one press from anywhere. Nobody receiving it is said here, not in a message: "Still sharing, on no screens".
+ * sharing, the one Stop a share has, one press from anywhere. Nobody receiving it is said here, not in a message:
+ * "Still sharing, on no screens".
  */
 export function SharingPill({ className }: { className?: string }) {
   const { state, localLiveSourceId } = useSessionGate();
@@ -55,6 +56,12 @@ export function SharingPill({ className }: { className?: string }) {
     : live
       ? "Live"
       : "Sharing";
+  // A phone's header has room for a word: who receives it, or that nobody does.
+  const short = none
+    ? live
+      ? "No listeners"
+      : `No ${source.video ? "screens" : "speakers"}`
+    : label;
   const Icon = live ? Radio : source.video ? ScreenShare : Volume2;
   const Count = live || !source.video ? Headphones : Users;
   const counted = `${viewers.length} ${live ? "listening" : source.video ? "watching" : "listening"}`;
@@ -79,8 +86,9 @@ export function SharingPill({ className }: { className?: string }) {
         className="flex h-9 min-w-0 items-center gap-2 rounded-full pr-2.5 pl-3 outline-none hover:bg-current/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-current"
       >
         <Icon aria-hidden="true" className="size-4 shrink-0" />
-        <span role="status" className="min-w-0 truncate">
-          {label}
+        <span role="status" aria-label={label} className="min-w-0 truncate">
+          <span className="max-sm:hidden">{label}</span>
+          <span className="sm:hidden">{short}</span>
         </span>
         {!none && (
           <span className="flex shrink-0 items-center gap-1 border-l border-current/25 pl-2 tabular-nums">
@@ -102,13 +110,13 @@ export function SharingPill({ className }: { className?: string }) {
         onClick={() => void stop.run()}
       >
         <Square aria-hidden="true" className="fill-current" />
-        <span className="max-sm:sr-only">{stop.pending ? "Stopping…" : "Stop"}</span>
+        {stop.pending ? "Stopping…" : "Stop"}
       </Button>
     </div>
   );
 }
 
-export function useStop() {
+function useStop() {
   const { endLive, setError } = useSessionGate();
   const [pending, setPending] = useState(false);
   const run = async () => {
