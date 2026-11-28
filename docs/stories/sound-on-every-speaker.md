@@ -4,8 +4,8 @@ Status: preview
 
 Matteo plugs the turntable into his laptop's sound card. In **Share screen or
 sound** he chooses **Audio input**, picks the card, sees its level move and taps
-**Start sharing**, sends it to the living room speakers from **Choose where it
-plays** and adds the kitchen's in **Where it plays**. The record plays all
+**Start sharing**, and in his player's **Where it plays**, open while nobody
+listens, turns on the living room speakers' **Sound**, then the kitchen's. The record plays all
 through the house, close to live and in step, until he taps **Stop** on the
 **Sharing** pill.
 

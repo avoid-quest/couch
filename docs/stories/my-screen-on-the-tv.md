@@ -4,10 +4,10 @@ Status: preview
 
 Samir wants friends to see the game he's playing. On his laptop he chooses
 **Share screen or sound**, picks the game's **Window** with **Include system
-audio** and taps **Start sharing**; his player shows what goes out, and from
-**Choose where it plays** he sends it to the TV. Lucia plays it on her laptop
-too from **Shared sources**, and Samir's player lists them both under
-**Watching**. When they're done, Samir taps **Stop** on the **Sharing** pill and
+audio** and taps **Start sharing**; his player shows what goes out, and in its
+**Where it plays** he turns on the TV's **Picture**. Lucia plays it on her
+laptop too from **Shared sources**, and Samir's **Where it plays** lists them
+both. When they're done, Samir taps **Stop** on the **Sharing** pill and
 it ends for everyone.
 
 ## Good to know

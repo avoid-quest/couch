@@ -7,8 +7,8 @@ chooses the desk's **Audio input**, sees its level move, gives it a **Title**
 and taps **Start sharing**. People in the crowd tap **Join** in **Shared
 sources** and hear the mix in their headphones, close to live, each at **Your
 volume**; a phone that needs it asks to **Tap to hear**. Rita's player is the
-console: she sees the **Listeners**, changes **Now playing** with **Edit
-details** between sets, and taps **Stop** on the **Live** pill at the end.
+console: she sees **Who listens**, changes **Now playing** with **Edit
+details…** in its **…** between sets, and taps **Stop** on the **Live** pill at the end.
 
 ## Good to know
 

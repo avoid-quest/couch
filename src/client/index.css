@@ -872,8 +872,8 @@ html:has(body.tv-presentation),
     0 1.75rem 4rem -1.75rem rgb(0 0 0 / 90%),
     0 0 9rem -1.75rem color-mix(in oklab, var(--lamp) calc(var(--light) * 70%), transparent);
 }
-/* Now playing (NowPlaying.tsx): the side player, its capsule and the phone's dock are one lit panel standing in the
-   room (.lit-panel). --fill is the quiet ground of its boxes and pills. */
+/* Now playing (NowPlaying.tsx): the side player's column stands on the room; its desk, the capsule and the phone's dock
+   are lit panels (.lit-panel). --fill is the quiet ground of its boxes and pills. */
 :root {
   --side-player-width: 23rem;
 }
@@ -1434,7 +1434,7 @@ html[data-cursor-hidden] * {
 /* The room (RoomLight.tsx; docs/design.md, Room): the dark every screen stands in, lit by what plays. Its lamp (the
    picture's first colour) pools where the player stands and its spill (the second) rises from the bottom left corner.
    --light says how lit it is: 1 playing, .3 paused, .5 for a page's lead picture while nothing plays, 0 dark. In the
-   full player and behind a lit panel the picture itself, blurred (.room-picture), lies on the wall too. The colours and
+   full player the picture itself, blurred (.room-picture), lies on the wall too. The colours and
    the level cross-fade over 600 ms (registered custom properties); a fine grain keeps the gradients from banding. The
    header and the phone's tabs paint the same room fixed to the window (.room-ground), so it runs on under them unbroken. */
 @property --light {
@@ -1544,18 +1544,6 @@ html[data-cursor-hidden] * {
   height: 130%;
   filter: blur(70px) saturate(1.7) brightness(0.45);
   opacity: calc(var(--light) * 0.6);
-}
-/* A lit panel that shows the picture (the side player) throws it on the wall behind it. */
-.lit-panel:has(> .room-picture) {
-  isolation: isolate;
-  overflow: hidden;
-}
-.lit-panel > .room-picture {
-  display: block;
-  left: -7%;
-  top: 2%;
-  width: 114%;
-  height: 118%;
 }
 /* Surfaces (docs/design.md): what opens over the page is a warm dark, a little see-through, blurring the light behind
    it, with a hairline of light at its edge and a deep shadow under it. */

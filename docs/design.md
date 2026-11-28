@@ -49,22 +49,27 @@ branch. Phones keep a bottom tab bar for thumb reach.
   wall; the full video player stays black. Artwork colour is the only colour
   besides danger's red. Artwork Core can't read (an SVG logo) gives no light.
 - **Now playing** (`NowPlaying.tsx`, `.now-playing`): while something plays it
-  stands at one side of every screen on desktops and the TV, a panel the
+  stands at one side of every screen on desktops and the TV, a column the
   window's height that the page steps beside: the right unless This device →
-  **Player side** says the left (`player-side.ts`). The page's inset at each
+  **Player side** says the left (`player-side.ts`). The column has no ground:
+  its tools, the picture (whole, or beside its title when the devices need the
+  room), the title and Up next stand on the room, and at its foot the **desk**
+  (`Desk.tsx`, `.desk`) holds where it plays, Volume on its own row, the
+  timeline and the transport. The page's inset at each
   edge is `--content-inset-left` and `--content-inset-right` (0 without a side
   player), which messages keep clear of; its panels open toward the page, and
   the room's lamp stands by it. Its picture and title open the full player
   ("Open player" on hover and focus); **Minimise player** (a chevron) folds it
   to a capsule in that side's bottom corner, for this window only, which shows
   it again when pressed. A phone keeps it as a dock above its tabs, which opens
-  the full player. Play/Pause, Next and a labelled Stop start from its
-  bottom-left corner at every size, the full player's too. It is a lit panel
-  (below), the side player with its picture on the wall behind it.
-- **Surfaces**: Now playing is a **lit panel** (`.lit-panel`): a warm
-  dark that takes the lamps' colours, with a hairline edge, a deep shadow and a
-  little of the light around it; a panel that shows the picture (the side
-  player) puts a blurred copy of it behind (`.room-picture`). What opens over
+  the full player, and its Where it plays raises the whole desk as a Sheet.
+  Play/Pause, Next and Stop are icons of one size from its bottom-left corner at
+  every size, the full player's too. Where it plays never floats: its list opens
+  and folds in place in the desk; Play on is a short list of places from its
+  control, and Choose where it plays takes the player's column.
+- **Surfaces**: the desk, the capsule and the dock are a **lit panel**
+  (`.lit-panel`): a warm dark that takes the lamps' colours, with a hairline
+  edge, a deep shadow and a little of the light around it. What opens over
   the page (popovers, menus, dialogs, sheets) is a warm dark, a little
   see-through, blurring the light behind it, with the same edge and shadow.
   A toast is ink, the one light surface, with a dark verb.
