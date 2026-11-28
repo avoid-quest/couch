@@ -335,9 +335,10 @@ export function SearchPanel(props: Props) {
         <>
           <SearchRoom thumbnail={litHit?.thumbnail} />
           <SearchTitle title={query} />
-          {/* The row holds its height while sources answer, so nothing below moves as chips arrive. */}
+          {/* The row holds its height while sources answer, so nothing below moves as chips arrive. On a phone or touch
+              screen it stays under the header while the shelves scroll, as the palette's does. */}
           {(found.length > 0 || asking.length > 0 || hasScope(current)) && (
-            <div className="min-h-control touch:min-h-11">
+            <div className="min-h-control touch:sticky touch:top-(--top-bar) touch:z-20 touch:-mx-(--gutter) touch:-my-2 touch:min-h-15 touch:bg-background touch:px-(--gutter) touch:py-2">
               {(found.length > 0 || hasScope(current)) && (
                 <ScopeChips query={resultsKey} chips={chips} />
               )}
