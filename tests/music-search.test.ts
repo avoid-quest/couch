@@ -381,8 +381,14 @@ test("A Spotify artist's top tracks play in embed order from either share link",
     return spotifyPage(spotifyArtist);
   }) as typeof fetch);
   for (const prefix of ["", "/intl-it"]) {
-    const page = await catalog.browse({ url: `https://open.spotify.com${prefix}${path}` });
-    expect(page.item).toMatchObject({ kind: "collection", title: "Devi Tensione", url: canonical });
+    const page = await catalog.browse({
+      url: `https://open.spotify.com${prefix}${path}`,
+    });
+    expect(page.item).toMatchObject({
+      kind: "collection",
+      title: "Devi Tensione",
+      url: canonical,
+    });
     expect(page.items).toHaveLength(10);
     expect(page.items.map((track) => track.url)).toEqual(
       spotifyArtist.trackList.map(({ uri }) =>
@@ -397,36 +403,51 @@ test("A Spotify artist's top tracks play in embed order from either share link",
   }
 });
 
-test("A Spotify track plays the first YouTube hit within 10 seconds of its length", async () => {
+test("A Spotify track plays the YouTube upload naming its title and artist, closest within 10 seconds", async () => {
   const queries: string[] = [];
-  const hit = (id: string, duration: number) => ({
-    id,
-    provider: "youtube" as const,
-    kind: "media" as const,
-    title: id,
-    url: `https://www.youtube.com/watch?v=${id}`,
-    duration,
-  });
-  const catalog = (durations: number[]) =>
+  type Hit = { title: string; channel: string; duration: number };
+  const catalog = (hits: Hit[]) =>
     createSpotifyCatalog(
       (async () => spotifyPage(trackEntity)) as typeof fetch,
       async ({ query }) => {
         queries.push(query!);
         return {
-          items: durations.map((duration, index) => hit(`video${index}abcd`, duration)),
+          items: hits.map(({ title, channel, duration }, index) => ({
+            id: `video${index}`,
+            provider: "youtube" as const,
+            kind: "media" as const,
+            title,
+            subtitle: channel,
+            url: `https://www.youtube.com/watch?v=video${index}abcd`,
+            duration,
+          })),
         };
       },
     );
-  const { url, item } = await catalog([200, 96, 90]).match(
-    "https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2",
-  );
+  const cover = {
+    title: "Global Warming (cover)",
+    channel: "Garage Singer",
+    duration: 85.4,
+  };
+  const { url, item } = await catalog([
+    cover,
+    { title: "Global Warming", channel: "Pitbull - Topic", duration: 200 },
+    { title: "Global Warming", channel: "Pitbull - Topic", duration: 94 },
+    {
+      title: "Pitbull - Global Warming ft. Sensato (Official Audio)",
+      channel: "Mr305",
+      duration: 88,
+    },
+    { title: "Pitbull - Global Wars", channel: "Pitbull", duration: 85.4 },
+  ]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2");
   expect(queries).toEqual(["Pitbull, Sensato Global Warming (feat. Sensato)"]);
-  expect(url).toBe("https://www.youtube.com/watch?v=video2abcd");
+  expect(url).toBe("https://www.youtube.com/watch?v=video3abcd");
   expect(item.url).toBe("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2");
-  await expect(
-    catalog([200]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
-  ).rejects.toThrow("no YouTube upload");
-  await expect(catalog([90]).match(spotifyAlbum)).rejects.toMatchObject({
+  for (const hits of [[cover], [{ ...cover, channel: "Pitbull", duration: 200 }]])
+    await expect(
+      catalog(hits).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
+    ).rejects.toThrow("no YouTube upload");
+  await expect(catalog([cover]).match(spotifyAlbum)).rejects.toMatchObject({
     status: 400,
   });
 });

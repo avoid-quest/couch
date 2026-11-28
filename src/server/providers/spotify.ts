@@ -4,6 +4,7 @@ import {
   type ProviderItem,
   type ProviderPage,
 } from "../../shared/providers";
+import { searchWords } from "../../shared/search-text";
 import { publicFetch } from "../public-network";
 import {
   label,
@@ -96,16 +97,25 @@ function largestImage(sources: unknown[]): string | undefined {
     );
 }
 
+// A track page's artists one by one.
+const artistList = (value: Metadata): string[] =>
+  (Array.isArray(value.artists) ? value.artists : [])
+    .filter(object)
+    .map((artist) => label(artist.name))
+    .filter((name): name is string => !!name);
+
 // A list's tracks name their artists in `subtitle`; a track's own page lists them in `artists`.
-const artistsOf = (value: Metadata) =>
-  label(value.subtitle) ??
-  label(
-    (Array.isArray(value.artists) ? value.artists : [])
-      .filter(object)
-      .map((artist) => label(artist.name))
-      .filter(Boolean)
-      .join(", "),
-  );
+const artistsOf = (value: Metadata) => label(value.subtitle) ?? label(artistList(value).join(", "));
+
+// The words an upload's title must carry: Spotify's title without its "(feat. …)", "[…]" or " - Remastered …" parts.
+function titleWords(title: string): string[] {
+  const core = title
+    .split(" - ")[0]!
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .replace(/\s(?:feat|ft)\.?\s.*$/i, "");
+  const words = searchWords(core);
+  return words.length ? words : searchWords(title);
+}
 
 function track(
   value: unknown,
@@ -244,7 +254,9 @@ export function createSpotifyCatalog(
           body: JSON.stringify({
             variables: { searchTerm: query, ...searchVariables },
             operationName: "searchDesktop",
-            extensions: { persistedQuery: { version: 1, sha256Hash: searchHash } },
+            extensions: {
+              persistedQuery: { version: 1, sha256Hash: searchHash },
+            },
           }),
           ...(signal ? { signal } : {}),
         },
@@ -306,7 +318,7 @@ export function createSpotifyCatalog(
     });
   }
 
-  /** The YouTube upload a Spotify track plays from: the first search hit within ±10 s of its length. */
+  /** The YouTube upload a Spotify track plays from: a search hit naming its title and an artist, closest in length within ±10 s. */
   async function match(
     url: string,
     signal?: AbortSignal,
@@ -316,14 +328,29 @@ export function createSpotifyCatalog(
     const entity = await embed(link.kind, link.id, signal, request);
     const item = track(entity, undefined, artwork(entity));
     if (!item?.duration) throw changed();
-    const query = `${artistsOf(entity) ?? ""} ${item.title}`.trim().slice(0, 200);
-    const hit = (await searchYouTube({ query }, signal)).items.find(
-      (hit) =>
-        hit.kind === "media" &&
-        !hit.live &&
-        hit.duration !== undefined &&
-        Math.abs(hit.duration - item.duration!) <= matchSeconds,
-    );
+    const artists = artistsOf(entity);
+    const query = `${artists ?? ""} ${item.title}`.trim().slice(0, 200);
+    const title = titleWords(item.title);
+    // A name can hold a comma, so the joined byline is split only when the page lists no artists.
+    const credits = (
+      artistList(entity).length ? artistList(entity) : (artists?.split(", ") ?? [])
+    ).map(searchWords);
+    const off = (hit: ProviderItem) => Math.abs(hit.duration! - item.duration!);
+    const hit = (await searchYouTube({ query }, signal)).items
+      .filter((hit) => {
+        if (hit.kind !== "media" || hit.live || hit.duration === undefined) return false;
+        if (off(hit) > matchSeconds) return false;
+        const words = new Set(searchWords(`${hit.title} ${hit.subtitle ?? ""}`));
+        const titled = new Set(searchWords(hit.title));
+        return (
+          title.every((word) => titled.has(word)) &&
+          (!credits.length || credits.some((name) => name.every((word) => words.has(word))))
+        );
+      })
+      .reduce<ProviderItem | undefined>(
+        (best, hit) => (best && off(best) <= off(hit) ? best : hit),
+        undefined,
+      );
     if (!hit) throw new ProviderError("Couch found no YouTube upload of this Spotify track.", 404);
     return { url: hit.url, item };
   }
