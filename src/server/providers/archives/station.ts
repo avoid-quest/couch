@@ -32,7 +32,7 @@ export type Station = {
 
 export const maxList = 500;
 /** A station's slug, which WordPress percent-encodes when it isn't ASCII. */
-export const slugPattern = /^[A-Za-z0-9][\w%.~-]{0,299}$/;
+export const slugPattern = /^(?=.{1,300}$)(?:[A-Za-z0-9]|%[\dA-Fa-f]{2})[\w%.~-]*$/;
 export const searchSize = 12;
 export { object };
 /** http.ts's label, of a station's text with its HTML entities and tags read. */

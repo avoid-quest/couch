@@ -9,6 +9,7 @@ import {
 } from "../src/server/providers/archives";
 import { browseMixcloud } from "../src/server/providers/mixcloud";
 import { catalogueTransport } from "../src/server/providers/http";
+import { slugPattern } from "../src/server/providers/archives/station";
 import { createContinuationResolver } from "../src/server/continuation";
 import { providerCollectionCursor } from "../src/client/collection-pagination";
 import bailefunk from "./fixtures/archives/lyl-baile-funk.json";
@@ -86,6 +87,13 @@ test("a station's link says what it is, from the link alone", () => {
   expect(archiveLink("https://radioblackout.org/podcast/flinta-☽")?.url).toBe(
     "https://radioblackout.org/podcast/flinta-%e2%98%bd/",
   );
+  expect(archiveLink("https://radioblackout.org/podcast/☽-flinta")?.url).toBe(
+    "https://radioblackout.org/podcast/%e2%98%bd-flinta/",
+  );
+  expect(slugPattern.test("%e2%98%bd-flinta")).toBe(true);
+  expect(slugPattern.test(`%e2${"a".repeat(297)}`)).toBe(true);
+  expect(slugPattern.test(`%e2${"a".repeat(298)}`)).toBe(false);
+  expect(archiveLink(`https://lyl.live/episode/${"a".repeat(301)}`)).toBeUndefined();
   expect(archiveLink("https://lyl.live/shows/residents")).toBeUndefined();
   expect(archiveLink("https://lyl.live/about")).toBeUndefined();
   expect(mixcloudLink("https://www.mixcloud.com/lylradio/dj-alé-dj-alé-22102026/")).toMatchObject({

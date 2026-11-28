@@ -34,7 +34,8 @@ export const archiveStationNames: Record<ArchiveStation, string> = {
   resonance: "Resonance Extra",
 };
 
-const segment = "([A-Za-z0-9][A-Za-z0-9_.~%-]{0,299})";
+// A slug of at most 300 characters, starting with a letter, a digit or an escape (WordPress encodes "☽" as "%e2%98%bd").
+const segment = "((?=[^/]{1,300}(?:/|$))(?:[A-Za-z0-9]|%[\\da-f]{2})[A-Za-z0-9_.~%-]*)";
 // Each station's public pages: origin, accepted hosts, and its episode and list paths. A trailing slash is kept
 // where the station's own links have one (WordPress), so a saved page is the station's canonical link.
 const stations: Record<
