@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import {
   busyWith,
   DeviceCell,
+  KeyFace,
   MixerColumns,
   MixerHeader,
   MixerKey,
@@ -14,8 +15,10 @@ import {
   WhyLine,
   type Channel,
 } from "@/components/MixerKeys";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ChoiceGroups, GroupsScope } from "@/sections/shell/MixerGroups";
+import { channelItem, Options } from "@/sections/shell/MixerRows";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
@@ -67,10 +70,10 @@ export function ChooseWherePlays({
     event.preventDefault();
     anchor.current.focus();
   };
-  // It opens on the first key a press can change, never on Close or on Play.
+  // It opens on the first key a press can change (a TV's first row), never on Close or on Play.
   const focusFirst = (event: Event) => {
     const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
-      "[data-mixer-key]:not([aria-disabled])",
+      tv ? "[data-device-row]" : "[data-mixer-key]:not([aria-disabled])",
     );
     if (!target) return;
     event.preventDefault();
@@ -81,6 +84,7 @@ export function ChooseWherePlays({
       title={title}
       thumbnail={thumbnail}
       audioOnly={audioOnly}
+      tv={tv}
       onPlay={(on) => {
         onOpenChange(false);
         onPlay(on);
@@ -132,9 +136,11 @@ function Choose({
   title,
   thumbnail,
   audioOnly,
+  tv,
   onPlay,
   onClose,
 }: {
+  tv: boolean;
   title: string;
   thumbnail?: string;
   audioOnly?: boolean;
@@ -191,6 +197,7 @@ function Choose({
         row={row}
         chosen={choice[row.device.id]}
         connected={connected}
+        tv={tv}
         dot={busy && row.status.includes("Playing") ? colours(busy.id) : undefined}
         why={
           reason && {
@@ -291,11 +298,15 @@ function Choose({
   );
 }
 
-/** A device's row: its name and status, and its Picture and Sound keys, white while chosen; a locked key says why. */
+/**
+ * A device's row: its name and status, and its Picture and Sound keys, white while chosen; a locked key says why. On a
+ * TV the row is one focus stop, as in the Mixer: OK opens its Picture and Sound, where a locked one says why.
+ */
 function ChoiceDevice({
   row,
   chosen,
   connected,
+  tv,
   dot,
   why,
   onTurn,
@@ -304,16 +315,27 @@ function ChoiceDevice({
   row: ChoiceRow;
   chosen?: { picture: boolean; sound: boolean };
   connected: boolean;
+  tv: boolean;
   dot?: string;
   why?: { text: string; offline: boolean } | "";
   onTurn: (channel: Channel) => void;
   onWhy: (channel: Channel) => void;
 }) {
+  const on = (channel: Channel) => !!chosen?.[channel] && row[channel].enabled;
+  const press = (channel: Channel) => (row[channel].enabled ? onTurn(channel) : onWhy(channel));
+  const cell = (
+    <DeviceCell
+      device={row.device}
+      status={row.status}
+      dot={dot}
+      active={!!chosen && (row.picture.enabled || row.sound.enabled)}
+    />
+  );
   const key = (channel: Channel) => (
     <MixerKey
       device={row.device}
       channel={channel}
-      on={!!chosen?.[channel] && row[channel].enabled}
+      on={on(channel)}
       control={row[channel]}
       draft
       disabled={!connected}
@@ -321,20 +343,52 @@ function ChoiceDevice({
       onWhy={() => onWhy(channel)}
     />
   );
+  const face = (channel: Channel) => (
+    <KeyFace channel={channel} on={on(channel)} control={row[channel]} draft />
+  );
   return (
     <li
       data-nav-row
       data-device={row.device.id}
-      className="grid min-h-13 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-x-2 py-0.5"
+      className={cn(
+        "grid",
+        !tv && "min-h-13 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-x-2 py-0.5",
+      )}
     >
-      <DeviceCell
-        device={row.device}
-        status={row.status}
-        dot={dot}
-        active={!!chosen && (row.picture.enabled || row.sound.enabled)}
-      />
-      {key("picture")}
-      {key("sound")}
+      {tv ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!connected}>
+            <button
+              type="button"
+              data-device-row
+              aria-label={row.device.name}
+              className="-mx-2.5 grid min-h-12 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-x-2 rounded-lg px-2.5 py-0.5 text-left outline-none disabled:opacity-50 [&:focus_[data-device-cell]_*]:text-inherit"
+            >
+              {cell}
+              {face("picture")}
+              {face("sound")}
+            </button>
+          </DropdownMenuTrigger>
+          <Options id={row.device.id}>
+            {(["picture", "sound"] as const).map((channel) =>
+              channelItem({
+                device: row.device,
+                channel,
+                on: on(channel),
+                control: row[channel],
+                connected,
+                onPick: () => press(channel),
+              }),
+            )}
+          </Options>
+        </DropdownMenu>
+      ) : (
+        <>
+          {cell}
+          {key("picture")}
+          {key("sound")}
+        </>
+      )}
       {why && <WhyLine text={why.text} offline={why.offline} />}
     </li>
   );

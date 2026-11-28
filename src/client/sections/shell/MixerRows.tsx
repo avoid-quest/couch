@@ -15,7 +15,7 @@ import { Level } from "@/components/Level";
 import { DeviceCell, KeyFace, MixerKey, WhyLine, type Channel } from "@/components/MixerKeys";
 import { RangeControl } from "@/components/RangeControl";
 import { rowLevel, soundActions, type Control, type Row } from "@/session/where-it-plays";
-import type { Action } from "../../../shared/protocol";
+import type { Action, DeviceSummary } from "../../../shared/protocol";
 
 // The Mixer's device rows (Outputs.tsx): a pointer's and a touch's row of keys and fader, and a TV's row that is one
 // focus stop, with what they share: Sync's line and a row's options.
@@ -230,9 +230,42 @@ export function tvRow({ row, connected, run, playing = false, dot, onWhy, why }:
 }
 
 /**
- * A TV row's Picture and Sound, which its OK opens, then Move here when permitted. A locked one stays choosable and
- * says why under the row, as a locked key does. Its sound is its Sound and fader's.
+ * A TV row's Picture or Sound in the menu its OK opens. A locked one stays choosable and says why under the row, as a
+ * locked key does (`onPick` decides which).
  */
+export function channelItem({
+  device,
+  channel,
+  on,
+  control,
+  connected,
+  onPick,
+}: {
+  device: DeviceSummary;
+  channel: Channel;
+  on: boolean;
+  control: Control;
+  connected: boolean;
+  onPick: () => void;
+}) {
+  const [On, Off] = channel === "picture" ? [Monitor, MonitorOff] : [Volume2, VolumeOff];
+  const Icon = on ? On : Off;
+  return (
+    <DropdownMenuCheckboxItem
+      key={channel}
+      aria-label={`${device.name} ${channel}`}
+      checked={on}
+      disabled={!connected}
+      onCheckedChange={onPick}
+    >
+      <Icon aria-hidden="true" />
+      {channel === "picture" ? "Picture" : "Sound"}
+      <Why reason={control.reason ?? (on ? "On" : "Off")} />
+    </DropdownMenuCheckboxItem>
+  );
+}
+
+/** A TV row's Picture and Sound, then Move here when permitted. Its sound is its Sound and fader's. */
 function channelItems({
   row,
   connected,
@@ -240,32 +273,20 @@ function channelItems({
   onWhy,
 }: Pick<RowProps, "row" | "connected" | "run" | "onWhy">) {
   const { device } = row;
-  const item = (channel: Channel, name: string, on: ReactNode, off: ReactNode) => {
-    const control = row[channel];
-    return (
-      <DropdownMenuCheckboxItem
-        aria-label={`${device.name} ${channel}`}
-        checked={control.on}
-        disabled={!connected}
-        onCheckedChange={() =>
-          control.enabled ? void send(run, row, control.action) : onWhy(row, channel)
-        }
-      >
-        {control.on ? on : off}
-        {name}
-        <Why reason={control.reason ?? (control.on ? "On" : "Off")} />
-      </DropdownMenuCheckboxItem>
-    );
-  };
+  const item = (channel: Channel) =>
+    channelItem({
+      device,
+      channel,
+      on: row[channel].on,
+      control: row[channel],
+      connected,
+      onPick: () =>
+        row[channel].enabled ? void send(run, row, row[channel].action) : onWhy(row, channel),
+    });
   return (
     <>
-      {item(
-        "picture",
-        "Picture",
-        <Monitor aria-hidden="true" />,
-        <MonitorOff aria-hidden="true" />,
-      )}
-      {item("sound", "Sound", <Volume2 aria-hidden="true" />, <VolumeOff aria-hidden="true" />)}
+      {item("picture")}
+      {item("sound")}
       {row.move && (
         <>
           <DropdownMenuSeparator />
@@ -295,7 +316,15 @@ export function SyncScope({ children }: { children: ReactNode }) {
 
 // A row's options (a TV row's Picture and Sound), then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its slider
 // rather than back to what opened the menu. The items stay children, so tests walk them without a DOM.
-function Options({ id, sync, children }: { id: string; sync?: string; children?: ReactNode }) {
+export function Options({
+  id,
+  sync,
+  children,
+}: {
+  id: string;
+  sync?: string;
+  children?: ReactNode;
+}) {
   const { reveal } = useContext(RevealedSync);
   const picked = useRef(false);
   return (

@@ -1,4 +1,11 @@
-import { useContext, useEffect, useReducer, type CSSProperties, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useReducer,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   Lock,
   Monitor,
@@ -238,17 +245,19 @@ export function MixerKey({
   );
 }
 
-/** The same key's face on a TV row, where the row is the one focus stop and OK opens its Picture and Sound. */
+/** The same key's face on a TV row, where the row is the one focus stop and OK opens its Picture and Sound (white while only chosen, as `draft`). */
 export const KeyFace = ({
   channel,
   on,
   control,
+  draft,
 }: {
   channel: Channel;
   on: boolean;
   control: Control;
+  draft?: boolean;
 }) => (
-  <span aria-hidden="true" className={keyLook({ on, locked: !control.enabled })}>
+  <span aria-hidden="true" className={keyLook({ on, locked: !control.enabled, draft })}>
     <KeyIcon channel={channel} on={on} control={control} />
   </span>
 );
@@ -278,16 +287,21 @@ export function whyLocked(device: DeviceSummary, channel: Channel, reason: Reaso
   }
 }
 
-/** The line under a row that says why its key changed nothing. */
-export const WhyLine = ({ text, offline }: { text: string; offline?: boolean }) => (
-  <p
-    role="status"
-    className="col-span-full flex items-center gap-2 pb-2 pl-7 text-meta text-muted-foreground [&_svg]:size-3.5"
-  >
-    {offline ? <WifiOff aria-hidden="true" /> : <Lock aria-hidden="true" />}
-    <span className="text-foreground/80">{text}</span>
-  </p>
-);
+/** The line under a row that says why its key changed nothing, scrolled into the panel's view as it appears. */
+export function WhyLine({ text, offline }: { text: string; offline?: boolean }) {
+  const line = useRef<HTMLParagraphElement>(null);
+  useEffect(() => line.current?.scrollIntoView({ block: "nearest" }), [text]);
+  return (
+    <p
+      ref={line}
+      role="status"
+      className="col-span-full flex items-center gap-2 pb-2 pl-7 text-meta text-muted-foreground [&_svg]:size-3.5"
+    >
+      {offline ? <WifiOff aria-hidden="true" /> : <Lock aria-hidden="true" />}
+      <span className="text-foreground/80">{text}</span>
+    </p>
+  );
+}
 
 /** The column heads over the rows: what the first column holds, then Picture, Sound and, in the Mixer, Volume. */
 export function MixerColumns({ first, volume = false }: { first?: string; volume?: boolean }) {
