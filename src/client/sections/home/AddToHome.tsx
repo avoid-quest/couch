@@ -7,8 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { House, HousePlus } from "lucide-react";
+import { ChevronRight, House, HousePlus, Search } from "lucide-react";
+import { forLaterQuery } from "@/api/for-later";
+import { historyQuery } from "@/api/progress";
 import { providerPageQuery } from "@/api/providers";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -66,6 +69,7 @@ export function FollowPanel({
   anchor,
   title,
   onClose,
+  onClosed,
   children,
 }: {
   open: boolean;
@@ -73,6 +77,8 @@ export function FollowPanel({
   anchor: HTMLElement | null;
   title: string;
   onClose: () => void;
+  /** Runs once it has closed and given the focus back, for a control that takes it elsewhere (Search). */
+  onClosed?: () => void;
   children: ReactNode;
 }) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
@@ -83,6 +89,7 @@ export function FollowPanel({
   const back = (event: Event) => {
     event.preventDefault();
     if (from.current?.isConnected) from.current.focus();
+    onClosed?.();
   };
   if ((desktop || isTvPresentation()) && from.current) {
     const box = from.current.getBoundingClientRect();
@@ -178,6 +185,156 @@ export function AddToHomePanel() {
         <AddToHomeForm key={open.target.url} target={open.target} done={() => setOpen(null)} />
       )}
     </FollowPanel>
+  );
+}
+
+/**
+ * Home's and Edit Home's Add a section: the series, programmes and channels of what you've played and saved, each
+ * once, latest first. Choosing one is Add to Home for it, in the same panel; Search finds anything else.
+ */
+export function AddSectionPanel({
+  anchor,
+  onClose,
+}: {
+  anchor: HTMLElement | null;
+  onClose: () => void;
+}) {
+  const { focusSearch } = useShell();
+  const [chosen, setChosen] = useState<AddTarget | null>(null);
+  const after = useRef<() => void>(undefined);
+  const close = () => {
+    setChosen(null);
+    onClose();
+  };
+  return (
+    <FollowPanel
+      open={!!anchor}
+      anchor={anchor}
+      title={chosen ? `Add ${chosen.title} to Home` : "Add a section"}
+      onClose={close}
+      onClosed={() => {
+        after.current?.();
+        after.current = undefined;
+      }}
+    >
+      {anchor &&
+        (chosen ? (
+          <AddToHomeForm key={chosen.url} target={chosen} done={close} />
+        ) : (
+          <SectionPicks
+            choose={(target) => {
+              setChosen(target);
+              // The pick leaves with the list: the focus goes on to Add to Home's first control.
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLElement>(
+                    "#add-to-home-name, [data-slot='popover-content'] button:not(:disabled)",
+                  )
+                  ?.focus(),
+              );
+            }}
+            search={() => {
+              after.current = focusSearch;
+              close();
+            }}
+            done={close}
+          />
+        ))}
+    </FollowPanel>
+  );
+}
+
+/** What a played or saved item belongs to that Home can follow: its series or programme, else its channel. */
+function itemTarget(item: Pick<QueueEntry, "collection" | "creator">): AddTarget | undefined {
+  const [outer] = collectionLinks(item.collection);
+  if (outer) return { provider: outer.provider, url: outer.url, title: outer.title };
+  const provider = item.creator && providerForUrl(item.creator.url);
+  if (provider) return { provider, url: item.creator!.url, title: item.creator!.title };
+}
+
+function SectionPicks({
+  choose,
+  search,
+  done,
+}: {
+  choose: (target: AddTarget) => void;
+  search: () => void;
+  done: () => void;
+}) {
+  const { credentials } = useShell();
+  const { connected } = useSessionGate();
+  const follows = useHomeFollows();
+  const history = useQuery({ ...historyQuery(credentials), enabled: connected });
+  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected });
+  // Each once, with the lists of it you've played from, so one already on Home says so.
+  const picks = new Map<string, { target: AddTarget; thumbnail?: string; lists: Set<string> }>();
+  for (const item of [...(history.data?.items ?? []), ...(later.data?.items ?? [])]) {
+    const target = itemTarget(item);
+    if (!target) continue;
+    const pick = picks.get(target.url) ?? { target, thumbnail: item.thumbnail, lists: new Set() };
+    picks.set(target.url, pick);
+    for (const link of [...collectionLinks(item.collection), item.creator])
+      if (link) pick.lists.add(link.url);
+  }
+  return (
+    <div className="grid gap-4">
+      <PopoverHeader>
+        <PopoverTitle className="font-heading text-base font-semibold">Add a section</PopoverTitle>
+        <PopoverDescription>From what you've played and saved</PopoverDescription>
+      </PopoverHeader>
+      {connected && (history.isPending || later.isPending) ? (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner /> Looking at what you've played…
+        </p>
+      ) : picks.size ? (
+        <ul className="-mx-2 grid">
+          {[...picks.values()].map(({ target, thumbnail, lists }) => (
+            <li key={target.url}>
+              <Button
+                variant="ghost"
+                className="h-auto w-full justify-start gap-3 rounded-lg p-2 text-left font-normal whitespace-normal"
+                onClick={() => choose(target)}
+              >
+                <span className="relative h-10 shrink-0 overflow-hidden rounded-md bg-muted">
+                  <MediaArtwork
+                    thumbnail={thumbnail}
+                    title={target.title}
+                    className="h-full w-auto"
+                  />
+                </span>
+                <span className="grid min-w-0 flex-1">
+                  <span className="truncate font-medium">{target.title}</span>
+                  <span className="truncate text-meta text-muted-foreground">
+                    On {providerNames[target.provider]}
+                  </span>
+                </span>
+                {follows.some((follow) => lists.has(follow.url)) ? (
+                  <span className="text-meta text-muted-foreground">On Home</span>
+                ) : (
+                  <ChevronRight aria-hidden="true" className="text-muted-foreground" />
+                )}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Nothing you've played or saved has a series, programme or channel to follow yet.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+        <p className="min-w-0 flex-1 basis-52 text-meta text-muted-foreground">
+          Anything else: find it with Search, then use Add to Home in its menu or on its page.
+        </p>
+        <Button variant="ghost" onClick={search}>
+          <Search aria-hidden="true" />
+          Search
+        </Button>
+        <Button variant="ghost" onClick={done}>
+          Close
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -11,6 +11,7 @@ import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
 import { playbackControls } from "@/session/playback-controls";
+import { isTvPresentation } from "@/session/presentation";
 import type { PlayOn } from "../../shared/protocol";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
@@ -38,6 +39,31 @@ export function usePlayOn(sharingDeviceId?: string, liveAudio = false) {
       if (result !== false) announcePlay(state, on?.deviceId);
       return result;
     },
+  };
+}
+
+/**
+ * Where a plain Play or Resume goes, as the destination beside it says it: the controlled Playback's devices, its
+ * picture's first ("on Living room TV +1"), else the controlled device; and what plays there now, which makes way.
+ */
+export function usePlayDestination() {
+  const state = useOptionalSessionGate()?.state;
+  const here = deviceId();
+  const outputs = state?.outputs ?? [];
+  const first = outputs.find((output) => output.picture) ?? outputs[0];
+  const id = first?.deviceId ?? state?.controlling ?? here;
+  const name =
+    id === here
+      ? isTvPresentation()
+        ? "this TV"
+        : "this device"
+      : (state?.devices?.find((device) => device.id === id)?.name ?? "another device");
+  const playback = state?.playbacks?.find((item) => item.id === state.playback);
+  const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
+  const busy = !!playback && ["loading", "playing", "paused"].includes(playback.status);
+  return {
+    label: `on ${name}${outputs.length > 1 ? ` +${outputs.length - 1}` : ""}`,
+    playing: busy ? current : undefined,
   };
 }
 

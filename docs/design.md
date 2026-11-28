@@ -63,7 +63,7 @@ branch. Phones keep a bottom tab bar for thumb reach.
   the page (popovers, menus, dialogs, sheets) is a warm dark, a little
   see-through, blurring the light behind it, with the same edge and shadow.
   A toast is ink, the one light surface, with a dark verb.
-- **Stage** (`components/Stage.tsx`): opens Home and every Details page
+- **Stage** (`components/Stage.tsx`): opens every Details page
   (`DetailHeader`). The picture stands whole as an **object** with a shadow, or
   as a **mark** (a logo on nothing) without one.
 

@@ -92,3 +92,35 @@ export function renameHomeFollow(id: FollowId, name: string) {
     ),
   );
 }
+
+// What each followed section showed at its last visit, by item address, so the next can mark what is New.
+const seenKey = "couch.home-follows-seen";
+const readAllSeen = (): Record<string, unknown> => {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(seenKey) ?? "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved)
+      ? (saved as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+/** The items a followed section showed at its last visit; none before its first. */
+export function readSeen(id: FollowId): string[] | undefined {
+  const seen = readAllSeen()[id];
+  return Array.isArray(seen) ? seen.filter((url) => typeof url === "string") : undefined;
+}
+
+export function writeSeen(id: FollowId, urls: string[]) {
+  const follows = new Set(readHomeFollows().map((follow) => follow.id as string));
+  // Sections taken off Home take their record with them.
+  const kept = Object.fromEntries(
+    Object.entries(readAllSeen()).filter(([other]) => follows.has(other) && other !== id),
+  );
+  try {
+    localStorage.setItem(seenKey, JSON.stringify({ ...kept, [id]: urls }));
+  } catch {
+    // Storage refused: nothing is New next time, as on a first visit.
+  }
+}

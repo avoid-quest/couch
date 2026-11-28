@@ -16,7 +16,7 @@ const wideRatio = 1.3;
 const vector = (src: string | undefined) => /\.svg(\?|#|$)/i.test(src ?? "");
 
 /**
- * The top of Home and of every Details page (docs/design.md, Stage). Its picture lights the room while nothing plays
+ * The top of every Details page (docs/design.md, Stage). Its picture lights the room while nothing plays
  * (RoomLight.tsx). The picture stands whole at the right at its own
  * shape: an `object` (a frame, a cover, a poster, an avatar, a logo on its own ground) crisp with its shadow, a `mark`
  * (a logo on nothing: a vector, see-through edges) without the shadow, which would outline its box. A wide frame is
@@ -30,7 +30,6 @@ export function Stage({
   shape,
   fit,
   title,
-  size = "details",
   label,
   className,
   onPicture,
@@ -43,7 +42,6 @@ export function Stage({
   fit?: "contain";
   /** For the missing-artwork cover. */
   title: string;
-  size?: "home" | "details";
   label?: string;
   className?: string;
   onPicture?: () => void;
@@ -55,12 +53,10 @@ export function Stage({
   useRoomLead(thumbnail);
   const form = shape !== "round" && (vector(thumbnail) || art?.clear) ? "mark" : "object";
   const wide = fit !== "contain" && shape !== "round" && ratio >= wideRatio;
-  // A Details page's stage is its header; Home's is a section of the board.
-  const Tag = size === "details" ? "header" : "section";
   return (
-    <Tag
+    <header
       {...props}
-      data-stage={size}
+      data-stage="details"
       data-form={thumbnail ? form : undefined}
       aria-label={label}
       className={cn("stage", className)}
@@ -71,7 +67,7 @@ export function Stage({
           ref={picture}
           aria-hidden="true"
           data-stage-picture
-          data-detail-art={size === "details" || undefined}
+          data-detail-art
           data-shape={shape}
           data-wide={wide || undefined}
           onClick={onPicture}
@@ -87,7 +83,7 @@ export function Stage({
         </div>
       )}
       <div className="stage-copy">{children}</div>
-    </Tag>
+    </header>
   );
 }
 

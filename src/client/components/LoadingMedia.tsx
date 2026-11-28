@@ -92,21 +92,14 @@ export function MediaTilesSkeleton({
   );
 }
 
-/** Home's or a Details page's Stage while it loads: the dark room with the copy's bars at the bottom left, no picture yet. */
-export function DetailSkeleton({
-  home = false,
-  trail,
-}: {
-  shape?: ArtShape;
-  home?: boolean;
-  trail?: ReactNode;
-}) {
+/** A Details page's Stage while it loads: the dark room with the copy's bars at the bottom left, no picture yet. */
+export function DetailSkeleton({ trail }: { shape?: ArtShape; trail?: ReactNode }) {
   return (
     <div
       role="status"
-      aria-label={home ? "Loading your Home…" : "Loading details…"}
+      aria-label="Loading details…"
       data-loading="details"
-      data-stage={home ? "home" : "details"}
+      data-stage="details"
       className="stage"
     >
       <div className="stage-copy w-full">

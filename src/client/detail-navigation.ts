@@ -236,7 +236,10 @@ export function DetailFocusRestoration() {
       window.removeEventListener("focusin", chosen, true);
     };
     const timer = home ? undefined : setTimeout(stop, 15_000);
-    const unsubscribe = router.subscribe("onBeforeNavigate", stop);
+    // Only a new history entry ends it: reconnecting re-runs the route's loaders (router.invalidate) in place.
+    const unsubscribe = router.subscribe("onBeforeNavigate", ({ toLocation }) => {
+      if (toLocation.state.__TSR_key !== location.state.__TSR_key) stop();
+    });
     observer.observe(document.body, {
       childList: true,
       subtree: true,
