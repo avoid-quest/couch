@@ -58,7 +58,17 @@ export type ProviderPage = {
   description?: string;
   subtitle?: string;
   parent?: CollectionLink;
+  /** A source's own front page or a section of it, as a room (RaiPlay's): see ProviderRoom. */
+  room?: ProviderRoom;
+  /** A list a source files by letter (RaiPlay's A to Z), whole: each letter in order, with how many of `items` it holds. */
+  letters?: { letter: string; count: number }[];
 };
+/**
+ * What a source shows on its own front page: its navigation (`doors`, each a page to open), the item it leads with, and
+ * its lists. The lead and each list are the first page their own address (`item.url`) answers, so they open without
+ * another request.
+ */
+type ProviderRoom = { doors: ProviderItem[]; lead?: ProviderPage; shelves: ProviderPage[] };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
 /** A section of a page (RaiPlay's "In Diretta" on its front page): that page's row, not a programme to save. */

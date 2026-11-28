@@ -36,7 +36,10 @@ branch. Phones keep a bottom tab bar for thumb reach.
   playing, the room is painted with two colours read from the artwork (via
   `/api/artwork`), set dark enough that ink keeps 7:1, with a static grain.
   Search's results and a pasted list's page stand in the room too, lit by the
-  top or focused item, neutral without artwork. Artwork colour is the only
+  top or focused item, neutral without artwork. So does a source's own page
+  (`sections/find/Room.tsx`, `SourceRooms.tsx`): its name set large, its own
+  doors (the Browse line's), its lead, then its lists as Shelves, while the
+  header's field wears the source as a token. Artwork colour is the only
   colour besides danger's red. Video keeps black bars and no artwork light.
 - **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
   page, its backdrop blurred and tinted with the artwork's tone. Besides the

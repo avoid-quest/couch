@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, House } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -205,6 +205,9 @@ export function ContentBreadcrumb({
                     onClick={(event) => open(event, crumb.to)}
                     className={cn("block min-w-0 truncate rounded-sm", cap, leading)}
                   >
+                    {index === 0 && crumb.label === "Home" && (
+                      <House aria-hidden="true" className="mr-1.5 inline size-4 align-[-0.15em]" />
+                    )}
                     {crumb.label}
                   </Link>
                 </BreadcrumbLink>

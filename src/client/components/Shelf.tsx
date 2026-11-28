@@ -12,6 +12,7 @@ export function Shelf({
   title,
   label = title,
   href,
+  note,
   loading = false,
   options,
   children,
@@ -19,6 +20,8 @@ export function Shelf({
   title: string;
   label?: string;
   href?: string;
+  /** A muted word after the heading: where the list comes from, or its order ("On now first"). */
+  note?: string;
   loading?: boolean;
   /** The section's own "…", beside its heading. */
   options?: ReactNode;
@@ -58,7 +61,7 @@ export function Shelf({
     <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 gap-2">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-1">
-          <ShelfHeading title={title} href={href} loading={loading} />
+          <ShelfHeading title={title} href={href} time={note} loading={loading} />
           {options}
         </div>
         {(edges.previous || edges.next) && (

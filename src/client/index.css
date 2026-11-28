@@ -1563,15 +1563,17 @@ html[data-cursor-hidden] * {
   --room-x: 18%;
   --room-y: 30%;
 }
-/* The query or the list's title, a step under a Details page's. */
-.search-title {
+/* The query or the list's title, a step under a Details page's; a source's room names itself the same. */
+.search-title,
+.room-title {
   --title-short: 4rem;
   --title-medium: 3.25rem;
   --title-long: 2.5rem;
   --title-xlong: 2rem;
 }
 @media (max-width: 47.99rem) {
-  .search-title {
+  .search-title,
+  .room-title {
     --title-short: 2.75rem;
     --title-medium: 2.25rem;
     --title-long: 1.875rem;

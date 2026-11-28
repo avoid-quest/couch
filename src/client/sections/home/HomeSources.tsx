@@ -4,12 +4,6 @@ import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { MediaTile } from "@/components/MediaTile";
 import { majorityShape, providerItemShape } from "@/art-shape";
 import { metaLine } from "@/media-caption";
@@ -21,6 +15,7 @@ import { browserActions } from "@/original-page";
 import { cn } from "@/lib/utils";
 import { providerNames, type SearchHit } from "@/sections/find/SearchOnlineResults";
 import { useShell } from "@/sections/shell/shell-context";
+import type { SearchScope } from "@/search-palette";
 import { useSessionGate } from "@/session/session-context";
 import { TRY_AGAIN } from "@/copy";
 import type { GuideRow } from "../../../shared/iptv";
@@ -218,42 +213,42 @@ function useFailingSources() {
   return (provider: ProviderId) => failing.split(" ").includes(provider);
 }
 
-// Home's Browse line: what is behind each door, in the order Home's sources come in. A door with one place opens it; a
-// door with several opens a menu of them, hung from the door. A source without a home scopes the header's field, so
-// search stays the one way to look things up.
-type Door = { label: string; meta: string; to: string | readonly ProviderId[] };
+// Home's Browse line: what is behind each door, in the order Home's sources come in. A door opens its place: a station
+// list, a source's room, or a kind's room with a shelf per source. A door whose sources publish no lists (Music, Radio
+// archives) narrows the header's field to them instead, so search stays the one way to look things up.
+type Door = { label: string; meta: string } & (
+  | { to: string }
+  | { provider: ProviderId }
+  | { scope: SearchScope }
+);
 const doors: Door[] = [
   { label: "Radio", meta: "Stations on air", to: "/radio" },
   { label: "Live TV", meta: "Channels from your playlists", to: "/live-tv" },
-  { label: "RaiPlay", meta: "Rai's programmes, films and channels", to: ["raiplay"] },
-  { label: "Twitch", meta: "Live channels and their videos", to: ["twitch"] },
+  { label: "RaiPlay", meta: "Rai's programmes, films and channels", provider: "raiplay" },
+  { label: "Twitch", meta: "Channels on now and their videos", provider: "twitch" },
   {
     label: "Films and series",
-    meta: "StreamingCommunity, 123MoviesFree",
-    to: ["streamingcommunity", "movies123"],
+    meta: "RaiPlay, StreamingCommunity, 123MoviesFree",
+    to: "/films-and-series",
   },
-  { label: "Anime", meta: "AnimeSaturn, AnimeUnity", to: ["animesaturn", "animeunity"] },
+  { label: "Anime", meta: "AnimeSaturn, AnimeUnity", to: "/anime" },
   {
-    label: "Music and video",
-    meta: "YouTube, Bandcamp, SoundCloud",
-    to: ["youtube", "bandcamp", "soundcloud"],
+    label: "Music",
+    meta: "Spotify, Bandcamp, SoundCloud, Mixcloud, YouTube",
+    scope: { kind: "music", source: "All" },
+  },
+  {
+    label: "Radio archives",
+    meta: "Past shows from NTS, Lyl and seven more",
+    scope: { source: "Radio archives" },
   },
 ];
-const hasHome = (provider: ProviderId) => (sourceHomes as readonly ProviderId[]).includes(provider);
 
 /** One quiet line of doors to the sources, each saying what is behind it; it scrolls sideways where it doesn't fit. */
 export function BrowseLine() {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
-  // A menu's item is gone when Back returns, so Back focuses the door that hung it.
-  const open = (provider: ProviderId, door: string) =>
-    hasHome(provider)
-      ? details.open(
-          collectionLocation({ provider, url: "" }),
-          `[data-browse-door="${CSS.escape(door)}"]`,
-        )
-      : scopeSearch(providerNames[provider]);
   return (
     <section
       aria-labelledby="home-browse"
@@ -268,13 +263,13 @@ export function BrowseLine() {
       <ul data-nav-row aria-labelledby="home-browse" className="flex flex-1">
         {doors.map((door, index) => {
           const href =
-            typeof door.to === "string"
+            "to" in door
               ? door.to
-              : door.to.length === 1 && hasHome(door.to[0]!)
-                ? collectionLocation({ provider: door.to[0]!, url: "" })
+              : "provider" in door
+                ? collectionLocation({ provider: door.provider, url: "" })
                 : undefined;
-          // A door with one source says it didn't load last time; a menu says it beside each of its sources.
-          const down = typeof door.to !== "string" && door.to.length === 1 && failing(door.to[0]!);
+          // A source's door says it didn't load last time.
+          const down = "provider" in door && failing(door.provider);
           const body = <DoorBody label={door.label} meta={down ? "Couldn't load" : door.meta} />;
           return (
             // On phones a door is under half the screen, so the next one shows cut through its words.
@@ -309,29 +304,13 @@ export function BrowseLine() {
                   </a>
                 </Button>
               ) : (
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" data-browse-door={door.label} className={doorClass}>
-                      {body}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-56">
-                    {(door.to as readonly ProviderId[]).map((provider) => (
-                      <DropdownMenuItem
-                        key={provider}
-                        className="justify-between gap-4"
-                        onSelect={() => open(provider, door.label)}
-                      >
-                        {hasHome(provider)
-                          ? providerNames[provider]
-                          : `Search ${providerNames[provider]}`}
-                        {failing(provider) && (
-                          <span className="text-meta text-muted-foreground">Couldn't load</span>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  className={doorClass}
+                  onClick={() => "scope" in door && scopeSearch(door.scope)}
+                >
+                  {body}
+                </Button>
               )}
             </li>
           );
@@ -342,9 +321,9 @@ export function BrowseLine() {
 }
 
 // A door's words: its name, then what is behind it, muted and at most two lines.
-const doorClass =
+export const doorClass =
   "h-auto min-h-16 w-full min-w-0 flex-col items-start justify-start gap-0.5 rounded-md px-4 py-3 text-left whitespace-normal";
-function DoorBody({ label, meta }: { label: string; meta: string }) {
+export function DoorBody({ label, meta }: { label: string; meta: string }) {
   return (
     <>
       <span className="text-body font-medium">{label}</span>

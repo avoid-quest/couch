@@ -7,7 +7,9 @@ steer it from their phones. Next week they pick up where they stopped.
 
 ## Journey
 
-1. On a phone: **Search or paste a link**, or Home → **Browse** → a catalogue.
+1. On a phone: **Search or paste a link**, or Home → **Browse** → **Films and
+   series** (or **Anime**): a shelf from each catalogue. A catalogue's own page
+   narrows **Search** to it.
 2. **Open** a film or series; series show **Seasons** and **Episodes**.
 3. **Play on** → the TV, or **Play S1 E2**, **Queue**, **Save** for later.
 4. **Remote**: arrows, **OK**, **Back**, transport, volume, and **Type on TV**.

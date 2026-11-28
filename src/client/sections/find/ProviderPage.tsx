@@ -38,6 +38,7 @@ import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 import { addToHome } from "@/sections/home/AddToHome";
+import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
@@ -213,28 +214,94 @@ function CollectionPage({
       onSelectPage={(page) => goToPage(locationFor({ page }))}
     />
   );
+  const reader = (
+    <SearchOnlineResults
+      provider={provider}
+      query=""
+      url={url}
+      cursor={cursor}
+      context={search.context}
+      paged
+      onOpenCollection={openProvider}
+      onResults={report}
+      onPlayHistory={playHistory}
+      origin={credentials.origin}
+      token={credentials.token}
+      connected={connected}
+      canPlay={available}
+      active
+      onCommand={run}
+      quality={videoQualityPreference.quality}
+      onEnqueued={() => {}}
+    />
+  );
+  const problems =
+    summary?.error && moved.test(summary.errorMessage ?? "") ? (
+      <MovedSource
+        name={providerNames[provider]}
+        message={summary.errorMessage!.replace(moved, "")}
+        retry={summary.retry}
+      />
+    ) : (
+      <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
+    );
+  // A source's own front page and its sections are rooms (docs/design.md, Room), as is a list it files by letter.
+  const raiplayRoom = provider === "raiplay" && (!url || path.startsWith("/tipologia/"));
+  const twitchRoom = provider === "twitch" && !url;
+  const lettered =
+    !!page?.letters || (provider === "raiplay" && path.startsWith("/genere/") && !page);
+  const catalogueRoom = posterCatalogue && !url;
+  // A section's name waits for its page, so the source's name doesn't stand in for it first.
+  const roomTitle = page || !url ? collection.title : "";
+  if (raiplayRoom || twitchRoom || lettered)
+    return (
+      <section data-page="Collection" className="min-w-0">
+        {reader}
+        {raiplayRoom ? (
+          <RaiPlayRoom page={page} title={roomTitle} url={url} context={search.context} />
+        ) : twitchRoom ? (
+          <TwitchRoom onNow={page?.items} />
+        ) : (
+          <AToZRoom
+            page={page}
+            summary={summary}
+            title={roomTitle}
+            url={url}
+            context={search.context}
+          />
+        )}
+        {!connected && (
+          <p role="status" className="mt-6 text-sm text-muted-foreground">
+            Connect to Couch to load this collection.
+          </p>
+        )}
+        <div className="mt-6 empty:hidden">{problems}</div>
+      </section>
+    );
   return (
     <section data-page="Collection" className="min-w-0 space-y-6">
-      <SearchOnlineResults
-        provider={provider}
-        query=""
-        url={url}
-        cursor={cursor}
-        context={search.context}
-        paged
-        onOpenCollection={openProvider}
-        onResults={report}
-        onPlayHistory={playHistory}
-        origin={credentials.origin}
-        token={credentials.token}
-        connected={connected}
-        canPlay={available}
-        active
-        onCommand={run}
-        quality={videoQualityPreference.quality}
-        onEnqueued={() => {}}
-      />
-      {cold && url ? (
+      {reader}
+      {catalogueRoom ? (
+        <CatalogueRoomHead
+          provider={provider}
+          doors={
+            provider === "movies123"
+              ? [
+                  {
+                    label: "Movies",
+                    meta: "Newest first",
+                    href: collectionLocation({ provider, url: `${movies123Origin}/movies/` }),
+                  },
+                  {
+                    label: "TV series",
+                    meta: "Newest first",
+                    href: collectionLocation({ provider, url: `${movies123Origin}/tv-series/` }),
+                  },
+                ]
+              : []
+          }
+        />
+      ) : cold && url ? (
         <DetailSkeleton
           trail={
             <ContentBreadcrumb title={collection.title} provider={provider} collection={trail} />
@@ -269,9 +336,8 @@ function CollectionPage({
       {!collection.single && !emptyRoot && (
         <>
           {/* Filter waits for more than a glance holds: one season or eight tracks need none. */}
-          {(filterable ||
-            (provider === "twitch" && !url) ||
-            (provider === "movies123" && posterCatalogue)) && (
+          {/* A room has no second search field: the header's, narrowed to the source, searches it. */}
+          {!catalogueRoom && (filterable || (provider === "movies123" && posterCatalogue)) && (
             <FilterBar label="Collection filters">
               {filterable && (
                 <FilterInput
@@ -285,18 +351,6 @@ function CollectionPage({
                     })
                   }
                 />
-              )}
-              {provider === "twitch" && !url && (
-                <Button variant="ghost" asChild>
-                  <Link
-                    to={keepSection(
-                      collectionLocation({ provider, url: "https://www.twitch.tv/directory" }),
-                      section,
-                    )}
-                  >
-                    Categories
-                  </Link>
-                </Button>
               )}
               {provider === "movies123" && posterCatalogue && (
                 <>
@@ -423,15 +477,7 @@ function CollectionPage({
           {pager}
         </>
       )}
-      {summary?.error && moved.test(summary.errorMessage ?? "") ? (
-        <MovedSource
-          name={providerNames[provider]}
-          message={summary.errorMessage!.replace(moved, "")}
-          retry={summary.retry}
-        />
-      ) : (
-        <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
-      )}
+      {problems}
       {collection.single && (
         <RelatedCollection
           collection={search.context ?? page?.item?.collection}
