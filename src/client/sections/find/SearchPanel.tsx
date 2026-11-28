@@ -999,13 +999,23 @@ function PastedList({
     list.count !== undefined && listUnit(target.provider, list.count),
   );
   const listCommand = useListCommand(props.onCommand);
+  // A command sent to another Core, or before a reconnect, no longer changes this one's controls (as PastedLink).
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    setPending(false);
+    return () => controller.abort();
+  }, [props.origin, props.token, props.connected]);
   async function send(verb: LinkVerb) {
-    if (!props.onCommand || pending) return;
+    if (!props.onCommand || pending || !lifetime.current) return;
+    const signal = lifetime.current.signal;
     setPending(true);
     try {
-      if (await listCommand(linkAction(url, target, verb, quality, list), list, title)) onDone();
+      const ok = await listCommand(linkAction(url, target, verb, quality, list), list, title);
+      if (ok && !signal.aborted) onDone();
     } finally {
-      setPending(false);
+      if (!signal.aborted) setPending(false);
     }
   }
   const disabled = !props.connected || pending || !props.onCommand;
