@@ -215,7 +215,12 @@ export function GroupChips({
   const { undoing, undo } = useUndo(chips, rows);
   const groups = state.groups ?? [];
   if (!scope || (!groups.length && !canSave)) return null;
-  const { edit, outcome, say } = scope;
+  const { edit, say } = scope;
+  // Another playback's outcome isn't this one's to undo (Core would refuse it): it shows again on its own tab.
+  const outcome =
+    scope.outcome?.playbackId && scope.outcome.playbackId !== state.player.playbackId
+      ? null
+      : scope.outcome;
   const open = groups.find((group) => group.id === opened);
   return (
     <div className="grid">
@@ -431,6 +436,7 @@ function GroupPreview({
     const moved = applied.some((change) => change.from);
     onApplied({
       group: group.id,
+      playbackId,
       text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.${moved ? " Undo changes only this playback." : ""}`,
       // Built from the rows as they are when Undo is pressed, after Apply changed them.
       undo: async (now) => {

@@ -18,8 +18,16 @@ export type GroupDraft = { id?: string; name: string; members: GroupMember[] };
  * What the last group action did, said beside the groups with its Undo: a toast would sit under a phone's or TV's Sheet.
  * `group` is the chip focus returns to after Undo.
  */
-/** A change's line beside the chips; Undo gets the Mixer's rows as they are when it is pressed. */
-export type Outcome = { text: string; undo: (rows: Row[]) => Promise<void>; group?: string };
+/**
+ * A change's line beside the chips; Undo gets the Mixer's rows as they are when it is pressed. A group applied to a
+ * playback names it: its line and Undo show only on that playback's tab.
+ */
+export type Outcome = {
+  text: string;
+  undo: (rows: Row[]) => Promise<void>;
+  group?: string;
+  playbackId?: string;
+};
 
 /**
  * Saving a group, in the Mixer's place: its name, then every device with its Picture and Sound keys, its members first
