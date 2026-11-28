@@ -126,6 +126,7 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
     : [];
   return {
     query,
+    typed,
     top,
     sections,
     hits: relevant,
