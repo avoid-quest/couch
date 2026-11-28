@@ -288,6 +288,7 @@ export function HomePage() {
           <Failed
             title="Continue"
             href="/saved?tab=played"
+            error={history.error}
             options={options("continue")}
             retry={() => void history.refetch()}
           />
@@ -335,6 +336,7 @@ export function HomePage() {
         <Failed
           title="For later"
           href="/saved?tab=later"
+          error={later.error}
           options={options("later")}
           retry={() => void later.refetch()}
         />
@@ -375,6 +377,7 @@ export function HomePage() {
         <Failed
           title="Played recently"
           href="/saved?tab=played"
+          error={history.error}
           options={options("recent")}
           retry={() => void history.refetch()}
         />
@@ -425,6 +428,7 @@ export function HomePage() {
         <Failed
           title="Radio"
           href="/radio"
+          error={favorites.error ?? builtIn.error}
           options={options("radio")}
           retry={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}
         />
@@ -437,6 +441,7 @@ export function HomePage() {
       <Failed
         title="Live TV"
         href="/live-tv"
+        error={iptv.error}
         options={options("live-tv")}
         retry={() => void iptv.refetch()}
       />
@@ -449,6 +454,7 @@ export function HomePage() {
           <Failed
             title={homeRows[provider].label}
             what="saved channels"
+            error={sourceFavorites.error}
             options={options(provider)}
             retry={() => void sourceFavorites.refetch()}
           />

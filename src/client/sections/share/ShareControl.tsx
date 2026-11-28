@@ -365,6 +365,10 @@ function SharingPanel({
                   )}
                   {viewerLine(viewer, routes[viewer.device.id])}
                 </span>
+                {/* Mounted before it fails, so a viewer's failure that arrives is announced. */}
+                <span aria-live="polite" className="sr-only">
+                  {viewer.error ? viewerLine(viewer, routes[viewer.device.id]) : ""}
+                </span>
               </div>
               {viewer.sound && (
                 <Level

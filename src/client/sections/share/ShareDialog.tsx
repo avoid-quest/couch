@@ -28,6 +28,7 @@ import { deviceId } from "@/session/device-id";
 import { couchApp } from "@/session/native-context";
 import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
 import { errorText, useSessionGate } from "@/session/session-context";
+import { failed } from "@/toasts";
 import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { CaptureBufferSelect, CaptureChannelsSelect } from "./LiveOperator";
 import {
@@ -335,7 +336,7 @@ function ShareForm({ onDone }: { onDone: () => void }) {
           );
       }
     } catch (reason) {
-      setError(errorText(reason));
+      failed(errorText(reason));
       await checkAccess();
     } finally {
       setPending(false);

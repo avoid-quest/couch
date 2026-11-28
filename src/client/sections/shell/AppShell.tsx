@@ -744,12 +744,12 @@ function ShellChrome({ children }: PropsWithChildren) {
   useTopBar(header, paired && !setupPending);
   const room = useRoomLight();
 
-  // A failed action is a message beside nothing else (docs/design.md "Problems"); Remote says it on its own page.
+  // A failed action is a message beside nothing else (docs/design.md "Problems").
   useEffect(() => {
-    if (!error || section === "Remote") return;
+    if (!error) return;
     failed(error);
     setError(null);
-  }, [error, section]);
+  }, [error]);
   // Core couldn't save progress or Up next: said once each time it starts failing.
   const progressError = state?.progressError;
   useEffect(() => {

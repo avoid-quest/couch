@@ -1,6 +1,7 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { type ComponentProps, type ReactNode, useSyncExternalStore } from "react";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
+import { coreSentence } from "@/api/client";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Button } from "@/components/ui/button";
 import { MediaTile } from "@/components/MediaTile";
@@ -50,7 +51,15 @@ export function LiveTvShelf({ options }: { options?: ReactNode }) {
   });
   const actions = useChannelActions();
   if (guide.error && !guide.data)
-    return <Failed title="Live TV" href="/live-tv" retry={() => void guide.refetch()} />;
+    return (
+      <Failed
+        title="Live TV"
+        href="/live-tv"
+        error={guide.error}
+        options={options}
+        retry={() => void guide.refetch()}
+      />
+    );
   if (guide.data && !guide.data.channels.length) return null;
   return (
     <Shelf loading={!guide.data} title="Live TV" href="/live-tv" options={options}>
@@ -368,12 +377,15 @@ export function Failed({
   title,
   href,
   what = title,
+  error,
   options,
   retry,
 }: {
   title: string;
   href?: string;
   what?: string;
+  /** Why it failed: Core's own sentence shows under the problem when it sent one. */
+  error: unknown;
   /** The section's "…". */
   options?: ReactNode;
   retry: () => void;
@@ -384,6 +396,7 @@ export function Failed({
       href={href}
       options={options}
       problem={`Couldn't load ${what}.`}
+      detail={coreSentence(error)}
       retry={retry}
     />
   );

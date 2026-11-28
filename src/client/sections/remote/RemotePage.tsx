@@ -11,7 +11,6 @@ import { useShell } from "@/sections/shell/AppShell";
 import { RemotePad } from "@/components/RemotePad";
 import { hasUpNext } from "@/sections/now/QueuePanel";
 import { PageHeader } from "@/components/PageHeader";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -36,7 +35,7 @@ import type { Action } from "../../../shared/protocol";
 import type { RemoteTextField } from "../../../shared/remote";
 
 export function RemotePage() {
-  const { state, connected, tvPresentation, credentials, run, error, setError } = useSessionGate();
+  const { state, connected, tvPresentation, credentials, run } = useSessionGate();
   const shell = useShell();
   const tvs = state?.devices?.filter((device) => device.tv) ?? [];
   // With every TV off, the one seen last.
@@ -80,7 +79,6 @@ export function RemotePage() {
     tvPresentation,
     run,
   ]);
-  useEffect(() => () => setError(null), [setError]);
   const ready =
     connected &&
     allowed &&
@@ -120,7 +118,6 @@ export function RemotePage() {
             value={targetId}
             onValueChange={(value) => {
               setBinding(null);
-              setError(null);
               setChosen(value);
             }}
             disabled={!connected}
@@ -164,11 +161,6 @@ export function RemotePage() {
                     ? "Selecting TV…"
                     : "Connected"}
         </p>
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
       </div>
       {target && (
         <>
