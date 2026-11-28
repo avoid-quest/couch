@@ -94,7 +94,7 @@ export function FollowPanel({
           align={box.left + box.width / 2 < window.innerWidth / 2 ? "start" : "end"}
           collisionPadding={16}
           onCloseAutoFocus={back}
-          className="w-[min(26rem,calc(100vw-2rem))] p-4"
+          className="max-h-[calc(var(--radix-popover-content-available-height)/var(--interface-scale))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto p-4"
         >
           {children}
         </PopoverContent>
