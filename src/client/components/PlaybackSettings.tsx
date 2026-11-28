@@ -12,12 +12,17 @@ import { PopoverContent } from "@/components/ui/popover";
 import { toolPanel } from "@/components/PlaybackTransport";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import type { WatchingProfile } from "../../shared/viewing";
-import type { Action, PlaybackPreferences as Preferences, QueueEntry } from "../../shared/protocol";
+import type {
+  Action,
+  PlaybackPreferences as Preferences,
+  QueueEntry,
+  VideoQualityLabels,
+} from "../../shared/protocol";
 import type { ClientPlayerState, Credentials } from "@/session/session";
 import { apiJson } from "@/api/client";
 import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
 import { supportsCurrentVideoQuality } from "../../shared/video-quality";
-import { videoQualityChoice, videoQualityLabels, videoQualityOptions } from "@/video-quality";
+import { videoQualityOffers } from "@/video-quality";
 
 export type PlaybackSettingsProps = {
   controls?: PlaybackControls;
@@ -28,6 +33,7 @@ export type PlaybackSettingsProps = {
   credentials: Credentials;
   preferences: Preferences;
   profile: WatchingProfile;
+  videoQualities?: VideoQualityLabels | null;
   onCommand: (action: Action) => Promise<boolean>;
 };
 
@@ -362,7 +368,9 @@ export function PlaybackMenu({
   const chapterIndex = chapters.findLastIndex(
     (chapter) => chapter.position <= playbackClock.position,
   );
-  const qualityAvailable = supportsCurrentVideoQuality(entry, player);
+  // A source that names no sizes (a fixed file) has no quality to choose.
+  const qualityAvailable = supportsCurrentVideoQuality(entry, player) && !!props.videoQualities;
+  const quality = videoQualityOffers(props.videoQualities ?? {}, entry?.quality);
   // Audio is a choice only with more than one track, as YouTube's Audio track row.
   const rows: { view: View; value: string }[] = [
     ...(controls.programme && showTracks
@@ -375,7 +383,7 @@ export function PlaybackMenu({
       ? [{ view: "speed" as const, value: rate?.selectedLabel ?? speedLabel(player.speed ?? 1) }]
       : []),
     ...(controls.programme && qualityAvailable
-      ? [{ view: "quality" as const, value: videoQualityLabels[entry?.quality ?? "auto"] }]
+      ? [{ view: "quality" as const, value: quality.label }]
       : []),
     ...(controls.seek && chapters.length > 0 && player.seekable
       ? [
@@ -468,11 +476,11 @@ export function PlaybackMenu({
         label="Quality"
         orientation="vertical"
         disabled={idle || !qualityAvailable}
-        value={videoQualityChoice(entry?.quality ?? "auto")}
-        onValueChange={(quality) =>
-          command((playbackId) => ({ type: "videoQuality", playbackId, quality }))
+        value={quality.value}
+        onValueChange={(choice) =>
+          command((playbackId) => ({ type: "videoQuality", playbackId, quality: choice }))
         }
-        options={videoQualityOptions}
+        options={quality.options}
       />
     ) : permittedView === "chapters" ? (
       <ChoiceGroup

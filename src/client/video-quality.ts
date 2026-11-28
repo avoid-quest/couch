@@ -1,22 +1,42 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
+import type { VideoQualityLabels } from "../shared/protocol";
 export { supportsWebVideoQuality } from "../shared/video-quality";
 
-// The only labels for video quality. Settings, the player and Search all use these. Auto plays 1080p (Core), so the
-// choices offer it once, as 1080p; an explicit "1080p" from an older Couch or a playlist shows as that choice.
-export const videoQualityLabels: Record<VideoQuality, string> = {
+// The fixed labels for video quality, which Settings and Search use. Auto plays 1080p (Core), so the choices
+// offer it once, as 1080p; an explicit "1080p" from an older Couch or a playlist shows as that choice.
+const videoQualityLabels: Record<VideoQuality, string> = {
   auto: "1080p",
   best: "Best",
   "1080p": "1080p",
   "720p": "720p",
   "480p": "480p",
 };
-export const videoQualityChoice = (value: VideoQuality): VideoQuality =>
+const videoQualityChoice = (value: VideoQuality): VideoQuality =>
   value === "1080p" ? "auto" : value;
 export const videoQualityOptions = (["best", "auto", "720p", "480p"] as const).map((value) => ({
   value,
   label: videoQualityLabels[value],
 }));
+const choices = ["best", "1080p", "720p", "480p"] as const;
+// The current item's choices, each named by what it plays (Core's videoQualities). Choices that play the same
+// picture show once, as the strictest: it keeps that picture when a later copy of the item offers more.
+export function videoQualityOffers(labels: VideoQualityLabels, quality: VideoQuality = "auto") {
+  const options = choices.flatMap((value, index) => {
+    const label = labels[value];
+    return label && !choices.slice(index + 1).some((other) => labels[other] === label)
+      ? [{ value, label }]
+      : [];
+  });
+  const current = quality === "auto" ? "1080p" : quality;
+  // A current choice Core couldn't name checks none of the others.
+  const playing = labels[current] ?? "";
+  return {
+    options,
+    value: options.find((option) => option.label === playing)?.value ?? current,
+    label: playing,
+  };
+}
 const storageKey = "couch.online-video-quality";
 
 function readVideoQuality(storage?: Pick<Storage, "getItem">): VideoQuality {

@@ -166,6 +166,7 @@ export function NowPlayingBar({
           credentials,
           preferences: state.preferences,
           profile: state.activeProfile,
+          videoQualities: state.videoQualities,
           onCommand: run,
           controls: state.controls,
         }
