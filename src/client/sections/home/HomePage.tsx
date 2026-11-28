@@ -396,7 +396,9 @@ export function HomePage() {
     sources: <BrowseLine />,
   };
   for (const follow of follows)
-    lists[follow.id] = <FollowShelf follow={follow} lead={continued[0]} />;
+    lists[follow.id] = (
+      <FollowShelf follow={follow} lead={hasRow("continue") ? continued[0] : undefined} />
+    );
   // A shelf still loading holds its place, so nothing moves under the focus when it arrives.
   const pending = (id: HomeSectionId) =>
     id === "later"
