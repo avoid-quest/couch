@@ -28,14 +28,22 @@ export const boardRows: readonly HomeRowId[] = ["continue", "later", "recent", "
 const sourceRows: HomeRow[] = (Object.keys(homeRows) as HomeRowId[])
   .filter((id) => !boardRows.includes(id))
   .map((id) => ({ id, shown: true }));
-// A device that ordered or hid Discover's sources before they moved here keeps that choice (couch.discover-rows).
+// A device that ordered or hid Discover's sources before they moved here keeps that choice (couch.discover-rows),
+// Browse included, where Discover had it.
+const browseFirst = (() => {
+  try {
+    return localStorage.getItem("couch.discover-rows") === null;
+  } catch {
+    return true;
+  }
+})();
 const discoverRows = readSectionRows("couch.discover-rows", sourceRows);
 // A fresh device's Home: Browse, Continue, For later, then the sources, then the rest of your own.
 export const defaultHomeRows: HomeRow[] = [
-  discoverRows.find((row) => row.id === "sources")!,
+  ...(browseFirst ? [{ id: "sources" as const, shown: true }] : []),
   { id: "continue", shown: true },
   { id: "later", shown: true },
-  ...discoverRows.filter((row) => row.id !== "sources"),
+  ...discoverRows.filter((row) => !browseFirst || row.id !== "sources"),
   { id: "recent", shown: true },
   { id: "upNext", shown: false },
 ];

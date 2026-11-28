@@ -232,9 +232,13 @@ export function BrowseLine() {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
-  const open = (provider: ProviderId) =>
+  // A menu's item is gone when Back returns, so Back focuses the door that hung it.
+  const open = (provider: ProviderId, door: string) =>
     hasHome(provider)
-      ? details.open(collectionLocation({ provider, url: "" }))
+      ? details.open(
+          collectionLocation({ provider, url: "" }),
+          `[data-browse-door="${CSS.escape(door)}"]`,
+        )
       : scopeSearch(providerNames[provider]);
   return (
     <section
@@ -259,7 +263,11 @@ export function BrowseLine() {
           const down = typeof door.to !== "string" && door.to.length === 1 && failing(door.to[0]!);
           const body = <DoorBody label={door.label} meta={down ? "Couldn't load" : door.meta} />;
           return (
-            <li key={door.label} className="flex min-w-36 flex-1 border-l first:border-l-0">
+            // On phones a door is under half the screen, so the next one shows cut through its words.
+            <li
+              key={door.label}
+              className="flex min-w-36 flex-1 border-l first:border-l-0 max-sm:min-w-[45vw]"
+            >
               {href ? (
                 <Button
                   asChild
@@ -289,7 +297,7 @@ export function BrowseLine() {
               ) : (
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className={doorClass}>
+                    <Button variant="ghost" data-browse-door={door.label} className={doorClass}>
                       {body}
                     </Button>
                   </DropdownMenuTrigger>
@@ -298,7 +306,7 @@ export function BrowseLine() {
                       <DropdownMenuItem
                         key={provider}
                         className="justify-between gap-4"
-                        onSelect={() => open(provider)}
+                        onSelect={() => open(provider, door.label)}
                       >
                         {hasHome(provider)
                           ? providerNames[provider]
