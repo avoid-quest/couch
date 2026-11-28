@@ -66,7 +66,9 @@ export const rowMenu = (hit: SearchHit) =>
 export function usePaletteHits(text: string, scope: SearchScope, moved: boolean) {
   const shell = useShell();
   const { connected, credentials, run, videoQualityPreference } = useSessionGate();
-  const [settled] = useDebouncedValue(text.trim(), { wait: pause });
+  // As typed, so a space after the last word finishes it (searchRelevance).
+  const [typed] = useDebouncedValue(text, { wait: pause });
+  const settled = typed.trim();
   const query = settled.length >= shortest ? settled : "";
   const providers = query
     ? allProviders.filter(
@@ -94,10 +96,10 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   const { order, within } = useSourceHits(key, summaries, query);
   // Only what names every word of the query in its title, artist or album, in the chosen kind and source as the results
   // show them, so the palette stays a glance and Enter never plays what the scope left out.
-  const { close } = searchRelevance(query, true);
+  const { close } = searchRelevance(typed, true);
   const relevant = within(scope.source).filter((hit) => inKind(hit, scope.kind) && close(hit));
   const asking = asked.filter((source) => !summaries[source] || summaries[source].loading);
-  const top = useTopHit(key, relevant, query, asking.length > 0, moved, true);
+  const top = useTopHit(key, relevant, typed, asking.length > 0, moved, true);
   const sections = order
     .map((source) => ({
       source,

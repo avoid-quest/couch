@@ -121,6 +121,8 @@ test("a hit by the searched artist or from the searched album counts as close", 
   // A submitted name is whole words: "dj ale" is not DJ Alex.
   expect(searchRelevance("dj ale").close({ title: "Voices In My Head w/ DJ Alex" })).toBe(false);
   expect(searchRelevance("dj ale", true).close({ title: "Dj Alexis" })).toBe(true);
+  // A space finishes the word being typed.
+  expect(searchRelevance("DJ alé ", true).close({ title: "Dj Alexis" })).toBe(false);
   // One shared word isn't enough: another artist with one of the words waits under the fold.
   expect(close({ title: "Aisha Devi", meta: "NTS" })).toBe(false);
   expect(

@@ -149,12 +149,14 @@ export const isLink = (value: string) => !!linkOf(value);
 
 /**
  * How hits answer a query. A word matches a whole word of the hit, folded; while `typing`, the last word may be the start
- * of one, so "dj al" already finds DJ Alé and a submitted "dj ale" doesn't find DJ Alex.
+ * of one until a space finishes it, so "dj al" already finds DJ Alé and "dj ale " or a submitted "dj ale" doesn't find
+ * DJ Alex.
  */
 export function searchRelevance(query: string, typing = false) {
   const words = searchWords(query);
+  const open = typing && !/\s$/.test(query);
   const matches = (part: string, word: string) =>
-    part === word || (typing && word === words.at(-1) && part.startsWith(word));
+    part === word || (open && word === words.at(-1) && part.startsWith(word));
   const mentions = (text: string, word: string) =>
     searchWords(text).some((part) => matches(part, word));
   /** How well a title answers the query: 3 when it is the query, 2 when it has every word, 1 when it has some. */

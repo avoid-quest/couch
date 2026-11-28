@@ -570,7 +570,7 @@ export function HeaderSearch({ className }: { className?: string }) {
             )}
             {text ? (
               <Typed
-                text={url ?? text}
+                text={url ?? value}
                 link={link}
                 scope={scope}
                 labels={labels}
