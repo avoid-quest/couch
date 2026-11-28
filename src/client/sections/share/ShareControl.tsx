@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Headphones, Radio, ScreenShare, Square, Users, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,28 +52,31 @@ export function SharingPill({
   const { state, localLiveSourceId } = useSessionGate();
   const stop = useStop();
   const source = state?.liveSources?.find((item) => item.id === localLiveSourceId);
-  if (!source) return null;
-  const viewers = viewersOf(state, source.id);
-  const live = source.intent === "live";
+  const viewers = source ? viewersOf(state, source.id) : [];
+  const live = source?.intent === "live";
   const none = !viewers.length;
   const label = none
     ? live
       ? "Still live, with no listeners"
-      : `Still sharing, on no ${source.video ? "screens" : "speakers"}`
+      : `Still sharing, on no ${source?.video ? "screens" : "speakers"}`
     : live
       ? "Live"
       : "Sharing";
-  // A phone's header has room for a word: who receives it, or that nobody does.
+  // A phone's header has room for a word, and so has any pill the long label doesn't fit: who receives it, or that
+  // nobody does.
   const short = none
     ? live
       ? "No listeners"
-      : `No ${source.video ? "screens" : "speakers"}`
+      : `No ${source?.video ? "screens" : "speakers"}`
     : label;
+  const { pill, text, tight } = useTight(label, source?.id);
+  if (!source) return null;
   const Icon = live ? Radio : source.video ? ScreenShare : Volume2;
   const Count = live || !source.video ? Headphones : Users;
   const counted = `${viewers.length} ${live ? "listening" : source.video ? "watching" : "listening"}`;
   return (
     <div
+      ref={pill}
       data-live-sharing
       data-tv-local-only
       data-receivers={viewers.length}
@@ -96,9 +99,9 @@ export function SharingPill({
         className="flex h-9 min-w-0 items-center gap-2 rounded-full pr-2.5 pl-3 outline-none hover:bg-current/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-current"
       >
         <Icon aria-hidden="true" className="size-4 shrink-0" />
-        <span role="status" aria-label={label} className="min-w-0 truncate">
-          <span className="max-sm:hidden">{label}</span>
-          <span className="sm:hidden">{short}</span>
+        <span ref={text} role="status" aria-label={label} className="min-w-0 truncate">
+          <span className={tight ? "hidden" : "max-sm:hidden"}>{label}</span>
+          <span className={tight ? undefined : "sm:hidden"}>{short}</span>
         </span>
         {!none && (
           <span className="flex shrink-0 items-center gap-1 border-l border-current/25 pl-2 tabular-nums">
@@ -124,6 +127,33 @@ export function SharingPill({
       </Button>
     </div>
   );
+}
+
+/**
+ * Whether the pill's label is cut short where it stands (beside the side player, say): then it takes the short one, and
+ * tries the long one again whenever the row it stands in changes size.
+ */
+function useTight(label: string, sourceId: string | undefined) {
+  const pill = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const [tight, setTight] = useState(false);
+  useLayoutEffect(() => {
+    const row = pill.current?.parentElement?.parentElement;
+    const span = text.current;
+    if (!row || !span) return;
+    let cut = false;
+    setTight(false);
+    const observer = new ResizeObserver((entries) => {
+      if (cut && entries.some((entry) => entry.target === row)) cut = false;
+      else if (!cut && span.scrollWidth > span.clientWidth) cut = true;
+      else return;
+      setTight(cut);
+    });
+    observer.observe(row);
+    observer.observe(span);
+    return () => observer.disconnect();
+  }, [label, sourceId]);
+  return { pill, text, tight };
 }
 
 function useStop() {
