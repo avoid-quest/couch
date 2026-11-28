@@ -400,8 +400,9 @@
   transition-duration: 200ms;
   transition-timing-function: var(--ease-out);
 }
-/* A toast hugs its words, its action beside them, at the toaster's right edge (the gutter), rather than a slab the
-   toaster's width. On phones, where sonner stretches both, the toaster spans the gutters and toasts still hug. */
+/* A toast hugs its words, its action beside them, at the toaster's outer edge (the gutter), rather than a slab the
+   toaster's width: its right edge, or its left or middle where an Undo shows beside its control (toasts.ts). On phones,
+   where sonner stretches both, the toaster spans the gutters and toasts still hug. */
 [data-sonner-toaster][data-x-position] {
   width: var(--width);
 }
@@ -415,6 +416,14 @@
   right: 0;
   width: fit-content;
   max-width: 100%;
+}
+[data-sonner-toaster][data-x-position="left"] [data-sonner-toast] {
+  left: 0;
+  right: auto;
+}
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
+  left: 0;
+  margin-inline: auto;
 }
 
 /* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window
