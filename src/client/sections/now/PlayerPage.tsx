@@ -928,7 +928,7 @@ export function PlayerPage({
             )}
 
             <div className="ml-auto flex shrink-0 items-center gap-3">
-              <SharingPill />
+              <SharingPill onShow={shell.leavePlayer} />
               <div ref={setRecognitionControls} className="empty:hidden" />
               {current && artworkStage && infoButton}
             </div>
@@ -957,7 +957,7 @@ export function PlayerPage({
               </div>
             )}
             <div className="ml-auto flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
-              {sharing && <SharingPill className="self-center" />}
+              {sharing && <SharingPill className="self-center" onShow={shell.leavePlayer} />}
               {tvPresentation && !radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
               {tvPresentation && <span className="self-center">{infoButton}</span>}

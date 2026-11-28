@@ -41,7 +41,14 @@ export function ShareControl() {
  * sharing, the one Stop a share has, one press from anywhere. Nobody receiving it is said here, not in a message:
  * "Still sharing, on no screens".
  */
-export function SharingPill({ className }: { className?: string }) {
+export function SharingPill({
+  className,
+  onShow,
+}: {
+  className?: string;
+  /** The full player leaves first, so the share shows in the player behind it. */
+  onShow?: () => void;
+}) {
   const { state, localLiveSourceId } = useSessionGate();
   const stop = useStop();
   const source = state?.liveSources?.find((item) => item.id === localLiveSourceId);
@@ -82,7 +89,10 @@ export function SharingPill({ className }: { className?: string }) {
         type="button"
         aria-label={`${label}: ${liveTitle(source)}, ${counted}. Show it in the player`}
         title={`${liveTitle(source)}: show it in the player`}
-        onClick={() => showShare(true)}
+        onClick={() => {
+          onShow?.();
+          showShare(true);
+        }}
         className="flex h-9 min-w-0 items-center gap-2 rounded-full pr-2.5 pl-3 outline-none hover:bg-current/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-current"
       >
         <Icon aria-hidden="true" className="size-4 shrink-0" />
