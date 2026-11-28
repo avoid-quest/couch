@@ -51,12 +51,13 @@ export const stationJson = async (url: string, signal: AbortSignal, init: Reques
 
 /**
  * A WordPress collection's rows, newest first, up to 500: page after page, as far as the last page WordPress counts
- * (asking past it is an error, so a show of exactly 100 episodes ends on its full page).
+ * (asking past it is an error, so a show of exactly 100 episodes ends on its full page), and how many it holds in all.
  */
 export async function wordpressRows(url: string, signal: AbortSignal, invalid: () => Error) {
   // WordPress's largest page.
   const batch = 100;
   const rows: unknown[] = [];
+  let total = 0;
   for (let page = 1; rows.length < maxList; page++) {
     const { value, headers } = await stationResponse(
       `${url}&per_page=${batch}&page=${page}`,
@@ -64,10 +65,11 @@ export async function wordpressRows(url: string, signal: AbortSignal, invalid: (
     );
     if (!Array.isArray(value)) throw invalid();
     rows.push(...value);
+    total = Number(headers.get("X-WP-Total")) || 0;
     const pages = Number(headers.get("X-WP-TotalPages"));
     if (value.length < batch || !(page < pages)) break;
   }
-  return rows;
+  return { rows, total };
 }
 
 /** A station's own page for a path, or nothing when the path isn't one Couch knows. */
@@ -198,8 +200,10 @@ export function wholeList(
     ...item,
     collection: { title: page.title, url: link.url, index },
   }));
-  // The count is the whole list's, so Play all says it keeps the first 500 of a longer one.
-  return { ...page, count: unique.length, items };
+  // The count is the whole list's, the source's own when it holds more than it gave, so Play all says it keeps the
+  // first 500 of a longer one.
+  const count = (page.count ?? 0) > maxList ? page.count! : unique.length;
+  return { ...page, count, items };
 }
 
 /** A value kept for a while, fetched once by concurrent readers; a failure isn't kept. */

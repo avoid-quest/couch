@@ -106,7 +106,7 @@ export const blackout: Station = {
     if (!term || !Number.isSafeInteger(term.id))
       throw new ProviderError("Radio BlackOut has no such show.", 404);
     const title = label(rendered(about?.title)) ?? label(term.name) ?? link.slug;
-    const rows = await wordpressRows(
+    const { rows, total } = await wordpressRows(
       `${api}/podcast?podcastfilter=${term.id}&${fields}`,
       signal,
       () => new ProviderError("Radio BlackOut returned an invalid show."),
@@ -119,6 +119,7 @@ export const blackout: Station = {
         subtitle: "Radio BlackOut",
         description: label(rendered(about?.excerpt), 2000),
         thumbnail: image(about?.featured_media),
+        count: total,
       },
       rows.flatMap((row) => item(row, { title, url: link.url }) ?? []),
     );

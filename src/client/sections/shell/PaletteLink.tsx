@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { collectionLocation } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,19 @@ export function PaletteLink({
   const target = linkTarget(url);
   const list = usePastedList(credentials, url, target);
   const station = useLinkStation(credentials, url, target);
+  // Enter before Couch has found the station waits for it, then plays it (or opens the page when there's none); the press
+  // belongs to the link it was made on, so editing the field drops it.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  const waiting = waitingFor === url;
+  useEffect(() => {
+    if (waitingFor && waitingFor !== url) setWaitingFor(null);
+  }, [url]);
+  useEffect(() => {
+    if (!waiting || station === undefined) return;
+    setWaitingFor(null);
+    if (station) onPlayStation(station);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  }, [waiting, station]);
   const where = url.replace(/^https?:\/\//i, "");
   const shape = target?.shape ?? "atom";
   // The first row reads as the link itself; the verbs after it are plain rows.
@@ -93,6 +107,19 @@ export function PaletteLink({
             <span className="shrink-0">Play</span>
             <span className="min-w-0 truncate font-normal text-muted-foreground">
               {station.name}
+            </span>
+          </CommandItem>
+        )}
+        {station === undefined && (
+          <CommandItem
+            value="link:play"
+            disabled={!connected}
+            onSelect={() => setWaitingFor(url)}
+            className={lead}
+          >
+            <span className="shrink-0">Play</span>
+            <span className="min-w-0 truncate font-normal text-muted-foreground">
+              {waiting ? "Finding the station…" : where}
             </span>
           </CommandItem>
         )}

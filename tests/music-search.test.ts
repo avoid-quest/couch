@@ -406,24 +406,21 @@ test("A Spotify artist's top tracks play in embed order from either share link",
 test("A Spotify track plays the YouTube upload naming its title and artist, closest within 10 seconds", async () => {
   const queries: string[] = [];
   type Hit = { title: string; channel: string; duration: number };
-  const catalog = (hits: Hit[]) =>
-    createSpotifyCatalog(
-      (async () => spotifyPage(trackEntity)) as typeof fetch,
-      async ({ query }) => {
-        queries.push(query!);
-        return {
-          items: hits.map(({ title, channel, duration }, index) => ({
-            id: `video${index}`,
-            provider: "youtube" as const,
-            kind: "media" as const,
-            title,
-            subtitle: channel,
-            url: `https://www.youtube.com/watch?v=video${index}abcd`,
-            duration,
-          })),
-        };
-      },
-    );
+  const catalog = (hits: Hit[], entity: object = trackEntity) =>
+    createSpotifyCatalog((async () => spotifyPage(entity)) as typeof fetch, async ({ query }) => {
+      queries.push(query!);
+      return {
+        items: hits.map(({ title, channel, duration }, index) => ({
+          id: `video${index}`,
+          provider: "youtube" as const,
+          kind: "media" as const,
+          title,
+          subtitle: channel,
+          url: `https://www.youtube.com/watch?v=video${index}abcd`,
+          duration,
+        })),
+      };
+    });
   const cover = {
     title: "Global Warming (cover)",
     channel: "Garage Singer",
@@ -443,10 +440,39 @@ test("A Spotify track plays the YouTube upload naming its title and artist, clos
   expect(queries).toEqual(["Pitbull, Sensato Global Warming (feat. Sensato)"]);
   expect(url).toBe("https://www.youtube.com/watch?v=video3abcd");
   expect(item.url).toBe("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2");
-  for (const hits of [[cover], [{ ...cover, channel: "Pitbull", duration: 200 }]])
+  // An upload naming the title and the artist that is another version loses even when its length is closer.
+  const namedCover = {
+    title: "Pitbull - Global Warming (cover)",
+    channel: "Pitbull",
+    duration: 85.4,
+  };
+  expect(
+    (
+      await catalog([
+        namedCover,
+        { title: "Global Warming", channel: "Pitbull - Topic", duration: 94 },
+      ]).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2")
+    ).url,
+  ).toBe("https://www.youtube.com/watch?v=video1abcd");
+  for (const hits of [[cover], [{ ...cover, channel: "Pitbull", duration: 200 }], [namedCover]])
     await expect(
       catalog(hits).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2"),
     ).rejects.toThrow("no YouTube upload");
+  // A version word that names one of the artists is their name: the band Live's studio song plays.
+  const live = {
+    ...trackEntity,
+    title: "Lightning Crashes",
+    artists: [{ name: "Live" }],
+    duration: 325000,
+  };
+  expect(
+    (
+      await catalog(
+        [{ title: "Live - Lightning Crashes", channel: "LiveVEVO", duration: 326 }],
+        live,
+      ).match("https://open.spotify.com/track/6OmhkSOpvYBokMKQxpIGx2")
+    ).url,
+  ).toBe("https://www.youtube.com/watch?v=video0abcd");
   await expect(catalog([cover]).match(spotifyAlbum)).rejects.toMatchObject({
     status: 400,
   });

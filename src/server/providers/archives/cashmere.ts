@@ -76,7 +76,7 @@ export const cashmere: Station = {
   async list(link, cursor, signal) {
     const parent = await category(`slug=${encodeURIComponent(link.slug)}`, signal);
     if (!parent) throw new ProviderError("Cashmere Radio has no such show.", 404);
-    const episodes = await wordpressRows(
+    const { rows: episodes, total } = await wordpressRows(
       `${api}/episode?categories=${parent.id}&${episodeFields}`,
       signal,
       () => new ProviderError("Cashmere Radio returned an invalid show."),
@@ -84,7 +84,7 @@ export const cashmere: Station = {
     return wholeList(
       link,
       cursor,
-      { title: parent.title, subtitle: "Cashmere Radio" },
+      { title: parent.title, subtitle: "Cashmere Radio", count: total },
       episodes.flatMap((row) => item(row, { title: parent.title, url: link.url }) ?? []),
     );
   },

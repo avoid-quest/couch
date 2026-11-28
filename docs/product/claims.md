@@ -12,7 +12,7 @@ qualification of Live audio mode.
 [`v0.4.0-preview.6`](https://github.com/avoid-quest/couch/releases/tag/v0.4.0-preview.6),
 the same commit as main (`8f05dc31`). No stable release exists. Recheck releases
 before changing public copy; "on main" is not "in the latest preview". The
-[stories](../stories/README.md) record what each journey does today.
+[stories](../stories/README.md) record what each scene does today.
 
 ## In the latest preview
 

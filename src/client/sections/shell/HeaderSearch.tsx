@@ -115,9 +115,12 @@ export function HeaderSearch({ className }: { className?: string }) {
     return linkTarget(pasted)?.shape === "page" ? "link:open" : "link:play";
   };
   const type = (next: string) => {
-    moved.current = false;
+    // An edit that only adds or removes spaces keeps what's chosen; any other edit hands the selection back to the top row.
+    if (next.trim() !== value.trim() || !next.trim()) {
+      moved.current = false;
+      setSelected(first(next));
+    }
     setDraft((current) => ({ ...current, value: next }));
-    setSelected(first(next));
     setOpen(true);
   };
   const show = () => {
@@ -875,10 +878,11 @@ function Typed({
   const tv = isTvPresentation();
   const { top } = remote;
   const topValue = top && (tv ? "top:main" : `hit:${top.id}`);
-  // The first match is selected as it arrives, so Enter is always safe; once the keys or the pointer move, it stays.
+  // The first match is selected as it arrives, and again once an edit that keeps it settles, so Enter is always safe;
+  // once the keys or the pointer move, it stays.
   useLayoutEffect(() => {
-    if (topValue) onTop(topValue);
-  }, [topValue]);
+    if (topValue && remote.typed === text) onTop(topValue);
+  }, [topValue, remote.typed, text]);
   // The row whose menu is open, for this query.
   const [menu, setMenu] = useState<{ query: string; id: string } | null>(null);
   const opened = menu?.query === remote.query ? menu.id : null;

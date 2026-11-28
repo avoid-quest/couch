@@ -1,48 +1,15 @@
 # Make it ours
 
-Status: preview · Scenes: home, group
+Status: preview
 
-The household shapes Couch: what nobody wants to see, which rows Home shows,
-how big text is, which language and quality films play in.
+The flat is tired of one channel's reaction videos, so Irene uses **Hide a
+word** and they're gone from everyone's Home and Search. On her own phone she
+hides rows she never uses with their **…** and makes the **Text size** bigger;
+on her laptop the player stands at the **Left**. Her films play in Italian with
+**Audio language**. She makes the TV's interface bigger and taps **Keep**, and
+turns on **Send error reports** after reading what it sends.
 
-## Journey
+## Good to know
 
-- For everyone: **Settings → Sources → Hidden → Hide a word**, or an item's
-  **Hide**.
-- On this device: **Edit Home** at the foot of Home (or **This device → Home**):
-  each section on or off, **Move up/down**, **Reset to default**; on Home, each
-  section's **…** moves or hides it, with **Undo**; **General → Text size**;
-  **General → Player side**, where Now playing stands (**Right** unless I
-  choose **Left**).
-- On this device: **Add to Home** on a series, programme or channel (its page,
-  its menu, or the player while it plays) gives it a section of its own with
-  what the source lists there, kept fresh. **Add a section** (Home's foot or
-  Edit Home) lists what I've played and saved, with **Search** for anything
-  else. Its **…** or its line in Edit Home renames, moves, hides or removes it;
-  removing it keeps what I saved and played.
-- For what I play: **Online video quality** and **Playback → Audio language**.
-- An admin: the TV's interface size, with **Keep** or **Revert**, and the
-  Couch's name.
-- Each device: its own **Name**.
-- In **This device → General → Messages**: where messages appear, **Bottom** or
-  **Top**, and whether **Confirmations** show. Undo and problems always show.
-- In **This device → General**, I can turn on **Send error reports** after reading
-  what Sentry receives. It starts off. In the app my choice covers this Couch
-  app and its local Core, and I turn it on while the app shows **This
-  computer**. In a browser it applies to this Couch in this browser. I can turn
-  it off in the same place.
-
-## Done when
-
-- Hidden words and items disappear from browsing and search for everyone, and
-  come back when removed.
-- Home's rows and text size belong to this device.
-- Quality and language follow what I start, wherever it plays.
-
-## Demo
-
-Needs: the Couch computer and a phone.
-
-## Known issues
-
-- A hidden word also matches inside longer words and in creators' names.
+- A hidden word also hides longer words that contain it, and creators whose
+  names do.

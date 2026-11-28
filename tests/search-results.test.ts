@@ -105,6 +105,11 @@ test("the same recording from several sources shows once, with the others in its
   expect(
     foldCopies([named, watch("aaaaaaaaaaa"), watch("bbbbbbbbbbb")]).map((each) => each.source),
   ).toEqual(["Radio archives", "YouTube"]);
+  // A video's ID keeps its case.
+  expect(foldCopies([named, watch("aaaaaaaaaaA")]).map((each) => each.source)).toEqual([
+    "Radio archives",
+    "YouTube",
+  ]);
   // The same title and length by someone else is another recording.
   const intro = (source: string, by: string, duration: number) => ({
     ...hit(source, "Intro"),
@@ -117,6 +122,14 @@ test("the same recording from several sources shows once, with the others in its
   expect(
     foldCopies([intro("SoundCloud", "Arsider", 45), intro("YouTube", "Arsider - Topic", 60)]),
   ).toHaveLength(1);
+  // An uncredited one between two artists' recordings joins neither.
+  expect(
+    foldCopies([
+      intro("SoundCloud", "Arsider", 45),
+      intro("Bandcamp", "Sensato", 60),
+      { ...hit("YouTube", "Intro"), duration: 50 },
+    ]).map((each) => each.source),
+  ).toEqual(["SoundCloud", "Bandcamp", "YouTube"]);
 });
 
 test("a copy out of the chosen kind never folds away the one in it", () => {

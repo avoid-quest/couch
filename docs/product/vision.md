@@ -57,7 +57,7 @@ The same work should make shared screens playable in step, not only fast.
 ## Every scene is a story
 
 Each thing people do with Couch, from music through the house to a talk with
-interpreters, is a [story](../stories/README.md) with its journey and status.
+interpreters, is a [story](../stories/README.md): a short scene and its status.
 A new scene starts there.
 
 ## What Couch is not

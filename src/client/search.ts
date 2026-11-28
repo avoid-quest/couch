@@ -3,7 +3,7 @@ import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
 // A page's address as copies name it: host without www, path decoded, no query or trailing slash, except a YouTube watch
-// page's `?v=`, the only part naming its video.
+// page's `?v=`, the only part naming its video, whose case it keeps.
 function pageKey(url?: string) {
   if (!url) return;
   try {
@@ -11,7 +11,8 @@ function pageKey(url?: string) {
     const host = page.hostname.replace(/^www\./, "");
     const path = decodeURIComponent(page.pathname).replace(/\/$/, "");
     const video = /(?:^|\.)youtube\.com$/.test(host) ? page.searchParams.get("v") : null;
-    return `${host}${path}${video ? `?v=${video}` : ""}`.toLowerCase();
+    const address = `${host}${path}`.toLowerCase();
+    return video ? `${address}?v=${video}` : address;
   } catch {
     return;
   }
@@ -58,7 +59,14 @@ function sameRecording(kept: Copyable, hit: Copyable) {
 export function foldCopies<T extends Copyable>(hits: readonly T[]): T[] {
   const kept: T[] = [];
   for (const hit of hits) {
-    const matched = kept.filter((other) => sameRecording(other, hit));
+    const linked = (other: T) => names(other, pageKey(hit.url)) || names(hit, pageKey(other.url));
+    const found = kept.filter((other) => sameRecording(other, hit));
+    // An uncredited hit matching recordings by different artists by title alone can't say which it is: it folds only
+    // with those its copies name.
+    const ambiguous = found.some(
+      (one) => !linked(one) && found.some((two) => !sameArtist(one, two)),
+    );
+    const matched = ambiguous ? found.filter(linked) : found;
     if (!matched.length) {
       kept.push(hit);
       continue;
