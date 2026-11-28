@@ -335,7 +335,7 @@ function MixerTransport({ state, connected, run }: Props) {
           className="max-w-44 min-w-32 flex-1"
         />
         {timed && (
-          <span className="text-meta whitespace-nowrap text-muted-foreground tabular-nums">
+          <span className="text-meta whitespace-nowrap text-muted-foreground tabular-nums max-sm:hidden">
             <Time.Value type="current" /> / <Time.Value type="duration" />
           </span>
         )}
