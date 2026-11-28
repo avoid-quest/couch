@@ -216,11 +216,17 @@ export function useTopHit(
   const best = Math.max(0, ...hits.map(rank));
   const candidate =
     (waiting && late !== key) || !best ? undefined : hits.find((hit) => rank(hit) === best);
-  const [held, setHeld] = useState<{ key: string; id: string } | null>(null);
-  const shown = held?.key === key ? hits.find((hit) => hit.id === held.id) : undefined;
+  const [held, setHeld] = useState<{ key: string; id: string; url?: string } | null>(null);
+  // A late hit naming the held one as its copy stands for it from then on (foldCopies).
+  const shown =
+    held?.key === key
+      ? (hits.find((hit) => hit.id === held.id) ??
+        (held.url ? hits.find((hit) => hit.copies?.includes(held.url!)) : undefined))
+      : undefined;
   const top = shown && (frozen || rank(shown) >= best) ? shown : candidate;
   useLayoutEffect(() => {
-    if (top && (held?.key !== key || held.id !== top.id)) setHeld({ key, id: top.id });
+    if (top && (held?.key !== key || held.id !== top.id))
+      setHeld({ key, id: top.id, url: top.url });
   }, [top?.id, key]);
   return top;
 }
