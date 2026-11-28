@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { Check, Lock, Minus, Pencil, Plus, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -91,6 +91,7 @@ export function GroupChips({
   const canSave = useCanSave();
   const [opened, setOpened] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const chips = useRef<HTMLDivElement>(null);
   const groups = state.groups ?? [];
   if (!scope || (!groups.length && !canSave)) return null;
   const { edit, outcome, say } = scope;
@@ -100,6 +101,11 @@ export function GroupChips({
     try {
       await current.undo();
       say(null);
+      // Focus goes back where it came from rather than to the top of a TV's Sheet.
+      const chip =
+        chips.current?.querySelector<HTMLElement>(`[data-group="${current.group}"]`) ??
+        chips.current?.querySelector<HTMLElement>("button");
+      chip?.focus();
     } catch (error) {
       gate?.setError(said(error));
     } finally {
@@ -109,6 +115,7 @@ export function GroupChips({
   return (
     <div className="grid gap-2 pb-2">
       <div
+        ref={chips}
         data-nav-row
         role="group"
         aria-label="Groups"
@@ -119,6 +126,7 @@ export function GroupChips({
           return (
             <Button
               key={group.id}
+              data-group={group.id}
               variant="secondary"
               size="sm"
               aria-expanded={group.id === opened}
@@ -155,6 +163,7 @@ export function GroupChips({
           <Button
             variant="ghost"
             size="sm"
+            autoFocus
             disabled={!connected || undoing}
             onClick={() => void undo(outcome)}
           >
@@ -168,6 +177,7 @@ export function GroupChips({
           group={open}
           plan={planGroup(open, rows, state)}
           rows={rows}
+          playbackId={state.player.playbackId}
           connected={connected}
           onEdit={canSave ? () => edit(open) : undefined}
           onApplied={(next) => {
@@ -199,6 +209,7 @@ function GroupPreview({
   group,
   plan,
   rows,
+  playbackId,
   connected,
   onEdit,
   onApplied,
@@ -206,6 +217,7 @@ function GroupPreview({
   group: MixerGroup;
   plan: Plan;
   rows: Row[];
+  playbackId: string | null;
   connected: boolean;
   onEdit?: () => void;
   onApplied: (outcome: Outcome) => void;
@@ -248,17 +260,21 @@ function GroupPreview({
   const count = plan.changes.length;
   const outcome = count
     ? `${count} ${count === 1 ? "change" : "changes"}${plan.left.length ? `, ${plan.left.length} left as ${plan.left.length === 1 ? "it is" : "they are"}` : ""}`
-    : plan.left.length
-      ? "Everything it may change is already on."
-      : "It already plays like this.";
+    : !plan.same.length
+      ? "None of it can play here now."
+      : plan.left.length
+        ? "Everything it may change is already on."
+        : "It already plays like this.";
   const apply = async () => {
-    if (!gate) return;
+    if (!gate || !playbackId) return;
     setBusy(true);
     gate.setError(null);
     const applied: Change[] = [],
       refused: string[] = [];
     let reason: unknown;
-    for (const step of applySteps(plan, rows)) {
+    for (const step of applySteps(plan, rows, playbackId)) {
+      // While nothing of the group plays yet, what plays now stays, so the playback never goes silent.
+      if (!step.gains && !plan.same.length && !applied.some((change) => change.on)) break;
       try {
         for (const action of step.actions) await gate.command(action);
         applied.push(...step.changes);
@@ -273,15 +289,17 @@ function GroupPreview({
       return;
     }
     const except = [
-      ...plan.left
-        .filter((item) => !item.stays)
-        .map((item) => `${channelNames([item])[0]} (${item.reason})`),
+      ...plan.left.map(
+        (item) => `${channelNames([item])[0]} (${item.reason}${item.stays ? ", still on" : ""})`,
+      ),
       ...refused,
     ];
     // Undo puts back this playback's devices; a device taken from another programme doesn't return to it.
-    const steps = undoSteps(applied, rows);
+    const steps = undoSteps(applied, rows, playbackId);
+    const moved = applied.some((change) => change.from);
     onApplied({
-      text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.`,
+      group: group.id,
+      text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.${moved ? " Undo changes only this playback." : ""}`,
       undo: async () => {
         for (const step of steps) for (const action of step.actions) await gate.command(action);
       },
@@ -302,7 +320,11 @@ function GroupPreview({
       </div>
       <ul className="grid gap-1">{lines}</ul>
       <div data-nav-row className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
-        <Button size="sm" disabled={!connected || !count || busy} onClick={() => void apply()}>
+        <Button
+          size="sm"
+          disabled={!connected || !count || busy || !playbackId}
+          onClick={() => void apply()}
+        >
           Apply
         </Button>
         <span role="status" className="text-sm text-muted-foreground">

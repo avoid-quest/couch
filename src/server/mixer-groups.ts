@@ -17,15 +17,15 @@ export function createMixerGroups(databasePath: string) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS mixer_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, members TEXT NOT NULL, createdAt INTEGER NOT NULL)",
   );
+  const list = (): MixerGroup[] =>
+    db
+      .query<{ id: string; name: string; members: string }, []>(
+        "SELECT id, name, members FROM mixer_groups ORDER BY createdAt, id",
+      )
+      .all()
+      .map((row) => ({ ...row, members: JSON.parse(row.members) as GroupMember[] }));
   return {
-    list(): MixerGroup[] {
-      return db
-        .query<{ id: string; name: string; members: string }, []>(
-          "SELECT id, name, members FROM mixer_groups ORDER BY createdAt, id",
-        )
-        .all()
-        .map((row) => ({ ...row, members: JSON.parse(row.members) as GroupMember[] }));
-    },
+    list,
     /** Creates a group, or replaces the one with its id (an edit, or Undo after Delete); validation.ts checked its shape. */
     save(group: Omit<MixerGroup, "id"> & { id?: string }, known: (deviceId: string) => boolean) {
       let name: string;
@@ -48,6 +48,22 @@ export function createMixerGroups(databasePath: string) {
     delete(id: string) {
       if (!db.query("DELETE FROM mixer_groups WHERE id = ?").run(id).changes)
         throw new ControllerError("That group was already deleted.", 409);
+    },
+    /** Takes a forgotten device out of every group, and deletes the groups it leaves empty; true when any changed. */
+    forget(deviceId: string) {
+      let changed = false;
+      for (const group of list()) {
+        const members = group.members.filter((member) => member.deviceId !== deviceId);
+        if (members.length === group.members.length) continue;
+        changed = true;
+        if (members.length)
+          db.query("UPDATE mixer_groups SET members = ? WHERE id = ?").run(
+            JSON.stringify(members),
+            group.id,
+          );
+        else db.query("DELETE FROM mixer_groups WHERE id = ?").run(group.id);
+      }
+      return changed;
     },
     close() {
       db.close();

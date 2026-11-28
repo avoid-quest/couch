@@ -14,8 +14,11 @@ export const said = (reason: unknown) =>
 
 /** A group being saved: a new one (no id) or an edit. */
 export type GroupDraft = { id?: string; name: string; members: GroupMember[] };
-/** What the last group action did, said beside the groups with its Undo: a toast would sit under a phone's or TV's Sheet. */
-export type Outcome = { text: string; undo: () => Promise<void> };
+/**
+ * What the last group action did, said beside the groups with its Undo: a toast would sit under a phone's or TV's Sheet.
+ * `group` is the chip focus returns to after Undo.
+ */
+export type Outcome = { text: string; undo: () => Promise<void>; group?: string };
 
 /**
  * Saving a group, in the Mixer's place: its name, then every device with its Picture and Sound, offline ones too.

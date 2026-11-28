@@ -359,8 +359,15 @@ export type Action =
   | { type: "solo"; deviceId: string }
   | { type: "allSpeakers"; level: number }
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the
-  // Device's sound out, more sets its volume and puts its sound in.
-  | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
+  // Device's sound out, more sets its volume and puts its sound in. With playbackId, only while that item plays there.
+  | {
+      type: "output";
+      deviceId: string;
+      picture?: boolean;
+      level?: number;
+      delay?: number;
+      playbackId?: string;
+    };
 
 /**
  * Play on: deviceId plays it with what that Device lends, and this window then controls it. With outputs it starts

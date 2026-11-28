@@ -334,6 +334,7 @@ function validAction(value: unknown): value is Action {
     case "output":
       return (
         id(value.deviceId) &&
+        (value.playbackId === undefined || id(value.playbackId)) &&
         (value.picture === undefined || typeof value.picture === "boolean") &&
         (value.level === undefined || number(value.level, 100)) &&
         (value.delay === undefined || number(value.delay, 5000)) &&

@@ -1,6 +1,5 @@
 import type { ClientSessionState } from "./session";
-import { soundActions, type Row } from "./where-it-plays";
-import type { Action } from "../../shared/protocol";
+import { leaveAction, soundActions, type OutputAction, type Row } from "./where-it-plays";
 import type { GroupMember, MixerGroup } from "../../shared/mixer-groups";
 
 // What applying a Group to the playback in view would change, from the Mixer's own rows (where-it-plays.ts): a group
@@ -15,24 +14,34 @@ export type Change = Line & { on: boolean; from?: string };
 type Left = Line & { reason: string; stays: boolean };
 export type Plan = { same: Line[]; changes: Change[]; left: Left[]; wanted: number };
 
-/** The group's plan for these rows; a channel the media lacks ("No picture", "No sound") is neither asked nor counted. */
+/**
+ * The group's plan for these rows. A channel the media lacks is neither asked nor counted, and while none of the group
+ * can play here it takes nothing out, so the playback never goes silent for a group that can't replace it.
+ */
 export function planGroup(group: MixerGroup, rows: Row[], state: ClientSessionState): Plan {
   const plan: Plan = { same: [], changes: [], left: [], wanted: 0 };
+  const playback = state.playbacks?.find((item) => item.id === state.playback);
+  const source = state.liveSources?.find((item) => item.id === playback?.liveSourceId);
+  const lacks = { picture: !!playback?.audioOnly, sound: source?.audio === false };
   for (const row of rows) {
     const member = group.members.find((item) => item.deviceId === row.device.id);
     for (const channel of ["picture", "sound"] as const) {
+      if (lacks[channel]) continue;
       const now = row[channel];
-      if (now.reason === "No picture" || now.reason === "No sound") continue;
       const want = !!member?.[channel],
         line = { deviceId: row.device.id, name: row.device.name, channel };
       if (want) plan.wanted++;
-      if (want === now.on) {
+      // An offline device's channel is on but plays nothing, so it doesn't count as playing as saved.
+      if (want && now.on && !row.device.online)
+        plan.left.push({ ...line, reason: "offline", stays: true });
+      else if (want === now.on) {
         if (want) plan.same.push(line);
       } else if (!now.enabled)
         plan.left.push({ ...line, reason: (now.reason ?? "Private").toLowerCase(), stays: now.on });
       else plan.changes.push({ ...line, on: want, from: want ? takenFrom(row, state) : undefined });
     }
   }
+  if (!plan.same.length && !plan.changes.some((change) => change.on)) plan.changes = [];
   return plan;
 }
 
@@ -49,21 +58,23 @@ function takenFrom(row: Row, state: ClientSessionState) {
 }
 
 /**
- * The chip: on (✓) once nothing is left to change and all it asks for plays; "5 of 6" once nothing is left to change
- * but some of it can't be put on; otherwise nothing.
+ * The chip: on (✓) only while it plays exactly as saved; "5 of 6" once nothing is left to change but some of it can't
+ * be put on; otherwise nothing.
  */
 export function groupStatus(plan: Plan) {
   if (plan.changes.length || !plan.wanted) return { on: false };
-  return plan.same.length === plan.wanted
-    ? { on: true }
-    : { on: false, part: `${plan.same.length} of ${plan.wanted}` };
+  if (plan.same.length < plan.wanted)
+    return { on: false, part: `${plan.same.length} of ${plan.wanted}` };
+  return { on: !plan.left.length };
 }
 
 /**
  * The Mixer's changes that apply a plan, one per device, in turn: devices gaining a channel first, so the playback
- * never empties on the way. Each is the action its row would send, with the unmute its sound brings.
+ * never empties on the way. Each is the action its row would send, with the unmute its sound brings; a device that
+ * keeps nothing here leaves as its row's last channel takes it out, a channel the media lacks included. Each names
+ * the item the plan was for, so Core refuses it on any other.
  */
-export function applySteps(plan: Plan, rows: Row[]) {
+export function applySteps(plan: Plan, rows: Row[], playbackId: string) {
   const ids = [...new Set(plan.changes.map((change) => change.deviceId))];
   const gains = (id: string) => plan.changes.some((change) => change.deviceId === id && change.on);
   return ids
@@ -73,18 +84,26 @@ export function applySteps(plan: Plan, rows: Row[]) {
       const changes = plan.changes.filter((change) => change.deviceId === id);
       const picture = changes.find((change) => change.channel === "picture"),
         sound = changes.find((change) => change.channel === "sound");
-      const action: Action = {
-        type: "output",
-        deviceId: id,
-        ...(picture ? { picture: picture.on } : {}),
-        ...(sound ? { level: sound.on ? row.device.volume || 50 : 0 } : {}),
-      };
-      return { changes, actions: soundActions(row, action) };
+      const leaves =
+        !!row.output &&
+        !gains(id) &&
+        (["picture", "sound"] as const).every(
+          (channel) => !row[channel].on || changes.some((change) => change.channel === channel),
+        );
+      const action: OutputAction = leaves
+        ? leaveAction(id, row.output)
+        : {
+            type: "output",
+            deviceId: id,
+            ...(picture ? { picture: picture.on } : {}),
+            ...(sound ? { level: sound.on ? row.device.volume || 50 : 0 } : {}),
+          };
+      return { changes, gains: gains(id), actions: soundActions(row, { ...action, playbackId }) };
     });
 }
 
 /** The changes that put back what a group's applied changes undid, on the devices they reached. */
-export function undoSteps(applied: Change[], rows: Row[]) {
+export function undoSteps(applied: Change[], rows: Row[], playbackId: string) {
   return applySteps(
     {
       same: [],
@@ -93,6 +112,7 @@ export function undoSteps(applied: Change[], rows: Row[]) {
       changes: applied.map((change) => ({ ...change, on: !change.on })),
     },
     rows,
+    playbackId,
   );
 }
 

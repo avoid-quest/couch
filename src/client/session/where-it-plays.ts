@@ -158,13 +158,7 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     // A channel the media lacks plays nothing, so its toggle isn't pressed.
     const pictureOn = !!current?.picture && !audioOnly,
       soundOn = !!current?.sound && !silent;
-    // Turning off its last channel takes it out: each channel it plays here goes, so each needs its consent.
-    const leave: Action = {
-      type: "output",
-      deviceId: device.id,
-      ...(current?.picture ? { picture: false } : {}),
-      ...(current?.sound ? { level: 0 } : {}),
-    };
+    const leave = leaveAction(device.id, current);
     const leaving =
       !!current && ((current.picture && !screen) || (current.sound && !speakers)) && "Private";
     const pictureReason =
@@ -257,6 +251,15 @@ export function picker(state: ClientSessionState, { here }: { here: string }): P
     rows,
   };
 }
+
+export type OutputAction = Extract<Action, { type: "output" }>;
+/** Turning off a device's last channel takes it out: each channel it plays here goes, so each needs its consent. */
+export const leaveAction = (deviceId: string, current: Output | undefined): OutputAction => ({
+  type: "output",
+  deviceId,
+  ...(current?.picture ? { picture: false } : {}),
+  ...(current?.sound ? { level: 0 } : {}),
+});
 
 /**
  * What a row's Sound or fader sends: Core's level leaves a device's Mute as it is, so one muted elsewhere (still "Muted")

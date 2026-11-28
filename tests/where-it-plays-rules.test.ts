@@ -456,10 +456,10 @@ describe("groups", () => {
       "tv picture",
       "kitchen sound",
     ]);
-    expect(applySteps(result, rows(state)).flatMap((step) => step.actions)).toEqual([
-      { type: "output", deviceId: "tv", picture: true },
-      { type: "output", deviceId: "kitchen", level: 50 },
-      { type: "output", deviceId: here, picture: false, level: 0 },
+    expect(applySteps(result, rows(state), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: "tv", picture: true, playbackId: "p" },
+      { type: "output", deviceId: "kitchen", level: 50, playbackId: "p" },
+      { type: "output", deviceId: here, picture: false, level: 0, playbackId: "p" },
     ]);
     expect(groupStatus(result)).toEqual({ on: false });
     expect(groupStatus(plan(session({ outputs: [picture("tv"), sound("kitchen")] })))).toEqual({
@@ -517,16 +517,46 @@ describe("groups", () => {
     const listening = session({ outputs: [sound("kitchen")], film: { audioOnly: true } });
     expect(plan(listening).wanted).toBe(1);
     expect(groupStatus(plan(listening))).toEqual({ on: true });
+    // An offline screen's picture isn't counted for radio either.
+    const offline = session({
+      outputs: [sound("kitchen")],
+      devices: [device("tv", { online: false }), device("kitchen")],
+      film: { audioOnly: true },
+    });
+    expect(groupStatus(plan(offline))).toEqual({ on: true });
+  });
+
+  test("a device the group leaves out leaves whole, its picture on radio too", () => {
+    const radio = session({ outputs: [both("tv")], film: { audioOnly: true } });
+    const kitchen: MixerGroup = {
+      ...livingRoom,
+      members: [{ deviceId: "kitchen", picture: false, sound: true }],
+    };
+    expect(applySteps(plan(radio, kitchen), rows(radio), "p").at(-1)!.actions).toEqual([
+      { type: "output", deviceId: "tv", picture: false, level: 0, playbackId: "p" },
+    ]);
+  });
+
+  test("while none of the group can play here, it takes nothing out", () => {
+    const state = session({
+      outputs: [both("tv")],
+      devices: [device("tv"), device("kitchen", { sharing: { audio: false, video: false } })],
+    });
+    const kitchen: MixerGroup = {
+      ...livingRoom,
+      members: [{ deviceId: "kitchen", picture: false, sound: true }],
+    };
+    expect(plan(state, kitchen).changes).toEqual([]);
   });
 
   test("Undo turns back exactly the channels it changed", () => {
     const before = session({ outputs: [both(here)] });
     const applied = plan(before).changes;
     const after = session({ outputs: [picture("tv"), sound("kitchen")] });
-    expect(undoSteps(applied, rows(after)).flatMap((step) => step.actions)).toEqual([
-      { type: "output", deviceId: here, picture: true, level: 50 },
-      { type: "output", deviceId: "tv", picture: false },
-      { type: "output", deviceId: "kitchen", level: 0 },
+    expect(undoSteps(applied, rows(after), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: here, picture: true, level: 50, playbackId: "p" },
+      { type: "output", deviceId: "tv", picture: false, playbackId: "p" },
+      { type: "output", deviceId: "kitchen", level: 0, playbackId: "p" },
     ]);
   });
 });

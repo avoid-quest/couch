@@ -3803,6 +3803,10 @@ export async function createHub(options: HubOptions) {
     shared.delete(id);
     targets.delete(id);
     remoteControllers.delete(id);
+    if (groups.forget(id)) {
+      common.groups = groups.list();
+      broadcast();
+    }
     for (const socket of sockets)
       if (socket.data.deviceId === id) {
         live.disconnect(socket, name);
@@ -5649,6 +5653,13 @@ export async function createHub(options: HubOptions) {
             requireAction(target, action, deviceId);
             if (action.type === "output" && lockedByLive(deviceId, action.deviceId))
               throw new ControllerError(LIVE_AUDIENCE_ONLY, 403);
+            // A Group's changes name the item its preview showed, so they never land on another playback.
+            if (
+              action.type === "output" &&
+              action.playbackId &&
+              stateOf(target).player.playbackId !== action.playbackId
+            )
+              throw new Error("The playing item changed. Try again.");
             if (action.type === "solo") {
               // Only this Device keeps the Playback: its picture, when it shows one, and its sound.
               requireControl(action.deviceId, deviceId);
