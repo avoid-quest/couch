@@ -37,9 +37,9 @@ export const useArtworkLight = (src: string | undefined): Light | null =>
 
 /**
  * The artwork at `src` as Core serves it, for an image to show: a phone or a browser can be refused a host's picture
- * (RaiPlay's) that Core reads. Undefined while loading, or when it can't be had.
+ * (RaiPlay's) that Core reads. Undefined while loading, or when it can't be had; with `fallback`, `src` itself then.
  */
-export function useArtworkPicture(src: string | undefined) {
+export function useArtworkPicture(src: string | undefined, fallback = false) {
   const credentials = useContext(SessionGateContext)?.credentials;
   const [picture, setPicture] = useState<{ src: string; url: string }>();
   useEffect(() => {
@@ -52,7 +52,9 @@ export function useArtworkPicture(src: string | undefined) {
         url = URL.createObjectURL(bytes);
         setPicture({ src, url });
       },
-      () => {},
+      () => {
+        if (live && fallback) setPicture({ src, url: src });
+      },
     );
     return () => {
       live = false;

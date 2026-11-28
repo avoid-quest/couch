@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
+import { useArtworkPicture } from "@/components/AmbientLight";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { AddToHomeButton } from "@/sections/home/AddToHome";
 import {
@@ -475,7 +476,10 @@ export function PlayerPage({
     return () => window.removeEventListener("couch-info", toggleInfo);
   });
   // The artwork stands at its own shape in the room its picture lights (docs/design.md, Room).
-  const [artFrame, artRatio] = useArtRatio(currentProgramme?.artworkUrl || current?.thumbnail, 1);
+  // Through Core, so a phone refused the host's picture (RaiPlay's) still shows it.
+  const artSrc = currentProgramme?.artworkUrl || current?.thumbnail;
+  const shownArt = useArtworkPicture(artSrc, true);
+  const [artFrame, artRatio] = useArtRatio(shownArt, 1);
   const radio = isRadio(current);
   const osd = !!current && !artworkStage;
   // iPhone Safari fills the window with the Player but has no document fullscreen.
@@ -625,10 +629,14 @@ export function PlayerPage({
       <Info aria-hidden="true" />
     </Button>
   );
-  const artwork = currentProgramme?.artworkUrl ? (
-    <MediaArtwork priority thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} />
-  ) : current?.thumbnail ? (
-    <MediaArtwork priority thumbnail={current.thumbnail} title={current.title} />
+  // Nothing until Core's copy arrives, rather than the title's cover for a moment.
+  const artwork = artSrc ? (
+    <MediaArtwork
+      priority
+      bare={!shownArt}
+      thumbnail={shownArt}
+      title={(currentProgramme?.artworkUrl && currentProgramme.title) || current?.title || ""}
+    />
   ) : undefined;
   const setPanel = (value: Panel | null) => {
     if (!value) setPanelState(null);

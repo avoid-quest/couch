@@ -351,7 +351,9 @@ function Picture({
     (element: HTMLSpanElement | null) => (video ? renderInto(element) : undefined),
     [video],
   );
-  const [measure, artRatio] = useArtRatio(thumbnail, isRadio(entry) ? 1 : 16 / 9);
+  // Through Core, so a phone refused the host's picture (RaiPlay's) still shows it.
+  const shown = useArtworkPicture(video ? undefined : thumbnail, true);
+  const [measure, artRatio] = useArtRatio(shown, isRadio(entry) ? 1 : 16 / 9);
   // A picture no taller than it is wide, so a square station's logo leaves the panel room.
   const ratio = video ? 16 / 9 : Math.max(1, artRatio);
   const paused = state.player.status === "paused";
@@ -370,7 +372,12 @@ function Picture({
       {video ? (
         <span ref={into} className="block size-full" />
       ) : (
-        <MediaArtwork thumbnail={thumbnail} title={title} className="size-full object-contain" />
+        <MediaArtwork
+          bare={!!thumbnail && !shown}
+          thumbnail={shown}
+          title={title}
+          className="size-full object-contain"
+        />
       )}
     </span>
   );
