@@ -159,13 +159,15 @@ export function archiveLink(value: string): ArchiveLink | undefined {
     ["playlist", lists],
   ] as const) {
     const match = patterns.map((pattern) => pattern.exec(path)).find(Boolean);
-    if (match)
-      return {
-        provider: "archives",
-        station,
-        shape,
-        url: `${origin}${path.replace(/\/episodes$/, "")}${slash ? "/" : ""}`,
-        slug: match.at(-1)!,
-      };
+    if (!match) continue;
+    // An NTS show's episode list is its show's page; anywhere else, "episodes" is a slug.
+    const page = station === "nts" && shape === "playlist" ? `/shows/${match[1]}` : path;
+    return {
+      provider: "archives",
+      station,
+      shape,
+      url: `${origin}${page}${slash ? "/" : ""}`,
+      slug: match.at(-1)!,
+    };
   }
 }

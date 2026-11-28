@@ -77,6 +77,11 @@ test("a station's link says what it is, from the link alone", () => {
     shape: "atom",
     url: "https://www.nts.live/shows/minimal-effort/episodes/x-1st-may-2026",
   });
+  expect(archiveLink("https://www.nts.live/shows/minimal-effort/episodes")?.url).toBe(
+    "https://www.nts.live/shows/minimal-effort",
+  );
+  for (const url of ["https://www.nts.live/shows/episodes", "https://lyl.live/episode/episodes"])
+    expect(archiveLink(url)?.url).toBe(url);
   // A WordPress slug keeps the station's own lower-case escapes, so a pasted link matches its show's list.
   expect(archiveLink("https://radioblackout.org/podcast/flinta-☽")?.url).toBe(
     "https://radioblackout.org/podcast/flinta-%e2%98%bd/",
