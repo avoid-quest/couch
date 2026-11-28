@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useItemLight } from "@/components/AmbientLight";
+import { useItemLight, useRoomLead } from "@/components/AmbientLight";
 import { ChooseWherePlays } from "@/components/ChooseWherePlays";
 import { SaveToggle } from "@/components/DetailHeader";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -158,6 +158,8 @@ function Lead({
       : menu,
   );
   const light = useItemLight(item.thumbnail);
+  // With nothing playing, the lead lights the room a little (RoomLight.tsx).
+  useRoomLead(item.thumbnail);
   const level = useLevel(item.url);
   const caption = mediaCaption(item);
   const meta = metaLine(caption.lead ?? programme(item), left(item));
