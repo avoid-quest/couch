@@ -109,8 +109,8 @@ for panels over the picture, **Sheet** for longer panels on phones.
 Portalled surfaces share `z-50`; later portals cover earlier ones.
 
 **A control's panel opens from it.** On desktops and the TV its Popover or menu
-hangs from the control and fits the screen; on phones a Sheet rises from the
-bottom, by the dock. Undo and confirmations show in the toast corner nearest the
+hangs from the control and fits the screen; on phones a longer panel rises as a
+Sheet from the bottom, by the dock, while short menus stay Popovers. Undo and confirmations show in the toast corner nearest the
 control that caused them.
 
 ## Copy

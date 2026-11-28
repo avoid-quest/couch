@@ -110,10 +110,10 @@ export const undoable = (text: string, undo: () => void, duration = long, contro
 };
 
 // Beside the control that queued it, as Undo is.
-export const queued = (title: string | undefined, upNext: () => void) =>
+export const queued = (title: string | undefined, upNext: () => void, control?: DOMRect) =>
   show("queued", title ? `Queued ${title}` : "Queued", {
     duration: brief,
-    position: nearest(),
+    position: nearest(control),
     action: { label: "Up next", onClick: upNext },
   });
 export const playingOn = (name: string, deviceId: string) => {

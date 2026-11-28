@@ -361,6 +361,8 @@ export function SessionGate({
     ) => {
       const owner = currentCredentials.current;
       const before = readObservation();
+      // Where the queuing control is now: focus may move on while Core answers.
+      const control = controlBox();
       const result = await work();
       const after = readObservation();
       if (
@@ -374,7 +376,7 @@ export function SessionGate({
         after.controlling === before.controlling
       ) {
         const label = typeof title === "function" ? title() : title;
-        queued(label, () => upNext(targetDeviceId));
+        queued(label, () => upNext(targetDeviceId), control);
       }
       return result;
     },

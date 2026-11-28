@@ -72,8 +72,9 @@ type Props = {
 };
 type Side = "popover" | "bottom";
 
-// A desktop's pointer and width: there, as on the TV, the panel hangs from its button; a phone's rises from the bottom.
-const desktopQuery = "(min-width: 960px) and (pointer: fine)";
+// A mouse wider than a phone (Settings' own 48rem): there, as on the TV, the panel hangs from its button; a phone's
+// rises from the bottom.
+const desktopQuery = "(min-width: 48rem) and (pointer: fine)";
 export const subscribeDesktop = (onChange: () => void) => {
   const media = window.matchMedia(desktopQuery);
   media.addEventListener("change", onChange);
