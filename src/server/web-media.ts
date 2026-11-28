@@ -3,7 +3,13 @@ import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality, VideoQualityLabels } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { resolveWithYtDlp, runYtDlp, UnavailableError, type YtDlpOptions } from "./yt-dlp";
+import {
+  ExtractionError,
+  resolveWithYtDlp,
+  runYtDlp,
+  UnavailableError,
+  type YtDlpOptions,
+} from "./yt-dlp";
 import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
@@ -14,12 +20,15 @@ import { resolveAnimeSaturnLink } from "./animesaturn";
 import { resolveAnimeUnityLink } from "./animeunity";
 import { animeSaturnTitle } from "./providers/animesaturn";
 import { animeUnityTitle } from "./providers/animeunity";
+import { isArchiveHost } from "../shared/archives";
+import { archiveEpisode, resolveArchiveLink } from "./providers/archives";
 import { logMediaResolution } from "./media-diagnostics";
 import type { SelectedChannels } from "./source-preparation";
 import { storyboardPreview } from "./playback-preview";
 import { vttPreview, type PreviewInput } from "./preview-manifest";
 import { hlsPreview } from "./hls-preview";
 import type { CollectionLink } from "../shared/media";
+import { browseSpotify, matchSpotifyTrack } from "./providers/spotify";
 
 export type WebMediaMetadata = {
   creator?: CollectionLink;
@@ -450,6 +459,21 @@ export function videoQualities(
   return labels;
 }
 
+// The track's own name and cover from Spotify; the stream from its YouTube match.
+async function spotifyMatch(source: string, signal?: AbortSignal) {
+  const { url, item } = await matchSpotifyTrack(source, signal).catch((error: unknown) => {
+    signal?.throwIfAborted();
+    throw new ExtractionError(
+      error instanceof Error ? error.message : "Couch found no YouTube upload of this track.",
+    );
+  });
+  const metadata: WebMediaMetadata = {
+    title: item.title,
+    ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}),
+  };
+  return { url, headers: {}, metadata, subtitles: [] };
+}
+
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
   return async function resolveWebMedia(
@@ -475,8 +499,15 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         ? await resolveAnimeSaturnLink(source, signal)
         : isAnimeUnityHost(host)
           ? await resolveAnimeUnityLink(source, signal)
-          : undefined;
-    const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+          : isArchiveHost(host)
+            ? await resolveArchiveLink(source, signal)
+            : host === "open.spotify.com"
+              ? await spotifyMatch(source, signal)
+              : undefined;
+    // A Spotify track plays its YouTube match, chosen and checked as YouTube's own items are.
+    const played = new URL(direct?.url ?? source).hostname;
+    const youtube =
+      played === "youtu.be" || played === "youtube.com" || played.endsWith(".youtube.com");
     // A cap sorts by the closest size: the tallest at most the cap, else the smallest above it. yt-dlp's
     // res is the smaller side, so YouTube caps portrait Shorts by width; other sites cap the height.
     const cap = selectedQuality === "best" ? "" : `:${selectedQuality.slice(0, -1)}`;
@@ -523,7 +554,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         direct?.url ?? streamingCommunity ?? source,
       ],
       { ...options, signal, plugin },
-      plugin ?? providerForUrl(source) ?? "other",
+      plugin ?? (youtube ? "youtube" : undefined) ?? providerForUrl(source) ?? "other",
       async (extracted) => {
         const info = parseInfo(extracted);
         if (info._has_drm === true) await rejectDrm(info, signal);
@@ -673,10 +704,19 @@ function createWebMediaInspector(options: ResolverOptions = {}) {
         ? animeSaturnTitle
         : isAnimeUnityHost(host)
           ? animeUnityTitle
-          : undefined;
+          : host === "open.spotify.com"
+            ? spotifyTitle
+            : undefined;
     if (inspectTitle) {
       const { title, thumbnail, duration } = (await inspectTitle(source, signal)).item;
       return { title, thumbnail, duration };
+    }
+    if (isArchiveHost(host)) {
+      const { title, thumbnail, duration, creator } = await archiveEpisode(
+        source,
+        signal ?? AbortSignal.timeout(25_000),
+      );
+      return { title, thumbnail, duration, creator };
     }
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const output = await runYtDlp(
@@ -693,6 +733,12 @@ function createWebMediaInspector(options: ResolverOptions = {}) {
     );
     return publicMetadata(parseInfo(output));
   };
+}
+
+async function spotifyTitle(url: string, signal?: AbortSignal) {
+  const { item } = await browseSpotify({ url }, signal);
+  if (!item) throw new ExtractionError("Couldn't open this page. It may be unsupported.");
+  return { item };
 }
 
 export const resolveWebMedia = createWebMediaResolver();

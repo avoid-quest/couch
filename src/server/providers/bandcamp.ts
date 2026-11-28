@@ -1,22 +1,20 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { ExtractionError, runYtDlp } from "../yt-dlp";
-import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
+import {
+  label,
+  object,
+  ProviderError,
+  providerItemId,
+  providerJson,
+  withProviderItem,
+} from "./http";
 
 type Metadata = Record<string, unknown>;
-type Target = { url: string; kind: "track" | "album"; host: string };
-const object = (value: unknown): value is Metadata =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const label = (value: unknown, limit = 200) =>
-  typeof value === "string"
-    ? value
-        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
-        .trim()
-        .slice(0, limit) || undefined
-    : undefined;
+export type Target = { url: string; kind: "track" | "album"; host: string };
 const invalidCatalog = () =>
   new ProviderError("Bandcamp returned invalid catalog information. Update yt-dlp and try again.");
 
-function target(value: unknown): Target {
+export function target(value: unknown): Target {
   const invalid = () =>
     new ProviderError(
       "Enter a public Bandcamp track or album link, such as https://artist.bandcamp.com/album/title.",
@@ -37,7 +35,7 @@ function target(value: unknown): Target {
   };
 }
 
-function thumbnail(info: Metadata): string | undefined {
+export function thumbnail(info: Metadata): string | undefined {
   const alternatives = Array.isArray(info.thumbnails)
     ? info.thumbnails
         .filter(object)
@@ -73,7 +71,7 @@ function artist(info: Metadata, album = false): string | undefined {
   );
 }
 
-function mediaItem(info: Metadata, source: Target): ProviderItem {
+export function mediaItem(info: Metadata, source: Target): ProviderItem {
   const title = label(info.track) ?? label(info.title);
   if (!title) throw invalidCatalog();
   const image = thumbnail(info);
@@ -235,7 +233,7 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request?:
     signal?.throwIfAborted();
     const args =
       source.kind === "album"
-        ? ["--flat-playlist", "--playlist-items", "1:501"]
+        ? ["--flat-playlist", "--playlist-items", "1:500"]
         : ["--no-playlist", "--playlist-items", "1", "--format", "bestaudio/best"];
     const output = await run(
       [
@@ -270,16 +268,9 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request?:
       throw new ProviderError("Choose a Bandcamp album link to queue its tracks.", 400);
     const info = await extract(source, cancellation);
     if (info._type !== "playlist" || !Array.isArray(info.entries)) throw invalidCatalog();
-    if (
-      info.entries.length > 500 ||
-      (typeof info.playlist_count === "number" && info.playlist_count > 500)
-    )
-      throw new ProviderError(
-        "This album has more than 500 tracks. Queue individual tracks instead.",
-        400,
-      );
-    if (info.playlist_count != null && info.playlist_count !== info.entries.length)
-      throw invalidCatalog();
+    const count = typeof info.playlist_count === "number" ? info.playlist_count : undefined;
+    // Couch's queue limit: a longer album queues its first 500 tracks.
+    if (count !== undefined && Math.min(count, 500) !== info.entries.length) throw invalidCatalog();
     if (!info.entries.length) throw new ProviderError("This Bandcamp album has no public tracks.");
     const title = label(info.title);
     if (!title) throw invalidCatalog();
@@ -307,6 +298,7 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request?:
     const subtitle = artist(detail, true);
     return withProviderItem("bandcamp", source.url, "collection", {
       title,
+      ...(count === undefined ? {} : { count }),
       thumbnail: image,
       subtitle,
       description: label(info.description, 2000),

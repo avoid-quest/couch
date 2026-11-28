@@ -30,6 +30,7 @@ before the work starts.
 | [Join a Couch](join-a-couch.md) | preview |
 | [Movie night](movie-night.md) | preview |
 | [Everyone adds to Up next](everyone-adds-to-up-next.md) | preview |
+| [Find and play anything](find-and-play-anything.md) | wip |
 | [Music through the house, and into the shower](music-through-the-house.md) | preview |
 | [Late film, quiet house](late-film-quiet-house.md) | preview |
 | [My own thing, then onto the TV](my-own-thing-then-the-tv.md) | preview |
@@ -53,7 +54,8 @@ before the work starts.
 | --- | --- |
 | Pairing, device names, lending speakers and screen | Join a Couch |
 | Film, series and anime catalogues; Remote; Continue and resume | Movie night |
-| Search, pasting a link, Up next, Undo, Autoplay, lists, For later | Everyone adds to Up next |
+| Up next, Undo, Autoplay, lists, For later | Everyone adds to Up next |
+| Search, pasting a link, radio archives, Mixcloud, Spotify, Clear Up next | Find and play anything |
 | Sound on several devices, in step; device levels and Volume | Music through the house |
 | Picture and sound on different devices, Sync…, Compressor | Late film, quiet house |
 | Several Playbacks, Play on, Move here, Stop | My own thing, then onto the TV |

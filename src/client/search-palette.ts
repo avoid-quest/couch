@@ -1,3 +1,4 @@
+import { fold } from "../shared/search-text";
 import { canReturn, searchRelevance, type SearchKind, type SearchRouteState } from "./search";
 
 /** What a search is narrowed to before it runs: the results page's kind and source, or none. */
@@ -15,17 +16,21 @@ export const kindLabels: Record<SearchKind, string> = {
   videos: "Videos",
   audio: "Audio",
 };
-// The kinds in the results' order, then the sources; each answers to its name and the short forms people type.
-export const scopes: Scope[] = [
+// The kinds in the results' order, then the sources in the chip row's order; each answers to its name and the short
+// forms people type.
+const scopes: Scope[] = [
   { kind: "films", label: kindLabels.films, words: ["film", "movies", "movie", "series", "shows"] },
   { kind: "radio", label: kindLabels.radio, words: ["stations", "station", "fm"] },
   { kind: "live", label: kindLabels.live, words: ["streams", "stream"] },
   { kind: "music", label: kindLabels.music, words: ["songs", "albums", "album"] },
   { kind: "audio", label: kindLabels.audio, words: [] },
   { kind: "videos", label: kindLabels.videos, words: ["video"] },
-  { source: "YouTube", label: "YouTube", words: ["yt"] },
-  { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
+  { source: "Radio archives", label: "Radio archives", words: ["archives", "lyl", "nts"] },
+  { source: "Mixcloud", label: "Mixcloud", words: ["mc"] },
   { source: "SoundCloud", label: "SoundCloud", words: ["sc"] },
+  { source: "Bandcamp", label: "Bandcamp", words: ["bc"] },
+  { source: "Spotify", label: "Spotify", words: ["sp"] },
+  { source: "YouTube", label: "YouTube", words: ["yt"] },
   { source: "Twitch", label: "Twitch", words: [] },
   { source: "RaiPlay", label: "RaiPlay", words: ["rai"] },
   { source: "StreamingCommunity", label: "StreamingCommunity", words: [] },
@@ -38,11 +43,7 @@ export const scopes: Scope[] = [
   { source: "Shared sources", label: "Shared sources", words: ["shared"] },
 ];
 
-const squash = (value: string) =>
-  value
-    .normalize("NFC")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
+const squash = (value: string) => fold(value).replace(/[^\p{L}\p{N}]+/gu, "");
 /** The scopes the typed text names, best first: an exact name or short form, then those it starts. Two letters at least. */
 function matchScopes(text: string): Scope[] {
   const typed = squash(text);
@@ -58,6 +59,28 @@ function matchScopes(text: string): Scope[] {
 }
 /** What Tab completes the field's text to: the best scope, when the text is all one scope's name. */
 export const completeScope = (text: string): Scope | undefined => matchScopes(text)[0];
+
+// The chip row's lead: the kinds and platforms people reach for most, so a wide palette shows both before More.
+const chipLead = [
+  "Music",
+  "Radio",
+  "Radio archives",
+  "Spotify",
+  "SoundCloud",
+  "Bandcamp",
+  "Mixcloud",
+  "YouTube",
+  "Films & series",
+];
+const chipRank = (scope: Scope) => {
+  const at = chipLead.indexOf(scope.label);
+  return at < 0 ? chipLead.length : at;
+};
+/** The chip row under the field: the lead kinds and platforms, then the other kinds and sources that can answer. */
+export const chipScopes = (current: SearchScope) =>
+  scopes
+    .filter((scope) => scope.kind || canReturn(scope.source, current.kind))
+    .sort((a, b) => chipRank(a) - chipRank(b));
 
 export const isChosen = (current: SearchScope, scope: Scope) =>
   scope.kind ? current.kind === scope.kind : current.source === scope.source;
@@ -96,7 +119,7 @@ export const hasScope = (current: SearchScope) => !!current.kind || current.sour
 type Titled = { title: string; source?: string; context?: string };
 type Station = { name: string };
 /**
- * The field's suggestions while typing, from what the client already holds: scopes, recent searches, saved and played
+ * The field's suggestions while typing, from what the client already holds: recent searches, saved and played
  * titles, and stations. Never a source's search. A scope narrows them: stations only for radio, titles never for it,
  * and a source only its own titles.
  */
@@ -106,8 +129,8 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
   held: { recents: string[]; saved: T[]; played: P[]; stations: S[] },
   limit = 3,
 ) {
-  const { strong } = searchRelevance(text);
-  const typed = text.trim().toLocaleLowerCase();
+  const { strong } = searchRelevance(text, true);
+  const typed = fold(text.trim());
   const radio = !current.kind || current.kind === "radio";
   const titled = <I extends Titled>(items: I[]) =>
     current.kind === "radio"
@@ -128,9 +151,8 @@ export function suggest<T extends Titled, P extends Titled, S extends Station>(
     return true;
   };
   return {
-    scopes: matchScopes(text).slice(0, 3),
     recents: held.recents
-      .filter((query) => query.toLocaleLowerCase() !== typed && strong({ title: query }))
+      .filter((query) => fold(query.trim()) !== typed && strong({ title: query }))
       .slice(0, limit),
     saved: titled(held.saved).filter(once),
     played: titled(held.played).filter(once),

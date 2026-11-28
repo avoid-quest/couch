@@ -37,7 +37,7 @@ import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
 import { useAutoplayList } from "./autoplay-list";
 import { browserActions, queuePageUrl } from "@/original-page";
-import { ItemMenu, useItemMenu } from "@/components/RowMenu";
+import { ItemMenu, RowOptions, useItemMenu } from "@/components/RowMenu";
 import { queueCursorIndex } from "../../../shared/queue";
 
 /** An entry's artwork shape (art-shape.ts): a station is square, an episode a frame, the rest go by their source. */
@@ -377,19 +377,37 @@ export function QueuePanel({
                       {upNext.length} to play
                       {doneIn == null ? "" : `, until ${formatEndTime(doneIn)}`}
                     </h3>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="-mr-2.5"
+                    <div className="-mr-2.5 flex items-center">
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          disabled={!connected}
+                          onClick={() => {
+                            keep.reset();
+                            setListName("");
+                          }}
+                        >
+                          Save as list
+                        </Button>
+                      </DialogTrigger>
+                      {/* Up next's menu: Clear Up next, undone from its toast as Remove is. Its "…" goes with
+                          the list, so the focus waits on the heading. */}
+                      <RowOptions
+                        title="Up next"
                         disabled={!connected}
-                        onClick={() => {
-                          keep.reset();
-                          setListName("");
-                        }}
-                      >
-                        Save as list
-                      </Button>
-                    </DialogTrigger>
+                        actions={[
+                          {
+                            label: "Clear Up next",
+                            run: () => {
+                              panelRef.current
+                                ?.querySelector<HTMLElement>("#queue-title")
+                                ?.focus({ preventScroll: true });
+                              void run({ type: "clearUpNext" });
+                            },
+                          },
+                        ]}
+                      />
+                    </div>
                   </div>
                   <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">
                     {upNext.map((entry, index) => {

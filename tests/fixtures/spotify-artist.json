@@ -1,0 +1,78 @@
+{
+  "type": "artist",
+  "id": "2enCZC6FjkZDdEW7rKBfw0",
+  "title": "Devi Tensione",
+  "subtitle": "Top tracks",
+  "trackList": [
+    {
+      "uri": "spotify:track:2gs7C6ywKz8h9JFZzdt6DH",
+      "title": "Quanto basta",
+      "subtitle": "Devi Tensione",
+      "duration": 138750,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:3tgUU5tgj40wggnWXT7eaO",
+      "title": "Tanto tempo",
+      "subtitle": "Devi Tensione",
+      "duration": 134783,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:2fga15htEHvKJajQrxwGTj",
+      "title": "Tanto tempo - NOT399093 Remix",
+      "subtitle": "Devi Tensione, NOT399093",
+      "duration": 242100,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:55iY7rnXOYKt5spBh31bKh",
+      "title": "Rapanui (Devi Tensione Rework)",
+      "subtitle": "Kinked, Devi Tensione",
+      "duration": 125000,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:4Q5msaQFFpLn1GfEHcJzWn",
+      "title": "Fuffy",
+      "subtitle": "Devi Tensione",
+      "duration": 54625,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:1SzWMDuaYGPlAL1c3FsENc",
+      "title": "666",
+      "subtitle": "Devi Tensione",
+      "duration": 184000,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:2vvTHPXVQcu5UCRyBIM6x8",
+      "title": "Verme",
+      "subtitle": "Devi Tensione",
+      "duration": 114218,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:2fLHgYMx28Fl5gToSO1wbh",
+      "title": "Non",
+      "subtitle": "Devi Tensione",
+      "duration": 136624,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:03dWacCmHBC6ojFNdQyFeV",
+      "title": "Tanto tempo - Kinked & Das Amore Remix",
+      "subtitle": "Devi Tensione, Kinked, Das Amore",
+      "duration": 278073,
+      "isPlayable": true
+    },
+    {
+      "uri": "spotify:track:4kirUidYWgxqYj2cf436Nw",
+      "title": "Meno",
+      "subtitle": "Devi Tensione",
+      "duration": 142437,
+      "isPlayable": true
+    }
+  ]
+}

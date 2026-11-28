@@ -46,6 +46,7 @@ import type {
 import type { WatchingProfile } from "../shared/viewing";
 import {
   providerForUrl,
+  spotifyLink,
   type ProviderId,
   type ProviderPage,
   type VideoQuality,
@@ -80,8 +81,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { playbackPreviewResponse } from "./playback-preview";
 import { hlsPreview } from "./hls-preview";
 import { logMediaDiagnostic, mediaAddress } from "./media-diagnostics";
-import { createProviders } from "./providers";
-import { loadProviderList } from "./providers";
+import { createProviders, loadProviderList, startProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { artworkResponse } from "./artwork";
 import { createPassThrough } from "./pass-through";
@@ -89,7 +89,7 @@ import { createRepacks } from "./ts-repack";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
 import { createPlaylists } from "./playlists";
-import { upcomingQueue } from "../shared/queue";
+import { queueCursorIndex, upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
 import { createTvPairing } from "./tv-pairing";
 import type { DeviceIdentity } from "../shared/devices";
@@ -3901,7 +3901,11 @@ export async function createHub(options: HubOptions) {
   ): Promise<void> | undefined => {
     type Intake =
       | { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string }
-      | { entries: QueueEntry[]; title: string };
+      | {
+          entries: QueueEntry[];
+          title: string;
+          more?: Promise<{ entries: QueueEntry[]; short: boolean }>;
+        };
     const actor = playedBy?.deviceId ?? hostId(),
       authenticated = authorize;
     authorize = () => {
@@ -3918,7 +3922,10 @@ export async function createHub(options: HubOptions) {
       authorize();
       return true;
     };
-    const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
+    const web = (link: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
+      // A shared Spotify track link carries a locale and tracking (`/intl-it/track/…?si=`); the queue keeps its page.
+      const spotify = spotifyLink(link.url);
+      const item = spotify?.kind === "track" ? { ...link, url: spotify.url } : link;
       const title = item.title?.trim();
       // Until the page's own title resolves, the link itself names it ("youtube.com/watch?v=…"), not just its host.
       const url = new URL(item.url);
@@ -3941,13 +3948,26 @@ export async function createHub(options: HubOptions) {
         ...(!title ? { inspectUrl: item.url } : {}),
       };
     };
+    // Play all starts as soon as the list's first part is read; Queue all waits for the whole list.
     const list = async (
       provider: ProviderId,
       url: string,
       quality?: VideoQuality,
+      playNow?: boolean,
     ): Promise<Intake> => {
-      const page = await loadProviderList(provider, url, shutdown.signal);
-      return { entries: providerListEntries(page, quality), title: page.title || "Playlist" };
+      const { more, ...page }: Awaited<ReturnType<typeof startProviderList>> = playNow
+        ? await startProviderList(provider, url, shutdown.signal)
+        : await loadProviderList(provider, url, shutdown.signal);
+      const rest = more?.then(({ items, short }) => ({
+        entries: providerListEntries({ items }, quality),
+        short,
+      }));
+      rest?.catch(() => {}); // Read on only when Play all starts.
+      return {
+        entries: providerListEntries(page, quality),
+        title: page.title || "Playlist",
+        ...(rest ? { more: rest } : {}),
+      };
     };
     let prepare: () => Intake | null | Promise<Intake | null>;
     switch (action.type) {
@@ -3958,7 +3978,7 @@ export async function createHub(options: HubOptions) {
         prepare =
           action.shape === "atom"
             ? () => web({ ...action, entryId: crypto.randomUUID() })
-            : () => list(action.provider, action.url, action.quality);
+            : () => list(action.provider, action.url, action.quality, action.playNow);
         break;
       case "enqueueRadio":
         prepare = () => {
@@ -4114,7 +4134,37 @@ export async function createHub(options: HubOptions) {
             playedBy,
             continuation: { title: prepared.title, entries: entries.slice(1) },
           });
-        } else session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
+          const more = prepared.more;
+          if (more)
+            void session
+              .extendContinuation(
+                entries.at(-1)!.id,
+                more.then((part) => part.entries),
+              )
+              .then(async (extended) => {
+                if (!extended) return;
+                const { entries: later, short } = await more;
+                if (!short) return;
+                const total = entries.length + later.length;
+                session.notice(
+                  playedBy ?? playbackActor(null)!,
+                  `Playing ${total} tracks from ${prepared.title}; the rest stay on its page`,
+                  "list-short",
+                  actor,
+                );
+              })
+              .catch(() => {});
+        } else {
+          // A list longer than Up next's room queues what fits; a full Up next still refuses it.
+          const room = 500 - stateOf(playback).queue.length;
+          session.loadQueue(
+            room > 0 ? prepared.entries.slice(0, room) : prepared.entries,
+            "append",
+            authorize,
+            playedBy,
+            action.placement,
+          );
+        }
       }
     })();
   };
@@ -5787,6 +5837,11 @@ export async function createHub(options: HubOptions) {
             requireAction(playback, action, deviceId);
             if (action.type === "play" || (action.type === "undoStop" && !mixOf(playback).length))
               present(playback, playedBy);
+            if (action.type === "clearUpNext") {
+              const state = stateOf(playback);
+              for (const entry of state.queue.slice(queueCursorIndex(state) + 1))
+                inspections.get(entry.id)?.abort();
+            }
             if (action.type === "remove") {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find((entry) => entry.id === action.entryId)?.title;
@@ -5825,15 +5880,17 @@ export async function createHub(options: HubOptions) {
                   ? "stopped playback"
                   : action.type === "remove"
                     ? `removed ${removed || "an item"}`
-                    : action.type === "enqueue"
-                      ? `${added} ${action.entry.title}`
-                      : action.type === "enqueueProvider" || action.type === "enqueueWeb"
-                        ? `${added} ${action.title || "media"}`
-                        : action.type === "enqueueRadio"
-                          ? `${added} ${titleOf(action.entryId) || "media"}`
-                          : action.type === "play"
-                            ? `played ${titleOf(action.entryId) || "media"}`
-                            : null;
+                    : action.type === "clearUpNext"
+                      ? "cleared Up next"
+                      : action.type === "enqueue"
+                        ? `${added} ${action.entry.title}`
+                        : action.type === "enqueueProvider" || action.type === "enqueueWeb"
+                          ? `${added} ${action.title || "media"}`
+                          : action.type === "enqueueRadio"
+                            ? `${added} ${titleOf(action.entryId) || "media"}`
+                            : action.type === "play"
+                              ? `played ${titleOf(action.entryId) || "media"}`
+                              : null;
             if (label) playback.session.notice(playedBy, `${playedBy.name} ${label}`);
           }
         } catch (error) {

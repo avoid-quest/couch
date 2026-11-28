@@ -1,0 +1,27 @@
+{
+  "shows": [],
+  "episodes": [
+    {
+      "slug": "dj-ale",
+      "title": "DJ Alé",
+      "artists": "DJ Alé",
+      "startAt": "2026-10-22T16:00:00.000Z",
+      "duration": "01:00:00",
+      "mixcloud": "https://www.mixcloud.com/lylradio/dj-al%C3%A9-dj-al%C3%A9-22102026/",
+      "soundcloud": "https://soundcloud.com/lyl_radio/dj-ale?utm_medium=api&utm_campaign=social_sharing&utm_source=id_314837",
+      "image": {
+        "url": "https://static.lyl.live/uploads/DJ_ALE_OCT_26_c25d86fc3c.jpeg",
+        "formats": {
+          "small": {
+            "url": "https://static.lyl.live/uploads/small_DJ_ALE_OCT_26_c25d86fc3c.jpeg"
+          }
+        }
+      },
+      "show": {
+        "slug": "one-off-lyon",
+        "title": "One Off "
+      }
+    }
+  ],
+  "articles": []
+}

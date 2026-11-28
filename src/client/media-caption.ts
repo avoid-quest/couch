@@ -54,13 +54,19 @@ export const savedCaption = (item: ForLaterItem) => {
   };
 };
 
-/** One meta line, one separator: its parts (a provider's own "Game · 1,204 viewers" among them) joined by commas. */
+/**
+ * One meta line, one separator: its parts (a provider's own "Game · 1,204 viewers" among them) joined by commas, each
+ * once (a show named as its collection and its creator reads "One Off", not "One Off, One Off").
+ */
 export const metaLine = (...parts: (string | false | null | undefined)[]) =>
-  parts
-    .flatMap((part) => (part ? part.split(" · ") : []))
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(", ");
+  [
+    ...new Set(
+      parts
+        .flatMap((part) => (part ? part.split(" · ") : []))
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ].join(", ");
 
 /** Only these catalogues put type labels in subtitles; other sources put creator names there. */
 export function collectionSubtitle(

@@ -1,0 +1,658 @@
+{
+ "showsByStyles": [
+  {
+   "slug": "cuntry-club-airline",
+   "title": "CUNTRY CLUB AIRLINE"
+  },
+  {
+   "slug": "ghettology",
+   "title": "Ghettology"
+  },
+  {
+   "slug": "gomar",
+   "title": "Gomar"
+  },
+  {
+   "slug": "sur-le-reseau",
+   "title": "Sur Le Réseau"
+  },
+  {
+   "slug": "the-sweetest-sounds",
+   "title": "The Sweetest Sounds"
+  }
+ ],
+ "episodesByShow": {
+  "cuntry-club-airline": [
+   {
+    "slug": "cuntry-club-airlines-2",
+    "title": "CUNTRY CLUB AIRLINES",
+    "artists": "Dj Under Arrest",
+    "startAt": "2024-06-25T19:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/cuntry-club-airlines-w-dj-under-arrest-250624/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/8ee531468c88a7a9e91bdae75db34c53.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/7e16fe8a3dcf6e015a2b7f08f9f19c99.jpg"
+    }
+   },
+   {
+    "slug": "cuntry-club-airline-1",
+    "title": "CUNTRY CLUB AIRLINE",
+    "artists": "Dj Under Arrest",
+    "startAt": "2024-03-05T20:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/cuntry-club-airline-w-dj-under-arrest-050324/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/f40befb02d72bd714fece1a460177bda.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/fd3e085d19b821385964ad3f1bb116c5.jpg"
+    }
+   },
+   {
+    "slug": "cuntry-club-airlines-1",
+    "title": "CUNTRY CLUB AIRLINES",
+    "artists": "DJ Under Arrest",
+    "startAt": "2024-01-09T20:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/cuntry-club-airlines-w-dj-under-arrest-090124/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/5bdee8805721775684063b886edfcc0b.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/cab31d884481d856a50260fa1617c8f6.png"
+    }
+   },
+   {
+    "slug": "cuntry-club-airlines",
+    "title": "CUNTRY CLUB AIRLINES : Emergency Gaza Support",
+    "artists": "DJ Under Arrest",
+    "startAt": "2023-11-14T20:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/cuntry-club-airlines-emergency-gaza-support-w-dj-under-arrest-141123/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/74d98c2f2ee50604b33b1fc2226ed435.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/9dcd9edda13782665a2b14e444360ec0.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-17",
+    "title": "Damn/asty",
+    "artists": "Dj under arrest",
+    "startAt": "2023-06-13T20:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-130623-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/56433edf870c1d1e246a83bea7003de0.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/b86f0cccbf1ad1cfb82206cde1ca38d2.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-16",
+    "title": "DAMN/ASTY",
+    "artists": "Brenda",
+    "startAt": "2023-04-18T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-180423-wbrenda/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/a29d46daa6cb493ec409d8724e2ae209.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/bb624a7e6d4f180c372f685c000f6274.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-15",
+    "title": "Damn/asty",
+    "artists": "Cimarrón",
+    "startAt": "2023-03-08T19:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-080323-wcimarr%C3%B3n/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/ed8058245aabeb91e0895d11c71c16f5.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/8ce291f7fa6a2a02b155829fe58ffd2c.png"
+    }
+   },
+   {
+    "slug": "damn-asty-14",
+    "title": "DAMN/ASTY",
+    "artists": "𝚆⊕𝙻𝙵𝚆𝙰𝚁 ⊕𝙽𝙴 ",
+    "startAt": "2023-01-11T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-110123-w/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/1dca9951d30eac94bb891608c0fb4953.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/78d965dcb86e6a0096f2e6f51bc24f4e.png"
+    }
+   },
+   {
+    "slug": "damn-asty-13",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest & CCOntrary",
+    "startAt": "2022-11-09T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-091122-wdj-under-arrest-ampamp-ccontrary/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/89afe1cb1e029c89d5067a990d248f86.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/57219257939813d3254701bf08507e9d.png"
+    }
+   },
+   {
+    "slug": "damn-asty-12",
+    "title": "DAMN/ASTY",
+    "artists": "DJ UNDER ARREST",
+    "startAt": "2022-09-14T13:00:00.000Z",
+    "duration": "02:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-140922-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/e2c4dc491e06b659aef412801b113ad7.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/011ff6450879cc832c0dc6f98f4550f2.PNG"
+    }
+   },
+   {
+    "slug": "damn-asty-11",
+    "title": "Damn/asty",
+    "artists": "Joanna Oj & Dj Under Arrest",
+    "startAt": "2022-06-15T13:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-150622-wjoanna-oj-ampamp-dj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/c6cecf8aff46fa8be04ff4690fa5b92c.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/b179e5a5ddaa9d90d4371feedb77e74b.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-10",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2022-04-20T17:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-200422-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/dbc85159bec312f8292d14fc91575928.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/ce0ca3adc17601e837173b4e23b2a779.png"
+    }
+   },
+   {
+    "slug": "damn-asty-9",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2022-02-23T17:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-230222-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/39c6dd864f6fbe1fc65bdcb8460dcd3e.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/e8567804aee64a864cbaa6f00b967ecf.png"
+    }
+   },
+   {
+    "slug": "damn-asty-8",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2021-12-22T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-221221-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/6853223606188034f2868ee81b982cb5.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/0e725422c6ac14366afa993db8fd389f.JPG"
+    }
+   },
+   {
+    "slug": "damn-asty-7",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2021-10-27T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-271021-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/c88a55a02c063b9e816772288d7ad8e1.png"
+    }
+   },
+   {
+    "slug": "damn-asty-6",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2021-09-01T14:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-010921-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/4375437fc1cadda5bcb85203fe1d3cd8.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/981cac067126f1363d25c3a85192e2f8.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-5",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest & Jacques Satre",
+    "startAt": "2021-06-30T14:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-300621-wdj-under-arrest-ampamp-jacques-satre/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/47c51b234a712b33e9edc7e45a536329.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/6fe892880c8f4b286b6fab5c4dc3234b.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-4",
+    "title": "Damn/asty ",
+    "artists": "Dj Under Arrest & Ivan Borgen",
+    "startAt": "2021-05-05T14:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-050521-wdj-under-arrest-ivan-borgen/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/f7f05c26f3bf9c141d157763a39292b3.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/f38a1fe3742a71d310e1788843047b39.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty-3",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2021-03-10T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-100321-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/damnastymars_0eaf8c6ff0.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/damnasty_mars_5bc70130b7.png"
+    }
+   },
+   {
+    "slug": "damn-asty-2",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2021-01-13T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-130121-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/damnastyjanvierdef_7112380238.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/Nouveau_projet_3_788dcde10c.png"
+    }
+   },
+   {
+    "slug": "damn-asty-1",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2020-11-18T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-181120-wdj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/asty_nov_2831cc6c97.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/126497004_287366402630704_3832401523327507619_n_46e5059e4c.jpg"
+    }
+   },
+   {
+    "slug": "damn-asty",
+    "title": "Damn/asty",
+    "artists": "Dj Under Arrest",
+    "startAt": "2020-09-23T14:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/damnasty-23092020-w-dj-under-arrest/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/DJUNDERARREST_Nasty_34c667518d.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/damnasty_d1287a2d17.png"
+    }
+   }
+  ],
+  "ghettology": [
+   {
+    "slug": "ghettology-3",
+    "title": "Ghettology",
+    "artists": "Brother Karl",
+    "startAt": "2026-03-12T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/ghettology-w-brother-karl-120326/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/d045f14bfe29ba9753b499928b1042c9.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/b81ae69d5a908fb48909190d2cb7c23a.jpg"
+    }
+   },
+   {
+    "slug": "ghettology-2",
+    "title": "Ghettology",
+    "artists": "Brother Karl",
+    "startAt": "2026-01-22T07:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/ghettology-w-ghettology-220126/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/6da58571d981794b8fa9afc5291f5564.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/b8251d17e12e84cfcd7096ea1048f874.jpg"
+    }
+   },
+   {
+    "slug": "ghettology-1",
+    "title": "Ghettology",
+    "artists": "Brother Karl",
+    "startAt": "2025-11-20T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/ghettology-w-brother-karl-201125/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/ced67f600b50a0b195278ab8bd4fcb48.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/f71bbbed1b6a0e4dd1b2d029487824d0.jpg"
+    }
+   },
+   {
+    "slug": "ghettology",
+    "title": "Ghettology",
+    "artists": "Brother Karl",
+    "startAt": "2025-09-25T14:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/ghettology-w-brother-karl-250925/",
+    "soundcloud": "https://soundcloud.com/lyl_radio/ghettology-2?utm_medium=api&utm_campaign=social_sharing&utm_source=id_314837",
+    "audio": {
+     "url": "https://static.lyl.live/uploads/b87564c735885fdedd89d4b669d30c8d.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/9032cd5a18a5c8278f0c361a9e7f4994.jpeg"
+    }
+   }
+  ],
+  "gomar": [
+   {
+    "slug": "gomar",
+    "title": "Gomar",
+    "artists": "Gomar",
+    "startAt": "2022-10-05T21:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/gomar-051022-wgomar/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/65ecb27d269991b32f7d270584538c0e.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/f01903549349e136fe81b644f3908de0.jpg"
+    }
+   }
+  ],
+  "sur-le-reseau": [
+   {
+    "slug": "sur-le-reseau-16",
+    "title": "Sur Le Réseau",
+    "artists": "King Doudou",
+    "startAt": "2019-03-20T16:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-16/",
+    "soundcloud": null,
+    "audio": null,
+    "image": null
+   },
+   {
+    "slug": "sur-le-reseau-15",
+    "title": "Sur Le Réseau",
+    "artists": "King Doudou",
+    "startAt": "2019-01-05T16:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-15/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/SUR_LE_RESEAU_JANV_1_94d69ebcfc.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-14",
+    "title": "Sur Le Réseau",
+    "artists": "douster",
+    "startAt": "2018-06-08T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-14/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_c5cc4919ff.png"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-13",
+    "title": "Sur Le Réseau",
+    "artists": "douster",
+    "startAt": "2018-05-11T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-12/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_bc334bd049.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-12",
+    "title": "Sur Le Réseau",
+    "artists": "douster",
+    "startAt": "2018-04-13T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-13/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_bc334bd049.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-11",
+    "title": "Sur Le Réseau",
+    "artists": "Schnautzi",
+    "startAt": "2018-03-16T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-10/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_1_048b3489d6.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-10",
+    "title": "Sur Le Réseau",
+    "artists": "douster",
+    "startAt": "2018-02-16T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-9/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_c5cc4919ff.png"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-9",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2018-01-19T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-8/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/SUR_LE_RESEAUSQ_e18ba523b4.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-7",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-12-22T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-7/",
+    "soundcloud": null,
+    "audio": null,
+    "image": null
+   },
+   {
+    "slug": "sur-le-reseau-8",
+    "title": "Sur Le Réseau",
+    "artists": "Dominique & Jean Booty",
+    "startAt": "2017-11-24T12:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-6/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/SUR_LE_RESEAU_NOV_5193f57343.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-6",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-10-27T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-5/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_bc334bd049.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-5",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-09-29T11:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-4/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/SUR_LE_RESEAU_SEPT_2efba73f28.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-4",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-07-14T13:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-3/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/TYPE_SUR_LE_RESEAU_7c4a3b5b24.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-3",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-06-16T13:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-2/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/Item_45_9_ceab1b1348.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau-2",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-05-19T13:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau-1/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_1_048b3489d6.jpg"
+    }
+   },
+   {
+    "slug": "sur-le-reseau",
+    "title": "Sur Le Réseau",
+    "artists": "Douster",
+    "startAt": "2017-04-21T13:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/sur-le-r%C3%A9seau/",
+    "soundcloud": null,
+    "audio": null,
+    "image": {
+     "url": "https://static.lyl.live/uploads/CRT_SURLERESEAU_1_048b3489d6.jpg"
+    }
+   }
+  ],
+  "the-sweetest-sounds": [
+   {
+    "slug": "the-sweetest-songs-1",
+    "title": "The Sweetest Sounds",
+    "artists": "DouceSœur",
+    "startAt": "2023-02-17T15:00:00.000Z",
+    "duration": "01:00:00.000",
+    "mixcloud": "https://www.mixcloud.com/lylradio/the-sweetest-sounds-170223-wdouces%C5%93ur/",
+    "soundcloud": null,
+    "audio": {
+     "url": "https://static.lyl.live/uploads/fa907c426f635a40c7e641f1858565ff.mp3"
+    },
+    "image": {
+     "url": "https://static.lyl.live/uploads/13ad1eb39d3bbca5e1a6640078d08949.png"
+    }
+   }
+  ]
+ }
+}

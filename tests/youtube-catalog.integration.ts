@@ -425,21 +425,14 @@ test("complete playlist contexts preserve duplicate positions and continuation u
   );
 });
 
-test("list validation still rejects incomplete, unavailable, empty, mismatched and oversized playlists", async () => {
+test("list validation still rejects incomplete, unavailable, empty and mismatched playlists", async () => {
   for (const [raw, error] of [
     [rawPage([video()], { playlist_count: 2 }), /incomplete/],
     [rawPage([video(), null]), /unavailable/],
     [rawPage([video(), { ...video(), title: "[Private video]" }]), /unavailable/],
     [rawPage([]), /empty/],
     [rawPage([video()], { webpage_url: `${playlist}X` }), /different playlist/],
-    [rawPage([video()], { playlist_count: 501 }), /500/],
-    [
-      rawPage(
-        Array.from({ length: 501 }, () => video()),
-        { playlist_count: null },
-      ),
-      /500/,
-    ],
+    [rawPage([video()], { playlist_count: 501 }), /incomplete/],
   ] as const)
     await assert.rejects(createYouTubePlaylistLoader(runner(raw))(playlist), error);
   const full = await createYouTubePlaylistLoader(
@@ -447,6 +440,17 @@ test("list validation still rejects incomplete, unavailable, empty, mismatched a
   )(playlist);
   assert.equal(full.items.length, 500);
   assert.equal(full.items.at(-1)?.collection?.index, 499);
+  // A longer playlist queues its first 500, and says how long it is.
+  const long = await createYouTubePlaylistLoader(
+    runner(
+      rawPage(
+        Array.from({ length: 501 }, () => video()),
+        { playlist_count: 4626 },
+      ),
+    ),
+  )(playlist);
+  assert.equal(long.items.length, 500);
+  assert.equal(long.count, 4626);
   assert.equal(
     (
       await createYouTubePlaylistLoader(

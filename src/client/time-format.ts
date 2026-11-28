@@ -33,6 +33,14 @@ export function formatSeen(at: number, now = Date.now()) {
       });
 }
 
+/** A day ("2026-10-22") as a meta line says it, "22 Oct 2026": day first, so it holds no comma of its own. */
+export const formatDay = (day: string) =>
+  new Date(`${day}T00:00`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
 /** Browsing reads runtime in minutes; the playback timeline keeps exact seconds. */
 export function formatRuntime(seconds: number) {
   const minutes = Math.max(0, Math.ceil(seconds / 60));
