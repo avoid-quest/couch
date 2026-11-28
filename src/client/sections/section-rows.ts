@@ -28,35 +28,39 @@ export function readSectionRows<Id extends string>(
   }
 }
 
+/** Keeps a device's rows, where storage allows, and tells every list of them on this page. */
+export function saveSectionRows<Id extends string>(storageKey: string, rows: SectionRow<Id>[]) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(rows));
+    sessionRows.delete(storageKey);
+  } catch {
+    sessionRows.set(storageKey, rows);
+  }
+  window.dispatchEvent(new Event(storageKey));
+}
+
+/** A page's rows, read again whenever they are saved anywhere or its defaults change (rows that come with data). */
 export function useSectionRows<Id extends string>(storageKey: string, defaults: SectionRow<Id>[]) {
-  const [rows, setRows] = useState(() => readSectionRows(storageKey, defaults));
+  const [saves, setSaves] = useState(0);
+  const rows = useMemo(() => readSectionRows(storageKey, defaults), [storageKey, defaults, saves]);
   useEffect(() => {
     const update = (event: StorageEvent) => {
       if (event.key === storageKey || event.key === null) {
         sessionRows.delete(storageKey);
-        setRows(readSectionRows(storageKey, defaults));
+        setSaves((count) => count + 1);
       }
     };
-    const refresh = () => setRows(readSectionRows(storageKey, defaults));
+    const refresh = () => setSaves((count) => count + 1);
     window.addEventListener("storage", update);
     window.addEventListener(storageKey, refresh);
     return () => {
       window.removeEventListener("storage", update);
       window.removeEventListener(storageKey, refresh);
     };
-  }, [storageKey, defaults]);
+  }, [storageKey]);
   const save = useCallback(
-    (next: SectionRow<Id>[]) => {
-      setRows(next);
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next));
-        sessionRows.delete(storageKey);
-      } catch {
-        sessionRows.set(storageKey, next);
-      }
-      window.dispatchEvent(new Event(storageKey));
-    },
-    [storageKey, defaults],
+    (next: SectionRow<Id>[]) => saveSectionRows(storageKey, next),
+    [storageKey],
   );
   return useMemo(
     () => ({
@@ -73,6 +77,6 @@ export function useSectionRows<Id extends string>(storageKey: string, defaults: 
       },
       reset: () => save(defaults),
     }),
-    [rows, save],
+    [rows, save, defaults],
   );
 }

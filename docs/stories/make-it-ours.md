@@ -12,6 +12,10 @@ how big text is, which language and quality films play in.
 - On this device: **Edit Home** at the foot of Home (or **This device → Home**):
   each section on or off, **Move up/down**, **Reset to default**; **General →
   Text size**.
+- On this device: **Add to Home** on a series, programme or channel (its page,
+  its menu, or the player while it plays) gives it a section of its own with
+  what the source lists there, kept fresh. Its **…** renames, moves, hides or
+  removes it; removing it keeps what I saved and played.
 - For what I play: **Online video quality** and **Playback → Audio language**.
 - An admin: the TV's interface size, with **Keep** or **Revert**, and the
   Couch's name.

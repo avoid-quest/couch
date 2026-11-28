@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
+import { AddToHomeButton } from "@/sections/home/AddToHome";
 import {
   PlaybackTimeline,
   PlaybackTransport,
@@ -643,14 +644,17 @@ export function PlayerPage({
   // A station's link names it under its show; without a show the title is the station, and already opens it. The
   // collections holding what plays are its trail, above the title as on a Stage.
   const context = current && (
-    <MediaContext
-      creator={current.creator}
-      radio={
-        radio && currentProgramme && current.source.startsWith("radio:")
-          ? { id: current.source.slice(6), title: current.title }
-          : undefined
-      }
-    />
+    <>
+      <MediaContext
+        creator={current.creator}
+        radio={
+          radio && currentProgramme && current.source.startsWith("radio:")
+            ? { id: current.source.slice(6), title: current.title }
+            : undefined
+        }
+      />
+      {!radio && <AddToHomeButton entry={current} />}
+    </>
   );
   // A station's tags wait for Info; its link stays the same element either way, so focus on it survives Info.
   const copyContext =

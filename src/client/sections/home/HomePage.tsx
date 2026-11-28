@@ -45,7 +45,16 @@ import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { useOnAir, useStationMenu } from "./on-air";
-import { boardRows, homeRows, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
+import {
+  boardRows,
+  homeRows,
+  useHomeRows,
+  useKeptOrder,
+  type HomeRowId,
+  type HomeSectionId,
+} from "./home-rows";
+import { isFollowId, useHomeFollows } from "./home-follows";
+import { FollowShelf } from "./FollowShelf";
 import { Board, BoardArt, BoardList } from "./HomeBoard";
 import {
   Failed,
@@ -118,6 +127,7 @@ export function HomePage() {
   const [queueOpen, setQueueOpen] = useState(false);
   const layout = useHomeRows();
   const onHome = layout.rows.filter((row) => row.shown);
+  const follows = useHomeFollows();
   const hasRow = (id: HomeRowId) => onHome.some((row) => row.id === id);
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
@@ -402,8 +412,9 @@ export function HomePage() {
   const recentShape = shelfShape(recent.slice(0, shelfLength).map(historyShape));
   // With no Stage, a remote starts on the board's first row.
   const firstBoard =
-    !hero && onHome.find((row) => boardRows.includes(row.id) && filled[row.id])?.id;
-  const lists: Partial<Record<HomeRowId, ReactNode>> = {
+    !hero &&
+    onHome.find((row) => !isFollowId(row.id) && boardRows.includes(row.id) && filled[row.id])?.id;
+  const lists: Partial<Record<HomeSectionId, ReactNode>> = {
     continue: !!continued.length && (
       <Shelf title="Continue" href="/saved?tab=played">
         {continued.slice(0, shelfLength).map((item, index) => (
@@ -536,9 +547,23 @@ export function HomePage() {
       ]),
     ),
     sources: <BrowseLine />,
+    ...Object.fromEntries(
+      follows.map((follow) => {
+        const index = layout.rows.findIndex((row) => row.id === follow.id);
+        return [
+          follow.id,
+          <FollowShelf
+            follow={follow}
+            first={index === 0}
+            last={index === layout.rows.length - 1}
+            layout={layout}
+          />,
+        ];
+      }),
+    ),
   };
   // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
-  const pending = (id: HomeRowId) =>
+  const pending = (id: HomeSectionId) =>
     connected &&
     (id === "later"
       ? later.isPending
@@ -547,9 +572,10 @@ export function HomePage() {
         : id === "radio"
           ? onAirPending
           : false);
-  const section = (id: HomeRowId) =>
+  const section = (id: HomeSectionId) =>
     lists[id] ||
-    (pending(id) &&
+    (!isFollowId(id) &&
+      pending(id) &&
       (id === "upNext" ? (
         <BoardList title={homeRows[id].label} loading />
       ) : (
@@ -558,13 +584,13 @@ export function HomePage() {
         </Shelf>
       )));
   // Adjacent artwork shelves share the width, as do compact history and queue lists.
-  const groupKind = (id: HomeRowId) =>
+  const groupKind = (id: HomeSectionId) =>
     id === "continue" || id === "later" || id === "recent"
       ? "shelves"
       : id === "upNext"
         ? "board"
         : id;
-  const groups = onHome.reduce<HomeRowId[][]>((all, row) => {
+  const groups = onHome.reduce<HomeSectionId[][]>((all, row) => {
     const last = all.at(-1);
     if (last && groupKind(row.id) === groupKind(last[0]!)) last.push(row.id);
     else all.push([row.id]);

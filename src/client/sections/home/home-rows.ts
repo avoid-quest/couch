@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { readSectionRows, useSectionRows } from "../section-rows";
+import { useMemo, useState } from "react";
+import { readSectionRows, saveSectionRows, useSectionRows } from "../section-rows";
+import {
+  readHomeFollows,
+  useHomeFollows,
+  writeHomeFollows,
+  type FollowId,
+  type HomeFollow,
+} from "./home-follows";
 
 // Every kind of section Home can show: its name, on Home and in Edit Home, and what Edit Home says it holds. A new kind
 // is one more entry here, a place in defaultHomeRows and what HomePage draws for it. Each device keeps its own choice;
@@ -49,7 +56,59 @@ export const defaultHomeRows: HomeRow[] = [
 ];
 export const readHomeRows = (storage?: Pick<Storage, "getItem">) =>
   readSectionRows("couch.home-rows", defaultHomeRows, storage);
-export const useHomeRows = () => useSectionRows("couch.home-rows", defaultHomeRows);
+export const useHomeRows = () => {
+  const follows = useHomeFollows();
+  return useSectionRows<HomeSectionId>(
+    "couch.home-rows",
+    useMemo(() => withFollows(follows), [follows]),
+  );
+};
+
+/** Home's own rows and the sections that follow a source's list. */
+export type HomeSectionId = HomeRowId | FollowId;
+/** Home's default rows, its followed sections newest first right after Continue: where Add and Reset put them. */
+const withFollows = (follows: HomeFollow[]): { id: HomeSectionId; shown: boolean }[] => {
+  const rows: { id: HomeSectionId; shown: boolean }[] = [...defaultHomeRows];
+  rows.splice(
+    rows.findIndex((row) => row.id === "continue") + 1,
+    0,
+    ...follows.map((follow) => ({ id: follow.id, shown: true })).reverse(),
+  );
+  return rows;
+};
+const homeLayout = () => ({
+  follows: readHomeFollows(),
+  rows: readSectionRows<HomeSectionId>("couch.home-rows", withFollows(readHomeFollows())),
+});
+const restore = (layout: ReturnType<typeof homeLayout>) => () => {
+  writeHomeFollows(layout.follows);
+  saveSectionRows("couch.home-rows", layout.rows);
+};
+
+/** Adds a section that follows `follow`'s list right after Continue, where it is seen; returns its undo. */
+export function addHomeFollow(follow: HomeFollow) {
+  const before = homeLayout();
+  const follows = [...before.follows.filter((other) => other.id !== follow.id), follow];
+  const rows = before.rows.filter((row) => row.id !== follow.id);
+  rows.splice(rows.findIndex((row) => row.id === "continue") + 1, 0, {
+    id: follow.id,
+    shown: true,
+  });
+  writeHomeFollows(follows);
+  saveSectionRows("couch.home-rows", rows);
+  return restore(before);
+}
+
+/** Takes a followed section off Home; what was saved or played from it stays. Returns its undo. */
+export function removeHomeFollow(id: FollowId) {
+  const before = homeLayout();
+  writeHomeFollows(before.follows.filter((follow) => follow.id !== id));
+  saveSectionRows(
+    "couch.home-rows",
+    before.rows.filter((row) => row.id !== id),
+  );
+  return restore(before);
+}
 
 /** Items in the order Home first showed them: known ones keep their place, new ones follow in their own order. */
 export function keptOrder<T>(

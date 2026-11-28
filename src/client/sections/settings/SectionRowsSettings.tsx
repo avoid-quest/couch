@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { SettingsSection } from "@/components/SettingsRow";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,13 @@ export function SectionRowsSettings<Id extends string>({
   page,
   rows,
   layout,
+  actions,
 }: {
   page: string;
   rows: Record<Id, { label: string; note?: string }>;
   layout: ReturnType<typeof useSectionRows<Id>>;
+  /** A line's own verbs before its moves (Home's followed sections: Rename, Remove). */
+  actions?: (id: Id) => ReactNode;
 }) {
   const toSwitch = (button: HTMLElement) =>
     button.closest("li")?.querySelector<HTMLButtonElement>('[role="switch"]')?.focus();
@@ -41,6 +45,7 @@ export function SectionRowsSettings<Id extends string>({
                   {note && <FieldDescription className="text-meta">{note}</FieldDescription>}
                 </FieldContent>
                 <div className="flex shrink-0 items-center gap-1">
+                  {actions?.(row.id)}
                   <Button
                     variant="ghost"
                     size="icon"

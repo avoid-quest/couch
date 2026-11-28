@@ -37,6 +37,7 @@ import { TRY_AGAIN } from "@/copy";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
+import { addToHome } from "@/sections/home/AddToHome";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
@@ -244,6 +245,11 @@ function CollectionPage({
           collection={collection}
           canPlay={available}
           shape={shape}
+          addToHome={
+            url && !collection.single
+              ? () => addToHome({ provider, url, title: collection.title })
+              : undefined
+          }
           trail={
             <ContentBreadcrumb
               title={collection.title}
@@ -445,11 +451,13 @@ function CollectionHeader({
   canPlay,
   shape,
   trail,
+  addToHome,
 }: {
   collection: SearchCollection;
   canPlay: boolean;
   shape: ArtShape;
   trail: ReactNode;
+  addToHome?: () => void;
 }) {
   const disabled = !canPlay || c.disabled;
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
@@ -490,6 +498,7 @@ function CollectionHeader({
       more={[
         ...browserActions(c.url),
         ...(c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []),
+        ...(addToHome ? [{ label: "Add to Home", run: addToHome }] : []),
       ]}
     />
   );

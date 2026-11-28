@@ -78,6 +78,7 @@ import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { UpdateCue } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
+import { AddToHomeDialog } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
@@ -877,6 +878,7 @@ function ShellChrome({ children }: PropsWithChildren) {
           )}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
           <Toaster tvPresentation={tvPresentation} />
+          {paired && <AddToHomeDialog />}
         </div>
       </main>
     </div>

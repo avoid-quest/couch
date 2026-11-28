@@ -30,6 +30,7 @@ import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
 import type { HistoryItem } from "../../../shared/viewing";
 import { collectionLinks } from "@/collection-target";
 import { episodeLabel } from "@/media-caption";
+import { addToHome } from "@/sections/home/AddToHome";
 
 // The same page whatever origin a source healed to.
 const samePage = (a: string, b: string) => {
@@ -492,9 +493,13 @@ function OnlineResults(props: Props) {
                 },
                 saveAction,
               ]
-            : pageSection(item) && !saved
-              ? []
-              : [saveAction]),
+            : [
+                ...(pageSection(item) && !saved ? [] : [saveAction]),
+                {
+                  label: "Add to Home",
+                  run: () => addToHome({ provider, url: item.url, title: item.title }),
+                },
+              ]),
           ...browserActions(item.url),
           { label: "Hide", disabled: !props.connected, run: () => void hide(item) },
         ],
