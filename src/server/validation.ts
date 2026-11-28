@@ -162,6 +162,22 @@ function validAction(value: unknown): value is Action {
       );
     case "askEveryDevice":
       return typeof value.enabled === "boolean";
+    case "saveGroup":
+      return (
+        object(value.group) &&
+        (value.group.id === undefined || id(value.group.id)) &&
+        typeof value.group.name === "string" &&
+        Array.isArray(value.group.members) &&
+        value.group.members.every(
+          (member) =>
+            object(member) &&
+            id(member.deviceId) &&
+            typeof member.picture === "boolean" &&
+            typeof member.sound === "boolean",
+        )
+      );
+    case "deleteGroup":
+      return id(value.id);
     case "inSync":
       return typeof value.inSync === "boolean";
     case "compressor":

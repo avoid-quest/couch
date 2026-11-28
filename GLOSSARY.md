@@ -16,6 +16,12 @@ have independent state and ordinary-media queues.
 The device or host service that owns an ongoing shared source. Ending its
 publication removes that source from its receivers.
 
+**Group**:
+A saved name for a set of Picture and Sound choices across devices, kept by the
+host for the whole Couch and applied to a Playback. Applying one changes only
+what its user could change by hand.
+_Avoid_: Sendspin group, which is one Playback's devices playing in step.
+
 **Receiver**:
 A device reproducing a Playback's selected picture or sound.
 _Avoid_: Listener when referring to picture and sound together.

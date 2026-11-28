@@ -89,6 +89,7 @@ import { createPassThrough } from "./pass-through";
 import { createRepacks } from "./ts-repack";
 import { createForLater } from "./for-later";
 import { createHidden } from "./hidden";
+import { createMixerGroups } from "./mixer-groups";
 import { createPlaylists } from "./playlists";
 import { upcomingQueue } from "../shared/queue";
 import { ControllerError, createDevices, settingField } from "./devices";
@@ -2992,6 +2993,7 @@ export async function createHub(options: HubOptions) {
     broadcast();
   };
 
+  const groups = createMixerGroups(options.databasePath);
   // What every window shares, whichever Playback it looks at.
   const common: Pick<
     SessionState,
@@ -3000,12 +3002,14 @@ export async function createHub(options: HubOptions) {
     | "setupStep"
     | "appearance"
     | "askEveryDevice"
+    | "groups"
     | "administratorClaimed"
     | "activeProfile"
     | "preferences"
     | "systemAudio"
   > = {
     askEveryDevice: store.askEveryDevice(),
+    groups: groups.list(),
     versions: {},
     installationName: store.installationName(),
     setupStep: store.setupStep(),
@@ -5315,6 +5319,19 @@ export async function createHub(options: HubOptions) {
             store.saveAskEveryDevice(action.enabled);
             common.askEveryDevice = action.enabled;
             broadcast();
+          } else if (action.type === "saveGroup" || action.type === "deleteGroup") {
+            // Groups are the Couch's: the host and admins keep them. Applying one is the Mixer's own changes, checked as those are.
+            authorize();
+            if (
+              socket.data.deviceId &&
+              store.device(socket.data.deviceId)?.role !== "administrator"
+            )
+              throw new ControllerError(ADMIN_ONLY, 403);
+            if (action.type === "saveGroup")
+              groups.save(action.group, (id) => id === hostId() || !!store.device(id));
+            else groups.delete(action.id);
+            common.groups = groups.list();
+            broadcast();
           } else if (action.type === "publishLive") {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
             if (action.intent === "live" && !socket.data.trusted)
@@ -6039,6 +6056,7 @@ export async function createHub(options: HubOptions) {
       playlists.close();
       forLater.close();
       hidden.close();
+      groups.close();
       radioProgramme?.close();
       radioRecognition.close();
       radio.close();

@@ -64,6 +64,7 @@ import {
   type Row,
 } from "@/session/where-it-plays";
 import type { Action } from "../../../shared/protocol";
+import { GroupChips, GroupsScope } from "./MixerGroups";
 
 type Props = {
   state: ClientSessionState;
@@ -152,18 +153,20 @@ function Panel({
     </Button>
   );
   const body = (close?: ReactNode) => (
-    <Mixer
-      state={state}
-      connected={connected}
-      run={run}
-      tv={tv}
-      order={view?.order}
-      filter={filter}
-      query={query}
-      onFilter={setFilter}
-      onQuery={setQuery}
-      close={close}
-    />
+    <GroupsScope state={state} connected={connected} close={close}>
+      <Mixer
+        state={state}
+        connected={connected}
+        run={run}
+        tv={tv}
+        order={view?.order}
+        filter={filter}
+        query={query}
+        onFilter={setFilter}
+        onQuery={setQuery}
+        close={close}
+      />
+    </GroupsScope>
   );
   // It opens on the first device on the TV, else on the Volume, never on a control that changes where it plays.
   const focusFirst = (event: Event) => {
@@ -242,8 +245,8 @@ type MixerProps = Props & {
 
 /**
  * The panel's content, without hooks, so tests walk its controls by label without a DOM: the Volume (or, for a
- * shared source waiting for receivers, "Choose where {title} plays"), In sync where it applies, the counts, then the
- * rows, the playback's devices first and the rest after a hairline, offline ones folded into one line.
+ * shared source waiting for receivers, "Choose where {title} plays"), In sync where it applies, the counts, the groups,
+ * then the rows, the playback's devices first and the rest after a hairline, offline ones folded into one line.
  */
 function Mixer({
   state,
@@ -357,6 +360,7 @@ function Mixer({
       </div>
       {/* Room at the sides for the controls that pull back past the text ("…", Move here) and their focus. */}
       <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3">
+        <GroupChips state={state} connected={connected} rows={rows} />
         {state.compressor && state.player.playbackId && (
           <CompressorControls
             key={state.playback}
