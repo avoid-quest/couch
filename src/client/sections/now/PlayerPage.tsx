@@ -33,6 +33,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { useArtworkPicture } from "@/components/AmbientLight";
+import { Level } from "@/components/Level";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { AddToHomeButton } from "@/sections/home/AddToHome";
 import {
@@ -997,6 +998,12 @@ export function PlayerPage({
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
                 )}
+                {radio && (
+                  <p className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                    <Level moving={player?.status === "playing"} />
+                    On air now
+                  </p>
+                )}
                 {radio && player?.playbackId && (
                   <RadioRecognition
                     key={JSON.stringify([
@@ -1016,8 +1023,12 @@ export function PlayerPage({
                 <div
                   ref={infoRegion}
                   id="player-info"
-                  hidden={!info}
-                  className="grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0"
+                  // A station's notes always show, under On air now, as the side player's do.
+                  hidden={!info && !radio}
+                  className={cn(
+                    "grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0",
+                    radio && "border-t border-border pt-3",
+                  )}
                 >
                   {byline && !livePlayback(state) && (
                     <p className="text-sm text-pretty text-muted-foreground">{byline}</p>
