@@ -37,10 +37,9 @@ export function usePlayChoice(item: PlaceItem) {
     const done = item.verb === "Resume" ? "Resumed" : "Playing";
     const said = place ? `${done} on ${place}.` : where.replace(/^Plays on/, `${done} on`);
     const changes = summary.lines.length > 1 ? ` ${summary.lines[0]}` : "";
+    // Its Undo is looked for once Core took the play, however long its item takes to check out.
     void gate.takeWithUndo(
-      async () => {
-        item.onPlay(on);
-      },
+      async () => (await item.onPlay(on)) !== false,
       `${said}${changes}`,
       true,
     );

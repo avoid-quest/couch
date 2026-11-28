@@ -138,7 +138,7 @@ export function DetailHeader({
   fromStart?: Verb;
   queue?: Verb;
   save?: { saved: boolean; run: () => void; disabled?: boolean };
-  playOn?: { run: (on: PlayOn) => void; disabled?: boolean; audioOnly?: boolean };
+  playOn?: { run: (on: PlayOn) => unknown; disabled?: boolean; audioOnly?: boolean };
   /** Every other verb (Play next, Remove, ordering), in the "…" menu after From start and Queue. */
   more?: MenuAction[];
   /** The page's ancestors (ContentBreadcrumb), above the title. */

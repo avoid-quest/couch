@@ -1058,7 +1058,7 @@ function PastedList({
       label: "Play on",
       group: "play",
       disabled: disabled || !props.canPlay,
-      playOn: (on) => void send("play", on),
+      playOn: (on) => send("play", on),
     },
     {
       label: "Open",
@@ -1098,7 +1098,7 @@ function PastedList({
             thumbnail={page?.thumbnail}
             disabled={disabled || !props.canPlay}
             onClick={() => void send("play")}
-            playOn={(playOn) => void send("play", playOn)}
+            playOn={(playOn) => send("play", playOn)}
           />
           {saves?.save && (
             <SaveToggle

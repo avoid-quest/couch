@@ -364,7 +364,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         save={item.url ? save : undefined}
         playOn={{
           disabled: blocked || !playable || !item.playable,
-          run: (on) => action.mutate(() => play(start, on)),
+          run: (on) => action.mutateAsync(() => play(start, on)).catch(() => false),
         }}
         more={[
           ...homeAction(itemTarget(item)),
@@ -465,7 +465,8 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
         }}
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
-          run: (on) => action.mutate(() => play((on) => load("play", on), on)),
+          run: (on) =>
+            action.mutateAsync(() => play((on) => load("play", on), on)).catch(() => false),
         }}
         more={[
           ...homeAction(itemTarget(item)),
@@ -566,7 +567,10 @@ function RadioDetails({ item }: { item: RadioStation }) {
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
           audioOnly: true,
-          run: (on) => action.mutate(() => play((on) => shell.enqueueRadio(item, true, on), on)),
+          run: (on) =>
+            action
+              .mutateAsync(() => play((on) => shell.enqueueRadio(item, true, on), on))
+              .catch(() => false),
         }}
         more={browserActions(
           programme?.programmeUrl ?? item.homepage,

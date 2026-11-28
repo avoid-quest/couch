@@ -12,7 +12,8 @@ export type ChooseRequest = {
   thumbnail?: string;
   verb?: string;
   audioOnly?: boolean;
-  onPlay: (on: PlayOn) => void;
+  /** Plays it there; a promise it returns settles once Core took the play (false: it failed). */
+  onPlay: (on: PlayOn) => unknown;
   from?: HTMLElement | null;
 };
 

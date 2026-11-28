@@ -254,7 +254,7 @@ export function PlayPill({
   audioOnly?: boolean;
   disabled?: boolean;
   onClick: () => void;
-  playOn?: (on: PlayOn) => void;
+  playOn?: (on: PlayOn) => unknown;
   playOnDisabled?: boolean;
   size?: "default" | "lg";
 } & Omit<ComponentProps<typeof Button>, "onClick" | "size">) {

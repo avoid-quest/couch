@@ -240,7 +240,7 @@ export function SavedPlaylists({
                     title={playlist.name}
                     disabled={disabled || !canPlay || !playlist.entries.length}
                     onClick={() => void load(playlist, "play")}
-                    playOn={(on) => void load(playlist, "play", on)}
+                    playOn={(on) => load(playlist, "play", on)}
                   />
                   <RowOptions
                     title={playlist.name}
