@@ -63,7 +63,7 @@ export function ContinueSection({ items, loading, resume, resumable, menu, playi
       {!lead ? (
         <LeadSkeleton />
       ) : (
-        <div className="grid items-start gap-x-8 gap-y-4 md:grid-cols-[minmax(0,min(56%,30rem))_minmax(0,1fr)] tv:gap-x-6">
+        <div className="grid items-start gap-x-8 gap-y-4 md:grid-cols-[minmax(0,min(56%,30rem))_minmax(0,1fr)] tv:grid-cols-[minmax(0,min(56%,20rem))_minmax(0,1fr)] tv:gap-x-6">
           <Lead
             item={lead}
             resume={resume}
@@ -113,7 +113,7 @@ export function ContinueSection({ items, loading, resume, resumable, menu, playi
 /** The lead's shape while what leads is read. */
 export function LeadSkeleton() {
   return (
-    <div aria-hidden="true" className="grid max-w-[30rem] gap-3">
+    <div aria-hidden="true" className="grid max-w-[30rem] gap-3 tv:max-w-[20rem]">
       <Skeleton className="aspect-video w-full rounded-xl" />
       <Skeleton className="h-6 w-4/5" />
       <Skeleton className="h-control w-48" />

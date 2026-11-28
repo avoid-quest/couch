@@ -125,7 +125,7 @@
   --spacing-caption: 0.125rem;
   --spacing-stack: 0.75rem;
   --spacing-item: 1rem;
-  --spacing-section: 3.5rem;
+  --spacing-section: 2rem;
   /* Type: caption, meta, body (titles of items, controls), title (what plays, in the bar), heading (a shelf, a section), page; the Stage's display
        sizes live with it (.display-title). Weights: 400 for everything but headings (600) and display (680 to 760, by length). */
   --text-caption: 0.75rem;

@@ -282,11 +282,7 @@ export function BrowseLine() {
           const down = typeof door.to !== "string" && door.to.length === 1 && failing(door.to[0]!);
           const body = <DoorBody label={door.label} meta={down ? "Couldn't load" : door.meta} />;
           return (
-            // On phones a door is under half the screen, so the next one shows cut through its words.
-            <li
-              key={door.label}
-              className="flex min-w-36 flex-1 border-l first:border-l-0 max-sm:min-w-[45vw]"
-            >
+            <li key={door.label} className="flex min-w-36 flex-1 border-l first:border-l-0">
               {href ? (
                 <Button asChild variant="ghost" className={doorClass}>
                   <a
