@@ -266,7 +266,10 @@ export function BrowseLine({ options, first = false }: { options: ReactNode; fir
   const details = useDetailNavigation();
   const failing = useFailingSources();
   return (
-    <section aria-labelledby="home-browse" className="-mx-(--gutter) flex border-y pr-(--gutter)">
+    <section
+      aria-labelledby="home-browse"
+      className="-mx-(--gutter) flex min-w-0 border-y pr-(--gutter)"
+    >
       <h2 id="home-browse" className="sr-only">
         Browse
       </h2>
