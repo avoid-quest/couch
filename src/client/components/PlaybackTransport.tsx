@@ -685,6 +685,8 @@ export function toolPanel(trigger: HTMLElement | null): {
       ? { side: "left", align: "start", sideOffset: at.left - panel.left + 12 }
       : { side: "right", align: "start", sideOffset: panel.right - at.right + 12 };
   }
+  // The full share fills the window: its panels hang just above their buttons.
+  if (row.matches('[data-size="full"]')) return { side: "top", align, sideOffset: 8 };
   return { side: "top", align, sideOffset: at.top - row.getBoundingClientRect().top + 8 };
 }
 
