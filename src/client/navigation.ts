@@ -82,6 +82,8 @@ function moveFocus(key: string) {
     !scope.contains(active) ||
     !visible(active) ||
     active === scope ||
+    // A page's hidden heading holds the focus only until its first control arrives (focusPageControl).
+    active.matches('[data-page] h1.sr-only[tabindex="-1"]') ||
     (remoteNavigation && active.closest(localOnly))
   ) {
     focus(entry(controls));
