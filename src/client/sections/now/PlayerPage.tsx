@@ -22,7 +22,6 @@ import {
   Info,
   Maximize,
   Minimize,
-  Minimize2,
   Music2,
   Settings,
   SlidersVertical,
@@ -108,6 +107,9 @@ export function PlayerPage({
   onQueueOpenChange,
 }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
+  // Leaving the player, by any route, leaves fullscreen too.
+  const exitFullscreen = fullscreen.exit;
+  useEffect(() => () => void exitFullscreen(), [exitFullscreen]);
   const shell = useShell();
   const { credentials, available, active, current } = shell;
   const currentProgramme = useStationShow();
@@ -213,7 +215,7 @@ export function PlayerPage({
     [picture],
   );
   const artworkStage = audioOnly || !picture;
-  const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
+  const canFullscreen = !tvPresentation && fullscreen.supported;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   // Now playing is calm: artwork, title and where it comes from. Info shows the rest in place (a show's genres and host,
   // its broadcast, synopsis and the next show; an item's trail and end). It belongs to what this Playback shows, so
@@ -1244,13 +1246,14 @@ export function PlayerPage({
                     aria-expanded={queueOpen}
                     onClick={() => setQueueOpen(!queueOpen)}
                   />
-                  {!tvPresentation && (
+                  {!tvPresentation ? (
                     <Button
+                      data-player-last
                       variant="ghost"
                       size="icon-lg"
                       disabled={!canFullscreen}
-                      aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      aria-label={fullscreen.fullscreen ? "Exit full screen" : "Full screen"}
+                      title={fullscreen.fullscreen ? "Exit full screen" : "Full screen"}
                       onClick={() => void fullscreen.toggle()}
                     >
                       {fullscreen.fullscreen ? (
@@ -1259,19 +1262,15 @@ export function PlayerPage({
                         <Maximize aria-hidden="true" />
                       )}
                     </Button>
+                  ) : (
+                    !artworkStage && (
+                      <span
+                        data-player-last
+                        aria-hidden="true"
+                        className="size-(--player-target) shrink-0"
+                      />
+                    )
                   )}
-                  {/* Back to the side player: the last slot, as the side player's Open player is its first. Phones have Back. */}
-                  <Button
-                    data-player-last
-                    variant="ghost"
-                    size="icon-lg"
-                    className="max-sm:hidden"
-                    aria-label="Back to the side"
-                    title="Back to the side. It keeps playing."
-                    onClick={shell.leavePlayer}
-                  >
-                    <Minimize2 aria-hidden="true" />
-                  </Button>
                 </div>
               </div>
             </div>
