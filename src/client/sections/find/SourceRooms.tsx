@@ -198,6 +198,11 @@ export function AToZRoom({
           ))}
         </ul>
       </nav>
+      {page && !items.length && (
+        <p role="status" className="text-body text-muted-foreground">
+          RaiPlay lists nothing under {title} today.
+        </p>
+      )}
       {filled.slice(0, shown).map((group) => (
         <section
           key={group.letter}
