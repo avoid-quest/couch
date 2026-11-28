@@ -120,8 +120,8 @@ export function RoomHead({
         {back?.title ?? "Home"}
       </a>
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-        {/* At least a short title's width, else the whole line: what follows wraps under it. */}
-        <div className="room-title @container min-w-0 grow basis-[min(100%,28rem)]">
+        {/* At least a short title's width, else the line less the "…": what else follows wraps under it. */}
+        <div className="room-title @container min-w-0 grow basis-[min(100%_-_4.5rem,28rem)]">
           {title ? <StageTitle title={title} /> : <Skeleton className="h-14 w-72 max-w-full" />}
         </div>
         {meta && <p className="pb-1 text-body text-muted-foreground tabular-nums">{meta}</p>}
