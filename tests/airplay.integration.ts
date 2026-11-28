@@ -579,7 +579,7 @@ test(
       {
         id: undefined,
         deviceId: "airplay",
-        name: "AirPlay · Kitchen iPhone",
+        name: "AirPlay from Kitchen iPhone",
         kind: "airplay",
         audio: true,
         video: false,
@@ -985,7 +985,7 @@ test(
     sender(fake, 32);
     fake.send({ tone: { frequency: 440 } });
     await until(() => !!host.state.liveSources?.length);
-    assert.equal(host.state.liveSources![0]!.name, "AirPlay · AirPlay device");
+    assert.equal(host.state.liveSources![0]!.name, "AirPlay from AirPlay device");
     await request("/api/settings/airplay", { body: { enabled: false } });
     await until(() => !alive(fake.pid));
     await until(() => !host.state.liveSources?.length);
@@ -1080,7 +1080,7 @@ test(
     fake.send({ log: "RAOP initialized success" });
     fake.send({ tone: { frequency: 440 } });
     await until(() => !!host.state.liveSources?.length);
-    assert.equal(host.state.liveSources![0]!.name, "AirPlay · Guest");
+    assert.equal(host.state.liveSources![0]!.name, "AirPlay from Guest");
 
     await request("/api/settings/airplay/ask-code", { body: { enabled: true } });
     await until(() => !alive(fake.pid));
@@ -1480,7 +1480,7 @@ test(
       "sound from another address never reaches the sender's stream",
     );
     await play(stream);
-    await until(() => host.state.liveSources?.[0]?.name === "AirPlay · No PIN sender", 5_000);
+    await until(() => host.state.liveSources?.[0]?.name === "AirPlay from No PIN sender", 5_000);
     // This sender doesn't answer UxPlay's clock requests, so UxPlay makes its sound due as it
     // arrives, too late to have started; it still holds updates off.
     assert.ok(["loading", "playing"].includes(await player()));

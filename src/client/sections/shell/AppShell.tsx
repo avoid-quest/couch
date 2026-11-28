@@ -711,7 +711,7 @@ function ShellChrome({ children }: PropsWithChildren) {
   useEffect(() => {
     const playback = state?.playbacks?.find((item) => item.id === state.playback);
     if (playback && playback.liveSourceId !== localLiveSourceId) showShare(false);
-  }, [state?.playback]);
+  }, [state?.playback, state?.currentEntryId]);
   const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
   // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again.
   const outside = livePlayback(state) && !playbackControls(state).leave;
