@@ -330,6 +330,25 @@ test("a WordPress show of exactly 100 episodes ends on its full page", async () 
   expect(asked.some((url) => url.includes("page=2"))).toBe(false);
 });
 
+test("a WordPress show longer than 500 episodes counts them all, though it keeps its first 500", async () => {
+  serve((url) => {
+    if (url.pathname.endsWith("/podcastfilter"))
+      return Response.json([{ id: 8162, name: "arsider" }]);
+    if (url.pathname.endsWith("/shows")) return Response.json([{ title: "ARSIDER" }]);
+    const page = Number(url.searchParams.get("page"));
+    return Response.json(
+      Array.from({ length: 100 }, (_, n) => ({
+        ...blackoutPodcast[0]!,
+        slug: `episode-${page}-${n}`,
+      })),
+      { headers: { "X-WP-Total": "612", "X-WP-TotalPages": "7" } },
+    );
+  });
+  const page = await loadArchiveList("https://radioblackout.org/shows/arsider/");
+  expect(page.count).toBe(612);
+  expect(page.items).toHaveLength(500);
+});
+
 test("NTS counts a show's episodes, and a picture off the station's own hosts isn't shown", async () => {
   const episode = (alias: string, picture: string) => ({
     show_alias: "minimal-effort",
