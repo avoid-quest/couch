@@ -80,7 +80,6 @@ import {
   hitContext,
   hitMeta,
   hitSources,
-  inKind,
   names,
   pressPlays,
   quickSources,
@@ -240,7 +239,7 @@ export function SearchPanel(props: Props) {
     close(hit) && (kind !== "audio" || canReturn(hit.source, kind));
   const found = hits.filter(isFound);
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
-  const scoped = within(filter).filter((hit) => inScope(hit.source) && inKind(hit, kind));
+  const scoped = within(filter, kind);
   const relevant = scoped.filter(close);
   const loose = scoped.filter((hit) => !close(hit));
   // The closest match leads and holds still for the query and kind, so nothing moves under the focus while browsing.
@@ -288,10 +287,7 @@ export function SearchPanel(props: Props) {
   // shows once that is something. A chosen one always shows; the page says when it holds nothing. Audio overlaps music
   // and videos, so it shows only when chosen.
   const current: SearchScope = { kind, source: filter };
-  const holds = (state: SearchScope) =>
-    (state.source === "All" ? found : within(state.source).filter(isFound)).filter(
-      (hit) => !state.kind || inKind(hit, state.kind),
-    ).length;
+  const holds = (state: SearchScope) => within(state.source, state.kind).filter(isFound).length;
   const chips = [
     {
       label: "All",

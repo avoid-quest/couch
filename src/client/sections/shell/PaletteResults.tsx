@@ -20,7 +20,6 @@ import {
 } from "@/sections/find/SearchOnlineResults";
 import {
   hitMeta,
-  inKind,
   names,
   quickSources,
   shapeOf,
@@ -97,7 +96,7 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   // Only what names every word of the query in its title, artist or album, in the chosen kind and source as the results
   // show them, so the palette stays a glance and Enter never plays what the scope left out.
   const { close } = searchRelevance(typed, true);
-  const relevant = within(scope.source).filter((hit) => inKind(hit, scope.kind) && close(hit));
+  const relevant = within(scope.source, scope.kind).filter(close);
   const asking = asked.filter((source) => !summaries[source] || summaries[source].loading);
   const top = useTopHit(key, relevant, typed, asking.length > 0, moved, true);
   const sections = order

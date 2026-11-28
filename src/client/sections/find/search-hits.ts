@@ -51,7 +51,7 @@ const groupOf = (hit: SearchHit): GroupId =>
             ? "channels"
             : "videos";
 /** Whether a hit is of the chosen kind, as both the palette and the results show it: audio is what a source plays as sound. */
-export const inKind = (hit: SearchHit, kind?: SearchKind) =>
+const inKind = (hit: SearchHit, kind?: SearchKind) =>
   !kind || (kind === "audio" ? canReturn(hit.source, kind) : kindOf(groupOf(hit)) === kind);
 
 /** A hit's own artwork shape (art-shape.ts). */
@@ -143,9 +143,26 @@ function useHeldOrder(key: string, ranked: string[]) {
 }
 
 /**
+ * The hits of a source (or "All") and kind, in `order`, each recording once: copies fold only among what is in scope, so
+ * a copy left out never stands for one shown.
+ */
+export const scopedHits = (
+  order: string[],
+  summaries: Record<string, SearchResultSummary>,
+  scope: string,
+  kind?: SearchKind,
+) =>
+  foldCopies(
+    order
+      .filter((from) => (scope === "All" || from === scope) && canReturn(from, kind))
+      .flatMap((from) => summaries[from]!.hits!)
+      .filter((hit) => inKind(hit, kind)),
+  );
+
+/**
  * One search's hits as Search shows them: each source in the order it answered (the strongest first among those
  * answering together; a source never moves once shown), each in its own order, each recording once (foldCopies), every
- * press playing what plays. `within` is what a source's own search shows: copies fold only among the sources in scope.
+ * press playing what plays. `within` is what a source's own search shows for a kind (scopedHits).
  */
 export function useSourceHits(
   key: string,
@@ -159,12 +176,8 @@ export function useSourceHits(
     .filter((source) => summaries[source]?.hits?.length)
     .sort((a, b) => best(b) - best(a));
   const order = useHeldOrder(key, answered);
-  const within = (scope: string) =>
-    foldCopies(
-      order
-        .filter((from) => scope === "All" || from === scope)
-        .flatMap((from) => summaries[from]!.hits!),
-    ).map(pressPlays);
+  const within = (scope: string, kind?: SearchKind) =>
+    scopedHits(order, summaries, scope, kind).map(pressPlays);
   return { order, hits: within("All"), within };
 }
 

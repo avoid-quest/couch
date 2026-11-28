@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { foldCopies, linkOf, searchRelevance } from "../src/client/search";
 import { completeScope } from "../src/client/search-palette";
 import type { SearchHit } from "../src/client/sections/find/SearchOnlineResults";
+import { scopedHits } from "../src/client/sections/find/search-hits";
 import { radioMatches, type RadioStation } from "../src/shared/radio";
 import { fold, searchWords } from "../src/shared/search-text";
 
@@ -91,6 +92,20 @@ test("the same recording from several sources shows once, with the others in its
   expect(
     foldCopies([mixcloud, episode, soundcloud]).map((each) => [each.source, each.also]),
   ).toEqual([["Radio archives", ["Mixcloud", "SoundCloud"]]]);
+});
+
+test("a copy out of the chosen kind never folds away the one in it", () => {
+  const video = { ...hit("YouTube", "Night Drive"), kind: "Video", duration: 240 };
+  const track = { ...hit("SoundCloud", "Night Drive"), kind: "Music", duration: 245 };
+  const summaries = {
+    YouTube: { count: 1, hits: [video], loading: false, error: false },
+    SoundCloud: { count: 1, hits: [track], loading: false, error: false },
+  };
+  const order = ["YouTube", "SoundCloud"];
+  expect(scopedHits(order, summaries, "All").map((each) => each.source)).toEqual(["YouTube"]);
+  expect(scopedHits(order, summaries, "All", "music").map((each) => each.source)).toEqual([
+    "SoundCloud",
+  ]);
 });
 
 test("a station matches every word of the query in any order, accents folded", () => {
