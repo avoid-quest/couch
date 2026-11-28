@@ -16,6 +16,8 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FilterInput } from "@/components/ContentFilters";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
+import { useStationShow } from "@/sections/home/on-air";
 import { CompressorControls } from "@/components/CompressorControls";
 import {
   LiveParticipation,
@@ -191,6 +193,12 @@ function Panel({ state, connected, run, className, label, children }: Props & Tr
       />
     </GroupsScope>
   );
+  // A lit panel in its playback's colours, from the picture the side player shows: brighter while it plays (index.css,
+  // .lit-panel).
+  const programme = useStationShow();
+  const entry = state.queue.find((item) => item.id === state.currentEntryId);
+  const light = useArtworkLight(programme?.artworkUrl || entry?.thumbnail);
+  const lit = roomStyle(light, state.player.status === "playing" ? 1 : 0.3);
   // It opens on the first device on the TV, else on the Volume, never on a control that changes where it plays.
   const focusFirst = (event: Event) => {
     const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
@@ -211,7 +219,8 @@ function Panel({ state, connected, run, className, label, children }: Props & Tr
             {...toolPanel(button.current)}
             aria-label="Where it plays"
             onOpenAutoFocus={focusFirst}
-            className="max-h-[min(48rem,calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem))] w-[min(36rem,calc(100vw-2rem))] gap-0 overflow-hidden px-4 pt-4 pb-3"
+            style={lit}
+            className="lit-panel max-h-[min(48rem,calc(var(--radix-popover-content-available-height)-var(--player-top,0px)-1rem))] w-[min(36rem,calc(100vw-2rem))] gap-0 overflow-hidden px-4 pt-4 pb-3"
           >
             <SyncScope>{body(closeButton)}</SyncScope>
           </PopoverContent>
@@ -226,7 +235,8 @@ function Panel({ state, connected, run, className, label, children }: Props & Tr
         aria-describedby={undefined}
         onOpenAutoFocus={focusFirst}
         showCloseButton={false}
-        className="max-h-[92dvh] items-center gap-0 overflow-hidden px-(--gutter) pt-4 pb-4"
+        style={lit}
+        className="lit-panel max-h-[92dvh] items-center gap-0 overflow-hidden px-(--gutter) pt-4 pb-4"
       >
         <SheetTitle className="sr-only">Where it plays</SheetTitle>
         <SyncScope>
