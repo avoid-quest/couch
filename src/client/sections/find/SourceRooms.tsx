@@ -93,7 +93,9 @@ export function RaiPlayRoom({
           title={title}
           provider="raiplay"
           context={context}
-          actions={url ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined}
+          actions={
+            url && title ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined
+          }
         />
         <DoorLine
           label={url ? `${title} genres` : "RaiPlay sections"}
@@ -168,7 +170,7 @@ export function AToZRoom({
         provider="raiplay"
         context={context}
         meta={page && `${items.length.toLocaleString()} ${noun}`}
-        actions={<AddRoomToHome provider="raiplay" url={url} title={title} />}
+        actions={title && <AddRoomToHome provider="raiplay" url={url} title={title} />}
       />
       {!page && <RoomSkeleton />}
       <nav ref={rail} aria-label="Jump to a letter">
