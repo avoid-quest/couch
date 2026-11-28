@@ -357,8 +357,9 @@ export function createSpotifyCatalog(
       artistList(entity).length ? artistList(entity) : (artists?.split(", ") ?? [])
     ).map(searchWords);
     const off = (hit: ProviderItem) => Math.abs(hit.duration! - item.duration!);
-    // Another version of the song (a cover, a remix, live…) only stands in when the track itself is that version.
-    const ownWords = new Set(searchWords(item.title));
+    // Another version of the song (a cover, a remix, live…) only stands in when the track itself is that version; an
+    // artist's name (the band Live) names no version.
+    const ownWords = new Set([...searchWords(item.title), ...credits.flat()]);
     const otherVersion = (words: Set<string>) =>
       versionWords.some((word) => words.has(word) && !ownWords.has(word));
     const hit = (await searchYouTube({ query }, signal)).items
