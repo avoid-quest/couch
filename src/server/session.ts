@@ -1722,11 +1722,11 @@ export function createSession(
           const player = chosenPlayer();
           stop();
           if (currentEntryId && player.playbackId) {
-            // Keep the Playback past Stop so the controller's six-second Undo can reach it.
+            // Keep the Playback past Stop so the controller's ten-second Undo can reach it, with a second for the network.
             const timer = setTimeout(() => {
               stopped = undefined;
               broadcast();
-            }, 10_000).unref();
+            }, 11_000).unref();
             stopped = { entryId: currentEntryId, player, timer };
           }
           break;

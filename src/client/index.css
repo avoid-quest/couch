@@ -400,30 +400,62 @@
   transition-duration: 200ms;
   transition-timing-function: var(--ease-out);
 }
-/* A toast hugs its words, its action beside them, at the toaster's outer edge (the gutter), rather than a slab the
-   toaster's width: its right edge, or its left or middle where an Undo shows beside its control (toasts.ts). On phones,
-   where sonner stretches both, the toaster spans the gutters and toasts still hug. */
-[data-sonner-toaster][data-x-position] {
-  width: var(--width);
+/* Every message shows in one place (sonner.tsx): centred over the content, right of the side player (--side-player, set
+   by the shell, 0 without one), hugging its words. Doubled to outrank sonner's centring, which it injects after us. */
+[data-sonner-toaster][data-sonner-toaster][data-x-position="center"] {
+  left: calc(var(--side-player, 0px) + var(--offset-left));
+  right: var(--offset-right);
+  width: auto;
+  transform: none;
 }
 @media (max-width: 600px) {
-  [data-sonner-toaster][data-x-position] {
-    width: auto;
+  [data-sonner-toaster][data-sonner-toaster][data-x-position="center"] {
+    left: var(--mobile-offset-left);
+    right: var(--mobile-offset-right);
   }
 }
-[data-sonner-toaster][data-x-position] [data-sonner-toast] {
-  left: auto;
+[data-sonner-toaster][data-x-position] [data-sonner-toast][data-sonner-toast] {
+  left: 0;
   right: 0;
   width: fit-content;
-  max-width: 100%;
-}
-[data-sonner-toaster][data-x-position="left"] [data-sonner-toast] {
-  left: 0;
-  right: auto;
-}
-[data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
-  left: 0;
+  max-width: min(35rem, 100%);
   margin-inline: auto;
+}
+/* On the ink pill a focused action inverts to ink, so its ring is the pill's dark ink. */
+[data-sonner-toast]:not([data-type="error"])
+  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  outline-color: var(--primary-foreground);
+}
+/* An Undo drains a thin bar over its time (toasts.ts sets --message-time), held while sonner holds its timer: under a
+   pointer, except a TV's parked one. */
+[data-sonner-toast][data-sonner-toast].message-drains {
+  overflow: hidden;
+}
+[data-sonner-toast][data-sonner-toast].message-drains::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  width: 100%;
+  background: var(--primary-foreground);
+  opacity: 0.45;
+  transform-origin: left;
+  animation: message-drain var(--message-time, 10s) linear forwards;
+}
+.messages:not([data-ignore-hover])
+  [data-sonner-toaster]:is(:hover, :active)
+  .message-drains::after {
+  animation-play-state: paused;
+}
+@keyframes message-drain {
+  to {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast][data-sonner-toast].message-drains::after {
+    animation: none;
+  }
 }
 
 /* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window

@@ -21,6 +21,8 @@ how big text is, which language and quality films play in.
 - An admin: the TV's interface size, with **Keep** or **Revert**, and the
   Couch's name.
 - Each device: its own **Name**.
+- In **This device → General → Messages**: where messages appear, **Bottom** or
+  **Top**, and whether **Confirmations** show. Undo and problems always show.
 - In **This device → General**, I can turn on **Send error reports** after reading
   what Sentry receives. It starts off. In the app my choice covers this Couch
   app and its local Core, and I turn it on while the app shows **This

@@ -1,30 +1,22 @@
-import { useSyncExternalStore } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import { phoneQuery, visibleToasts } from "@/toasts";
+import { messagePlace, visibleToasts } from "@/toasts";
 import { OctagonXIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button";
 
-// Couch: top right at the page gutter, below the header's row (min-h-14), or in the player below its top band
-// (PlayerPage publishes --player-top). Phones (sonner's own breakpoint) keep the top for the artwork: their toasts sit
-// at the bottom, just above the footer or the player's band (--bottom-bar). Two at most, both open: a remote can't hover.
-const offset = {
-  left: "var(--gutter)",
-  right: "var(--gutter)",
-  top: "calc(var(--player-top, var(--top-bar, 3.5rem)) + 1rem)",
-  // Undo shows in the corner nearest its control (toasts.ts); at the bottom it clears the bar or the band.
-  bottom: "calc(var(--bottom-bar, 0px) + .5rem)",
-};
+// Couch: one place for every message, the person's choice (This device → General): centred over the content, beside the
+// side player (--side-player, NowPlaying's width), at the bottom clear of the dock and tabs or the full player's controls
+// (--bottom-bar), or at the top below the header (--top-bar) or the player's top band (--player-top). Sonner's own
+// breakpoint (600px) uses mobileOffset. Two at most, both open: a remote can't hover.
+const bottom = "calc(var(--bottom-bar, 0px) + 1.25rem)";
+const top = "calc(var(--player-top, var(--top-bar, 3.5rem)) + 1rem)";
+const offset = { left: "var(--gutter)", right: "var(--gutter)", top, bottom };
 const mobileOffset = {
   left: "var(--gutter)",
   right: "var(--gutter)",
-  bottom: "calc(var(--bottom-bar, 0px) + .5rem)",
+  top: "calc(var(--player-top, var(--top-bar, 3.5rem)) + .5rem)",
+  bottom: "calc(var(--bottom-bar, 0px) + .75rem)",
 };
-const subscribePhone = (onChange: () => void) => {
-  const media = window.matchMedia(phoneQuery);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-};
-const isPhone = () => window.matchMedia(phoneQuery).matches;
 
 const Toaster = ({
   tvPresentation = false,
@@ -34,35 +26,38 @@ const Toaster = ({
   const ignoreHover: React.MouseEventHandler = (event) => {
     if (tvPresentation) event.stopPropagation();
   };
-  const phone = useSyncExternalStore(subscribePhone, isPhone, () => false);
+  const place = messagePlace.use();
   return (
-    <div onMouseOverCapture={ignoreHover} onMouseMoveCapture={ignoreHover}>
+    <div
+      className="messages"
+      data-ignore-hover={tvPresentation || undefined}
+      onMouseOverCapture={ignoreHover}
+      onMouseMoveCapture={ignoreHover}
+    >
       <Sonner
         theme="dark"
         className="toaster group"
-        position={phone ? "bottom-right" : "top-right"}
+        position={`${place}-center`}
         offset={offset}
         mobileOffset={mobileOffset}
         visibleToasts={visibleToasts}
         expand
         icons={{ error: <OctagonXIcon className="size-5 text-destructive" /> }}
-        style={
-          {
-            "--width": "min(28rem, calc(100vw - 2 * var(--gutter)))",
-            fontFamily: "var(--font-sans)",
-          } as React.CSSProperties
-        }
+        style={{ fontFamily: "var(--font-sans)" }}
         toastOptions={{
           unstyled: true,
           classNames: {
-            // Floats like the bar: its solid surface and shadow, no backdrop filter (docs/design.md, Glass). It hugs its
-            // message (index.css), which wraps, with the verb beside it as a small capsule; an error leads with its icon.
+            // A pill in ink on the dark room, hugging its words (index.css), its one action a dark capsule inside; an
+            // Undo drains a thin bar over its time. A problem keeps the floating bar's dark surface and leads with its icon.
             toast:
-              "flex items-center gap-3 rounded-xl bg-bar py-3 pr-4 pl-4 text-sm text-foreground shadow-(--float-shadow) has-[[data-button]]:py-2 has-[[data-button]]:pr-2 has-[[data-icon]]:pl-3",
+              "flex items-center gap-1.5 rounded-[1.625rem] bg-primary py-1.5 pr-4.5 pl-4.5 text-sm font-medium text-primary-foreground shadow-[0_1.125rem_3rem_-0.75rem_rgb(0_0_0/80%)] has-[[data-button]]:pr-1.5 data-[type=error]:gap-3 data-[type=error]:rounded-xl data-[type=error]:bg-bar data-[type=error]:py-3 data-[type=error]:pr-4 data-[type=error]:pl-3 data-[type=error]:text-foreground data-[type=error]:shadow-(--float-shadow)",
             icon: "flex shrink-0",
-            content: "min-w-0",
-            title: "font-medium leading-snug wrap-anywhere",
-            actionButton: buttonVariants({ size: "sm" }),
+            content: "min-w-0 py-1.5 in-data-[type=error]:py-0",
+            title: "leading-snug wrap-anywhere",
+            actionButton: cn(
+              buttonVariants({ size: "sm" }),
+              "shrink-0 bg-primary-foreground text-primary hover:bg-primary-foreground/85 active:bg-primary-foreground/70",
+            ),
           },
         }}
         {...props}

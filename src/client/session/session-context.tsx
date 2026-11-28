@@ -40,7 +40,7 @@ import {
   useLocalDeviceName,
 } from "./device-id";
 import { apiSend } from "../api/client";
-import { controlBox, dismissAll, dismissUndo, queued, undoable } from "../toasts";
+import { dismissAll, dismissUndo, queued, undoable, undoTime } from "../toasts";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -332,24 +332,20 @@ export function SessionGate({
     [state?.playback],
   );
 
-  const offerUndo = useCallback(
-    (text: string, undo: () => Promise<void>, duration?: number, control?: DOMRect) => {
-      const owner = currentCredentials.current;
-      undoable(
-        text,
-        () => {
-          if (!owner || owner !== currentCredentials.current) return;
-          setError(null);
-          undo().catch((reason) => {
-            if (owner === currentCredentials.current) setError(errorText(reason));
-          });
-        },
-        duration,
-        control,
-      );
-    },
-    [],
-  );
+  const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration?: number) => {
+    const owner = currentCredentials.current;
+    undoable(
+      text,
+      () => {
+        if (!owner || owner !== currentCredentials.current) return;
+        setError(null);
+        undo().catch((reason) => {
+          if (owner === currentCredentials.current) setError(errorText(reason));
+        });
+      },
+      duration,
+    );
+  }, []);
 
   // Confirm the requesting action, including REST callers, under its original connection and target.
   const queue = useCallback(
@@ -361,8 +357,6 @@ export function SessionGate({
     ) => {
       const owner = currentCredentials.current;
       const before = readObservation();
-      // Where the queuing control is now: focus may move on while Core answers.
-      const control = controlBox();
       const result = await work();
       const after = readObservation();
       if (
@@ -376,7 +370,7 @@ export function SessionGate({
         after.controlling === before.controlling
       ) {
         const label = typeof title === "function" ? title() : title;
-        queued(label, () => upNext(targetDeviceId), control);
+        queued(label, () => upNext(targetDeviceId));
       }
       return result;
     },
@@ -394,9 +388,6 @@ export function SessionGate({
       const current = () => owner === currentCredentials.current;
       const started = performance.now();
       const before = readObservation();
-      // Where the pressed control is, read before the player hands focus back to its picture or Stop closes it, so
-      // Undo shows beside it.
-      const control = controlBox();
       dismissUndo();
       const attempt = ++commandAttempt.current;
       setError(null);
@@ -467,7 +458,9 @@ export function SessionGate({
             after = readObservation();
             plan = after && undoPlan(action, before, after);
           }
-          const remaining = 6_000 - (performance.now() - started);
+          // Core keeps a removed entry six seconds, a stopped Playback longer.
+          const remaining =
+            (plan && plan.removed ? 6_000 : undoTime) - (performance.now() - started);
           if (plan && remaining > 0 && current() && attempt === commandAttempt.current) {
             const confirmed = plan;
             offerUndo(
@@ -475,7 +468,6 @@ export function SessionGate({
               () =>
                 applyUndo(confirmed, (action) => command(action, targetDeviceId), readObservation),
               remaining,
-              control,
             );
           }
         }
