@@ -162,10 +162,13 @@ export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean
 }
 
 /** The query or the list, set large in the display face. */
+// With no query yet, the page's heading still names it, for screen readers alone.
 function SearchTitle({ title }: { title: string }) {
   return (
     <div className="search-title @container">
-      <StageTitle title={title} />
+      <StageTitle title={title}>
+        {title || <span className="sr-only">Search results</span>}
+      </StageTitle>
     </div>
   );
 }
