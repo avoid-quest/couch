@@ -1,8 +1,8 @@
 import { useId, useRef, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText, useSessionGate } from "@/session/session-context";
+import { failed } from "@/toasts";
 import type { LiveMetadata, LiveSource } from "../../../shared/live-input";
 
 export function LiveMetadataFields({
@@ -48,7 +48,6 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
   const { connected, command } = useSessionGate();
   const [draft, setDraft] = useState<LiveMetadata>(source.metadata ?? {});
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
   const dirty =
     (draft.title?.trim() || "") !== (source.metadata?.title ?? "") ||
@@ -61,7 +60,6 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
         if (!connected || busy.current || !dirty) return;
         busy.current = true;
         setPending(true);
-        setError(null);
         try {
           await command({
             type: "updateLiveMetadata",
@@ -69,7 +67,7 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
             metadata: { title: draft.title ?? "", description: draft.description ?? "" },
           });
         } catch (reason) {
-          setError(errorText(reason));
+          failed(errorText(reason));
         } finally {
           busy.current = false;
           setPending(false);
@@ -82,11 +80,6 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
         disabled={!connected}
         readOnly={pending}
       />
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       <Button
         type="submit"
         variant="secondary"

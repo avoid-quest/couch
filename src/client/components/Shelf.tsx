@@ -132,7 +132,8 @@ export function StaleNote() {
 
 /**
  * A shelf that can't load says so in its own place, under its heading, with Try again (docs/design.md "Problems"):
- * what couldn't happen, then Core's own sentence when it sent one.
+ * what couldn't happen, then Core's own sentence when it sent one. While it asks again (`asking`, "Asking RaiPlay…") the
+ * line says so and Try again stays where it is, so focus stays on it.
  */
 export function ShelfProblem({
   title,
@@ -140,6 +141,7 @@ export function ShelfProblem({
   options,
   problem,
   detail,
+  asking,
   retry,
 }: {
   title: string;
@@ -147,6 +149,7 @@ export function ShelfProblem({
   options?: ReactNode;
   problem: string;
   detail?: string;
+  asking?: string;
   retry?: () => void;
 }) {
   return (
@@ -157,7 +160,9 @@ export function ShelfProblem({
         {options}
       </div>
       <Alert variant="destructive" className="border-y py-4">
-        {detail ? (
+        {asking ? (
+          <AlertDescription>{asking}</AlertDescription>
+        ) : detail ? (
           <>
             <AlertTitle>{problem}</AlertTitle>
             <AlertDescription>{detail}</AlertDescription>
@@ -167,7 +172,11 @@ export function ShelfProblem({
         )}
         {retry && (
           <AlertAction>
-            <TryAgain data-page-first onClick={retry} />
+            <TryAgain
+              data-page-first
+              aria-disabled={!!asking || undefined}
+              onClick={asking ? undefined : retry}
+            />
           </AlertAction>
         )}
       </Alert>

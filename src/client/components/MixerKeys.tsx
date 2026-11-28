@@ -147,10 +147,16 @@ export function DeviceCell({
                 style={{ "--dot": dot } as CSSProperties}
               />
             )}
-            {/* A failure is said whole; the rest keeps to one line, whole on hover. */}
-            <span className={failed ? "[overflow-wrap:anywhere]" : "truncate"}>{status}</span>
+            {/* A failure takes two lines at most, the rest one; each is whole on hover and to a screen reader. */}
+            <span className={failed ? "line-clamp-2 [overflow-wrap:anywhere]" : "truncate"}>
+              {status}
+            </span>
           </span>
         )}
+        {/* Mounted before it fails, so a failure that arrives is announced. */}
+        <span aria-live="polite" className="sr-only">
+          {failed ? status : ""}
+        </span>
       </span>
     </span>
   );

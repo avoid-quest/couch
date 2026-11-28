@@ -1,4 +1,5 @@
 import { useRadioClock } from "@/radio-clock";
+import { restoredByUndo } from "@/session/undo";
 import {
   defaultStringifySearch,
   Link,
@@ -242,7 +243,8 @@ function useShellValue() {
       !picked &&
       current.settled &&
       (newlySelected || explicitlyStarted) &&
-      section !== "Now"
+      section !== "Now" &&
+      !restoredByUndo()
     )
       openPlayer();
     current.picture = picture;
@@ -595,7 +597,9 @@ function PairingPage({ status }: { status: ReactNode }) {
       <Onboarding title="Starting Couch" description={couch || undefined}>
         {status}
         {booting ? (
-          <StatusLine busy>Starting…</StatusLine>
+          <StatusLine busy dismissible={false}>
+            Starting…
+          </StatusLine>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
@@ -744,12 +748,12 @@ function ShellChrome({ children }: PropsWithChildren) {
   useTopBar(header, paired && !setupPending);
   const room = useRoomLight();
 
-  // A failed action is a message beside nothing else (docs/design.md "Problems"); Remote says it on its own page.
+  // A failed action is a message beside nothing else (docs/design.md "Problems").
   useEffect(() => {
-    if (!error || section === "Remote") return;
+    if (!error) return;
     failed(error);
     setError(null);
-  }, [error, section]);
+  }, [error]);
   // Core couldn't save progress or Up next: said once each time it starts failing.
   const progressError = state?.progressError;
   useEffect(() => {
@@ -842,10 +846,11 @@ function ShellChrome({ children }: PropsWithChildren) {
                     <DigitalClock className="app-header-tools text-muted-foreground" />
                   )}
                 </div>
-                {/* The whole app's one status place, inside the measured header: nothing over the page's content. */}
+                {/* The whole app's one status place, inside the measured header: nothing over the page's content.
+                  It takes no room while it holds only a dismissed line or the update cue's announcement. */}
                 <div
                   data-app-status
-                  className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden"
+                  className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 not-has-[>:not([hidden],.sr-only)]:pb-0"
                 >
                   <ConnectionStatus />
                   {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (

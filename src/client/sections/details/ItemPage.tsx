@@ -10,7 +10,7 @@ import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
+import { ApiError, apiJson, apiSend, coreSentence, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { radioProgrammesQuery } from "@/api/radio";
 import { useStationSave } from "@/sections/home/on-air";
@@ -188,7 +188,9 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
         )}
         {query.error && !gone ? (
           <Alert variant="destructive">
-            <AlertDescription>{query.error.message}</AlertDescription>
+            <AlertDescription>
+              {coreSentence(query.error) ?? "Couldn't load this item."}
+            </AlertDescription>
             <AlertAction>
               <TryAgain onClick={() => void query.refetch()} />
             </AlertAction>
@@ -519,13 +521,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
             run: () => action.mutate(remove),
           },
         ]}
-      >
-        {action.error && (
-          <Alert variant="destructive">
-            <AlertDescription>{action.error.message}</AlertDescription>
-          </Alert>
-        )}
-      </DetailLayout>
+      />
       <RelatedCollection
         collection={item.collection}
         creator={item.creator}

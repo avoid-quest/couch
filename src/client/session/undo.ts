@@ -145,12 +145,26 @@ function reorderedForPlay(state: SessionState, entryId: string) {
     : queue;
 }
 
+// An Undo of Stop brings its Playback back where it was, so the next picture to return within a moment is that one, and
+// the shell doesn't open the full player for it as it does for a picture just started (AppShell). Core answers well
+// within the moment.
+let restoringUntil = 0;
+const restoreWindow = 5_000;
+export function restoredByUndo() {
+  const restored = performance.now() < restoringUntil;
+  restoringUntil = 0;
+  return restored;
+}
+
 export async function applyUndo(
   plan: UndoPlan,
   command: (action: Action) => Promise<void>,
   current: () => SessionState | null,
 ) {
-  if ("stoppedId" in plan) return command({ type: "undoStop", stoppedId: plan.stoppedId });
+  if ("stoppedId" in plan) {
+    restoringUntil = performance.now() + restoreWindow;
+    return command({ type: "undoStop", stoppedId: plan.stoppedId });
+  }
   let state = current();
   if (
     !state ||

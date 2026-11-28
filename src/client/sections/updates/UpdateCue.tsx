@@ -30,13 +30,11 @@ export function UpdateCue() {
     checkFailed ||
     batch?.helpers === "failed" ||
     batch?.items.some((item) => item.status === "failed");
-  if (
+  const hidden =
     (!canMaintain && !targets.length) ||
     fullscreen ||
     (tvPresentation && updateInterrupts(state, ["app"], deviceId())) ||
-    (!busy && !downloading && !failed)
-  )
-    return null;
+    (!busy && !downloading && !failed);
   const label = busy
     ? batch?.items.length && !["waiting", "checking"].includes(batch.helpers)
       ? `Updating ${Math.min(batch.items.filter((item) => item.status === "updated").length + 1, batch.items.length)} of ${batch.items.length}`
@@ -44,23 +42,33 @@ export function UpdateCue() {
     : failed
       ? "Couldn't update"
       : "Downloading update";
+  // The live region stays mounted, so an update that fails is announced.
+  const announcement = (
+    <span aria-live="polite" className="sr-only">
+      {!hidden && failed ? label : ""}
+    </span>
+  );
+  if (hidden) return announcement;
   return (
-    <Button variant="ghost" asChild className="touch:size-11 touch:p-0 tv:w-auto tv:px-3.5">
-      <Link
-        to={canMaintain ? "/settings/couch/updates" : "/settings/device/updates"}
-        aria-label={label}
-        title={label}
-        data-update-cue
-      >
-        {busy ? (
-          <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
-        ) : failed ? (
-          <CircleAlert aria-hidden="true" className="text-destructive" />
-        ) : (
-          <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
-        )}
-        <span className="touch:sr-only tv:not-sr-only">{label}</span>
-      </Link>
-    </Button>
+    <>
+      {announcement}
+      <Button variant="ghost" asChild className="touch:size-11 touch:p-0 tv:w-auto tv:px-3.5">
+        <Link
+          to={canMaintain ? "/settings/couch/updates" : "/settings/device/updates"}
+          aria-label={label}
+          title={label}
+          data-update-cue
+        >
+          {busy ? (
+            <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
+          ) : failed ? (
+            <CircleAlert aria-hidden="true" className="text-destructive" />
+          ) : (
+            <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
+          )}
+          <span className="touch:sr-only tv:not-sr-only">{label}</span>
+        </Link>
+      </Button>
+    </>
   );
 }

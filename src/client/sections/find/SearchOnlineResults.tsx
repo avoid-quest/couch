@@ -20,7 +20,7 @@ import {
 } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
 import { useHidden } from "@/api/hidden";
-import { apiFetch } from "@/api/client";
+import { apiFetch, coreSentence } from "@/api/client";
 import { historyQuery } from "@/api/progress";
 import { usePlayOn } from "@/components/PlayOn";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -125,8 +125,8 @@ export type SearchPlaybackProps = {
 };
 export { providerNames } from "../../../shared/providers";
 import { providerNames } from "../../../shared/providers";
-export const searchError = (reason: unknown) =>
-  reason instanceof Error ? reason.message : "Didn't respond.";
+/** Core's own sentence for a failed read, else "Didn't respond.": never a request's address or a script's error. */
+export const searchError = (reason: unknown) => coreSentence(reason) ?? "Didn't respond.";
 export function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   if (item.kind === "media") return;
   if (item.kind === "channel") return "Channel";

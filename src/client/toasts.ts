@@ -1,6 +1,6 @@
 import { useSyncExternalStore, type CSSProperties } from "react";
 import { toast, type ExternalToast } from "sonner";
-import { ApiError } from "./api/client";
+import { coreSentence } from "./api/client";
 
 // Every toast Couch shows, by kind (docs/design.md, Messages). Each kind fixes its duration and its one action,
 // and shows one toast: a repeat updates the one showing. Only this module and the Toaster import sonner.
@@ -78,9 +78,9 @@ export function dismissAll() {
 
 /** "Couldn't X." Core's own sentence wins when it sent one; anything else (the network, a timeout) shows `text` and logs the detail. */
 export function failed(text: string, reason?: unknown) {
-  const said = reason instanceof ApiError && typeof reason.body.error === "string";
+  const said = coreSentence(reason);
   if (reason !== undefined && !said) console.warn(text, reason);
-  return show("failed", said ? reason.message : text, { duration: long }, toast.error);
+  return show("failed", said ?? text, { duration: long }, toast.error);
 }
 
 // Each Undo offer retires the last, so it takes a new id, and its bar drains over its time (index.css).

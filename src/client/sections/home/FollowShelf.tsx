@@ -70,8 +70,14 @@ export function FollowShelf({
   const loading = !summary || summary.loading || (!!previousCursor && (!before || before.loading));
   // While its source fails, the section asks again every minute, so it shows again once the source answers.
   const retry = useRef<() => void>(undefined);
-  retry.current = opening?.error ? opening.retry : summary?.error ? summary.retry : undefined;
-  const failing = !!retry.current;
+  const failure = opening?.error ? opening : summary?.error ? summary : undefined;
+  if (failure) retry.current = failure.retry;
+  const failing = !!failure;
+  // A list that failed stays failed while it's asked again, so Try again keeps its place and focus; it goes once the
+  // source answers.
+  const [failedBefore, setFailedBefore] = useState<string>();
+  const lastFailure = failure ? (failure.errorMessage ?? "") : loading ? failedBefore : undefined;
+  if (lastFailure !== failedBefore) setFailedBefore(lastFailure);
   useEffect(() => {
     if (!failing) return;
     const timer = setInterval(() => retry.current?.(), 60_000);
@@ -169,19 +175,17 @@ export function FollowShelf({
       {read(undefined, reportOpening)}
       {lastCursor && read(lastCursor, reportNewest)}
       {previousCursor && read(previousCursor, reportBefore)}
-      {(opening?.error || summary?.error) && !items.length ? (
+      {lastFailure !== undefined && !items.length ? (
         <ShelfProblem
           title={follow.name}
           href={href}
           options={menu}
           problem={`Couldn't load ${follow.list} from ${source}.`}
-          detail={[
-            (opening?.error ? opening : summary)?.errorMessage,
-            `${follow.name} shows again once ${source} answers.`,
-          ]
+          detail={[lastFailure, `${follow.name} shows again once ${source} answers.`]
             .filter(Boolean)
             .join(" ")}
-          retry={opening?.error ? opening.retry : summary?.retry}
+          asking={failure ? undefined : `Asking ${source}…`}
+          retry={() => retry.current?.()}
         />
       ) : !loading && !shelved.length ? (
         quiet(`${source} lists nothing here right now.`)

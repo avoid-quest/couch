@@ -1,6 +1,7 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { type ComponentProps, type ReactNode, useSyncExternalStore } from "react";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
+import { coreSentence } from "@/api/client";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Button } from "@/components/ui/button";
 import { MediaTile } from "@/components/MediaTile";
@@ -50,7 +51,15 @@ export function LiveTvShelf({ options }: { options?: ReactNode }) {
   });
   const actions = useChannelActions();
   if (guide.error && !guide.data)
-    return <Failed title="Live TV" href="/live-tv" retry={() => void guide.refetch()} />;
+    return (
+      <Failed
+        title="Live TV"
+        href="/live-tv"
+        error={guide.error}
+        options={options}
+        retry={() => void guide.refetch()}
+      />
+    );
   if (guide.data && !guide.data.channels.length) return null;
   return (
     <Shelf loading={!guide.data} title="Live TV" href="/live-tv" options={options}>
@@ -250,9 +259,9 @@ const doors: Door[] = [
 /**
  * One quiet line of doors to the sources, each saying what is behind it, all as wide as each other, then the section's
  * "…". The doors scroll sideways where they don't fit; the "…" stays at the line's end. Its doors are its name: "Browse"
- * is for screen readers.
+ * is for screen readers. With `first` (nothing to continue leads Home), its first door takes a remote's first press.
  */
-export function BrowseLine({ options }: { options: ReactNode }) {
+export function BrowseLine({ options, first = false }: { options: ReactNode; first?: boolean }) {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
@@ -266,7 +275,7 @@ export function BrowseLine({ options }: { options: ReactNode }) {
         aria-labelledby="home-browse"
         className="flex min-w-0 flex-1 overflow-x-auto pl-(--gutter) [scrollbar-width:none]"
       >
-        {doors.map((door) => {
+        {doors.map((door, index) => {
           const href =
             "to" in door
               ? door.to
@@ -282,7 +291,12 @@ export function BrowseLine({ options }: { options: ReactNode }) {
               className="flex min-w-0 flex-[1_0_8.75rem] border-l first:border-l-0 sm:flex-[1_0_10.5rem]"
             >
               {href ? (
-                <Button asChild variant="ghost" className={doorClass}>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className={doorClass}
+                  data-page-first={(first && index === 0) || undefined}
+                >
                   <a
                     href={detailHref(href)}
                     aria-label={down ? `${door.label}, couldn't load` : undefined}
@@ -306,6 +320,7 @@ export function BrowseLine({ options }: { options: ReactNode }) {
                 <Button
                   variant="ghost"
                   className={doorClass}
+                  data-page-first={(first && index === 0) || undefined}
                   onClick={() => "scope" in door && scopeSearch(door.scope)}
                 >
                   {body}
@@ -375,12 +390,15 @@ export function Failed({
   title,
   href,
   what = title,
+  error,
   options,
   retry,
 }: {
   title: string;
   href?: string;
   what?: string;
+  /** Why it failed: Core's own sentence shows under the problem when it sent one. */
+  error: unknown;
   /** The section's "…". */
   options?: ReactNode;
   retry: () => void;
@@ -391,6 +409,7 @@ export function Failed({
       href={href}
       options={options}
       problem={`Couldn't load ${what}.`}
+      detail={coreSentence(error)}
       retry={retry}
     />
   );
