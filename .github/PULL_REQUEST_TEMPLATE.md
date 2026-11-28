@@ -8,4 +8,4 @@ The story in `docs/stories/` this serves, or "none" for internal work.
 
 ## Checked
 
-How you saw it working in the real app (screenshots or video of the journey), and what you couldn't check.
+How you saw it working in the real app (screenshots or video of the story's scene), and what you couldn't check.

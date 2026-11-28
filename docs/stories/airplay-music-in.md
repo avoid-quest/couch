@@ -1,32 +1,15 @@
 # A friend AirPlays their music in
 
-Status: preview · Scenes: group, home
+Status: preview
 
-A friend has their music on an iPhone. They send it to Couch from the AirPlay
-picker and it plays on the house speakers.
+Sara arrives with a playlist on her iPhone. She picks the Couch in her AirPlay
+picker, types the **Code** Luca reads out from **Settings → Sources → Receive
+AirPlay**, and her music fills the living room. Luca adds the kitchen speaker in
+**Where it plays**, and the film queued on the TV is still waiting when she
+stops.
 
-## Journey
+## Good to know
 
-1. An admin: **Settings → Sources → Receive AirPlay** (with **Share on network**
-   on).
-2. The friend chooses this Couch in their AirPlay picker and, if **Ask for a
-   code** is on, enters its **Code**.
-3. **AirPlay · name** appears in Shared sources and takes the Couch computer's
-   speakers.
-4. Add more speakers in **Where it plays**; they play in step.
-5. **New code** changes the password; senders enter the new one.
-
-## Done when
-
-- With **Ask for a code** on, only a sender with the code can play.
-- Other Playbacks and their queues keep going.
-- When the sender stops, the source goes away.
-
-## Demo
-
-Needs: the Couch computer on Linux and an iPhone or Mac (the owner's).
-
-## Known issues
-
-- The Couch computer must run Linux; one sender at a time; sound only.
-- Not yet tried with a real Apple device.
+- Receiving AirPlay works only when the Couch computer runs Linux, from one
+  phone at a time, and plays sound only.
+- It hasn't been tried with a real iPhone or Mac yet.
