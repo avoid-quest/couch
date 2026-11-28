@@ -46,6 +46,8 @@ import { cn } from "@/lib/utils";
 import { useShell } from "./shell-context";
 import { PlaybackPicker, playbackChoices } from "./PlaysOnLine";
 import { WhereItPlays } from "./Outputs";
+import { StationNotes } from "./StationNotes";
+import { useUncut } from "./uncut";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import { upcomingQueue } from "../../../shared/queue";
 import { isRadio } from "../../../shared/radio";
@@ -181,6 +183,8 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
     [router],
   );
   const programme = useStationShow();
+  // Identify song's button sits beside Volume; what it finds shows in the station's notes.
+  const [identify, setIdentify] = useState<HTMLDivElement | null>(null);
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
   // The light behind the player is the playing artwork's (index.css, .now-playing).
   const light = useArtworkLight(programme?.artworkUrl || current?.thumbnail);
@@ -316,7 +320,26 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
                 {where(false)}
               </WhereItPlays>
             )}
-            <UpNext state={state} connected={connected} run={run} onOpen={() => onOpen("queue")} />
+            {/* What's left of the panel: only the notes give way, never the title or Where it plays above them. */}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {isRadio(current) && (
+                <StationNotes
+                  state={state}
+                  connected={connected}
+                  station={current}
+                  show={programme}
+                  identify={identify}
+                />
+              )}
+              <UpNext
+                state={state}
+                connected={connected}
+                run={run}
+                onOpen={() => onOpen("queue")}
+                // After a station's notes, room for its heading and first row (the notes give way).
+                className={isRadio(current) ? "min-h-24" : undefined}
+              />
+            </div>
           </div>
         </div>
         <div className="relative shrink-0 px-3.5 pb-3.5">
@@ -326,9 +349,6 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
             said
             className="px-0.5 pt-2 pb-1 [&_[data-time-labels]]:text-xs"
           />
-          {isRadio(current) && state.player.status === "playing" && (
-            <p className="px-1 pt-2.5 pb-2 text-sm text-muted-foreground">On air now</p>
-          )}
           <div className="flex min-h-(--player-target) items-center gap-1.5">
             <PlaybackTransport
               state={state}
@@ -346,6 +366,7 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
                 className="ml-auto max-w-32 min-w-0 flex-1 gap-0"
               />
             )}
+            {isRadio(current) && <div ref={setIdentify} className="contents" />}
           </div>
         </div>
       </aside>
@@ -644,7 +665,8 @@ function UpNext({
   connected,
   run,
   onOpen,
-}: Omit<Props, "size" | "onOpen" | "onSize"> & { onOpen: () => void }) {
+  className,
+}: Omit<Props, "size" | "onOpen" | "onSize"> & { onOpen: () => void; className?: string }) {
   const list = useRef<HTMLDivElement>(null);
   const entries = playbackControls(state).queue
     ? [...upcomingQueue(state), ...(state.autoplay?.enabled ? state.autoplay.upcoming : [])].slice(
@@ -653,32 +675,17 @@ function UpNext({
       )
     : [];
   const ids = entries.map((entry) => entry.id).join(" ");
-  // Rows that would be cut by the panel's foot wait unseen, as the prototype's do; none at all hides the list.
-  useLayoutEffect(() => {
-    const box = list.current;
-    if (!box) return;
-    const fit = () => {
-      const rows = [...box.querySelectorAll<HTMLElement>("[data-up-next-row]")];
-      for (const row of rows) row.hidden = false;
-      const limit = box.getBoundingClientRect().bottom + 1;
-      let shown = 0;
-      for (const row of rows) {
-        row.hidden = row.getBoundingClientRect().bottom > limit;
-        if (!row.hidden) shown++;
-      }
-      box.style.visibility = rows.length && !shown ? "hidden" : "";
-    };
-    const observer = new ResizeObserver(fit);
-    observer.observe(box);
-    fit();
-    return () => observer.disconnect();
-  }, [ids]);
+  // Rows that would be cut by the panel's foot wait unseen; none at all hides the list.
+  useUncut(list, "[data-up-next-row]", ids);
   const { available } = playbackCapabilities(state, connected);
   if (!entries.length) return <div className="flex-1" />;
   return (
     <div
       ref={list}
-      className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border pt-2"
+      className={cn(
+        "mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border pt-2",
+        className,
+      )}
     >
       <Button
         variant="ghost"
