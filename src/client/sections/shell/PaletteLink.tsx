@@ -1,30 +1,42 @@
 import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { collectionLocation } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
-import { linkPlays, listLabel, listLimit, usePastedList, type LinkVerb } from "@/pasted-link";
+import {
+  linkPlays,
+  listLabel,
+  listLimit,
+  useLinkStation,
+  usePastedList,
+  type LinkVerb,
+} from "@/pasted-link";
 import { useSessionGate } from "@/session/session-context";
 import { linkTarget } from "../../../shared/providers";
+import type { RadioStation } from "../../../shared/radio";
 
 /**
  * The palette for a pasted link: a list's Play all and Queue all, one thing's Play, Queue and Play next, a page's Open,
- * each named by what it plays once its page says; then Choose how to play, on the results page.
+ * each named by what it plays once its page says, a station's page its station's Play; then Choose how to play, on the
+ * results page.
  */
 export function PaletteLink({
   url,
   connected,
   onOpen,
   onLink,
+  onPlayStation,
   onSearch,
 }: {
   url: string;
   connected: boolean;
   onOpen: (href: string) => void;
   onLink: (verb: LinkVerb, list: { title?: string; count?: number }) => void;
+  onPlayStation: (station: RadioStation) => void;
   onSearch: () => void;
 }) {
   const { credentials } = useSessionGate();
   const target = linkTarget(url);
   const list = usePastedList(credentials, url, target);
+  const station = useLinkStation(credentials, url, target);
   const where = url.replace(/^https?:\/\//i, "");
   const shape = target?.shape ?? "atom";
   // The first row reads as the link itself; the verbs after it are plain rows.
@@ -61,6 +73,31 @@ export function PaletteLink({
       )}
     </CommandItem>
   );
+  const choose = (
+    <CommandItem value="query" onSelect={onSearch}>
+      Choose how to play
+    </CommandItem>
+  );
+  // A station's page plays its station live, once Couch finds it; nothing here plays the page itself.
+  if (shape === "station")
+    return (
+      <CommandGroup>
+        {station && (
+          <CommandItem
+            value="link:play"
+            disabled={!connected}
+            onSelect={() => onPlayStation(station)}
+            className={lead}
+          >
+            <span className="shrink-0">Play</span>
+            <span className="min-w-0 truncate font-normal text-muted-foreground">
+              {station.name}
+            </span>
+          </CommandItem>
+        )}
+        {choose}
+      </CommandGroup>
+    );
   return (
     <CommandGroup>
       {shape === "page" && open}
@@ -77,9 +114,7 @@ export function PaletteLink({
       )}
       {shape !== "page" && verb("next", "Play next")}
       {shape !== "page" && open}
-      <CommandItem value="query" onSelect={onSearch}>
-        Choose how to play
-      </CommandItem>
+      {choose}
     </CommandGroup>
   );
 }

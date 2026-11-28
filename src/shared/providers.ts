@@ -322,16 +322,18 @@ export function spotifyLink(
 
 /**
  * What a pasted link is, from its URL alone (no fetch, so Enter is always safe): an `atom` plays by itself, a `playlist`
- * queues whole, and a `page` (a channel, a series, a category) is opened to choose from. Undefined: Couch's providers
- * don't open it, and it plays as a webpage.
+ * queues whole, a `page` (a channel, a series, a category) is opened to choose from, and a `station` (a radio's home
+ * page) plays that radio live. Undefined: Couch's providers don't open it, and it plays as a webpage.
  */
-export type LinkTarget = { provider: ProviderId; shape: MediaShape | "page" };
+export type LinkTarget = { provider: ProviderId; shape: MediaShape | "page" | "station" };
 type LinkClassifier = (url: string) => LinkTarget | undefined;
 
 function builtInLink(value: string): LinkTarget | undefined {
   const provider = providerForUrl(value);
   if (!provider) return;
   const path = new URL(value).pathname.replace(/\/$/, "");
+  // A station's pages other than its episodes and shows (archiveLink), its home page first, play the station live.
+  if (provider === "archives") return { provider, shape: "station" };
   // Twitch pages list only channels and categories; a VOD or a clip plays as a webpage.
   if (provider === "twitch")
     return path.startsWith("/videos/") ||

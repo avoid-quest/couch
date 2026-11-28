@@ -918,6 +918,7 @@ function Typed({
         connected={connected}
         onOpen={onOpen}
         onLink={onLink}
+        onPlayStation={onPlayStation}
         onSearch={onSearch}
       />
     );

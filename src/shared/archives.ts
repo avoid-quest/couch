@@ -97,6 +97,18 @@ const stations: Record<
 export const isArchiveHost = (host: string) =>
   Object.values(stations).some((station) => station.hosts.includes(host));
 
+/** Whether `address` is on the same station's site as the page `link`: its hosts, or under them (icecast.lyl.live). */
+export function onArchiveSite(link: string, address: string) {
+  try {
+    const page = new URL(link).hostname;
+    const host = new URL(address).hostname;
+    const site = Object.values(stations).find((station) => station.hosts.includes(page));
+    return !!site?.hosts.some((own) => host === own || host.endsWith(`.${own}`));
+  } catch {
+    return false;
+  }
+}
+
 /** What a station's link is, from the link alone: Couch can tell before fetching anything. */
 export function archiveLink(value: string): ArchiveLink | undefined {
   if (value.length > 2048) return;

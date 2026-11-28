@@ -1,11 +1,13 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { providerPageQuery } from "@/api/providers";
+import { radioSearchQuery } from "@/api/radio";
 import type { ApiCredentials } from "@/api/client";
 import { createId } from "@/session/session";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { dismiss, notice, pendingNotice } from "@/toasts";
 import type { Action, VideoQuality } from "../shared/protocol";
+import { onArchiveSite } from "../shared/archives";
 import type { LinkTarget, ProviderId } from "../shared/providers";
 
 // Couch's queue limit: a longer list queues its first 500.
@@ -44,9 +46,29 @@ export function usePastedList(
   return { title: page?.title, count, queued };
 }
 
-/** Whether a pasted link's page plays by itself: a Twitch channel does, Mixcloud's list of playlists only opens. */
+/** The avoid radio station a pasted station's page plays, as Home does: the one whose stream or logo is on its site. */
+export function useLinkStation(
+  credentials: ApiCredentials | null | undefined,
+  url: string,
+  target: LinkTarget | undefined,
+) {
+  const station = target?.shape === "station";
+  const stations = useQuery({
+    ...radioSearchQuery(credentials ?? { origin: "", token: "" }, "avoid radio", ""),
+    enabled: !!credentials && station,
+  }).data?.stations;
+  if (!station) return;
+  return stations?.find((radio) =>
+    [radio.url, radio.logoUrl].some((address) => address && onArchiveSite(url, address)),
+  );
+}
+
+/**
+ * Whether a pasted link's page plays as itself: a Twitch channel does; Mixcloud's list of playlists only opens, and a
+ * station's page plays its station instead.
+ */
 export const linkPlays = (target: LinkTarget | undefined) =>
-  !(target?.shape === "page" && target.provider === "mixcloud");
+  !(target?.shape === "page" && target.provider === "mixcloud") && target?.shape !== "station";
 
 /** "Play all (12)"; over the queue limit, "Play all (4,626)" with the note that the first 500 go. */
 export const listLabel = (verb: "Play all" | "Queue all", count?: number) =>

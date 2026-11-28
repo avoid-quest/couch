@@ -60,6 +60,8 @@ test("a pasted link classifies from its URL alone", () => {
     ],
     ["https://radioblackout.org/shows/arsider/", { provider: "archives", shape: "playlist" }],
     ["https://www.nts.live/shows/minimal-effort", { provider: "archives", shape: "playlist" }],
+    ["https://lyl.live", { provider: "archives", shape: "station" }],
+    ["https://radioblackout.org/", { provider: "archives", shape: "station" }],
     ["https://www.mixcloud.com/lylradio/", { provider: "mixcloud", shape: "playlist" }],
     ["https://user:secret@www.youtube.com/watch?v=dQw4w9WgXcQ", undefined],
   ];

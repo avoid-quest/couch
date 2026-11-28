@@ -4,15 +4,16 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
-import { linkAction, linkPlays, type LinkVerb } from "@/pasted-link";
+import { linkAction, linkPlays, useLinkStation, type LinkVerb } from "@/pasted-link";
 import { createId } from "@/session/session";
+import { useShell } from "@/sections/shell/shell-context";
 import { supportsWebVideoQuality, videoQualityOptions } from "@/video-quality";
 import { linkTarget, type VideoQuality } from "../../../shared/providers";
 import type { Props } from "./SearchPanel";
 
 /**
  * A pasted link that isn't a list, on the results page: open it as a webpage or as direct media, at a quality, then
- * Play, Queue or Play next; Open page where Couch's provider opens it.
+ * Play, Queue or Play next; Open page where Couch's provider opens it. A station's page plays its station.
  */
 export function PastedLink({
   url,
@@ -38,6 +39,8 @@ export function PastedLink({
   const { hostname, pathname } = new URL(url);
   const { on } = usePlayOn();
   const target = linkTarget(url);
+  const station = useLinkStation(props, url, target);
+  const shell = useShell();
   async function send(verb: LinkVerb, deviceId?: string) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
@@ -95,7 +98,15 @@ export function PastedLink({
       </SettingsSection>
       <div className="flex flex-wrap gap-2">
         {/* Open shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage. */}
-        {target && (
+        {station && (
+          <Button
+            disabled={disabled || !props.canPlay}
+            onClick={() => void shell.enqueueRadio(station, true).then((ok) => ok && onDone())}
+          >
+            Play {station.name}
+          </Button>
+        )}
+        {target && target.shape !== "station" && (
           <Button
             variant="outline"
             onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
