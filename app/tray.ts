@@ -5,7 +5,7 @@ import {
   type MenuItemConstructorOptions,
   type NativeImage,
 } from "electron";
-import type { TrayAction, TrayStatus } from "../src/shared/app-bridge";
+import { trayLabelLength, type TrayAction, type TrayStatus } from "../src/shared/app-bridge";
 import type { UpdateState } from "../src/shared/updates";
 
 type Options = {
@@ -90,7 +90,7 @@ function updateItem(options: Options): MenuItemConstructorOptions {
 /** Is it a status a page may give the tray: short labels only, since another Couch's page may send it. */
 export function isTrayStatus(value: unknown): value is TrayStatus {
   const status = value as TrayStatus;
-  const label = (text: unknown) => typeof text === "string" && text.length <= 200;
+  const label = (text: unknown) => typeof text === "string" && text.length <= trayLabelLength;
   return (
     !!value &&
     typeof value === "object" &&

@@ -22,6 +22,8 @@ export type AppMode = {
   targets: string[];
   localSetupComplete: boolean;
 };
+/** The longest label the desktop app's tray takes from a page. */
+export const trayLabelLength = 200;
 /** What the desktop app's tray says of the Couch its window shows (app/tray.ts). */
 export type TrayStatus = {
   couch: string;
