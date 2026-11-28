@@ -3,7 +3,7 @@ import childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { NsisUpdater } from "electron-updater/out/NsisUpdater";
 
@@ -287,14 +287,16 @@ test.each([
 });
 
 // The script runs in Couch's exe as Node: Electron's own binary runs it here the same way.
-const electronPackage = require.resolve("electron/package.json");
-const electron = join(
-  dirname(electronPackage),
-  "dist",
-  readFileSync(join(dirname(electronPackage), "path.txt"), "utf8"),
-);
+// The first run downloads Electron (about 100 MB), hence the longer timeout; later runs use its cache.
 test("the swap waits for Couch to exit, replaces app.asar and starts Couch again", async () => {
   const { swapScript } = await import("../app/app-update");
+  // The electron package's own lookup downloads the binary on first use, which bun install doesn't.
+  // Its download notice shares stdout, so the path is the last line.
+  const electron = Bun.spawnSync([process.execPath, "-e", "console.log(require('electron'))"])
+    .stdout.toString()
+    .trim()
+    .split("\n")
+    .at(-1)!;
   writeFileSync(join(temporary, "app.asar"), "old app");
   writeFileSync(join(temporary, "app.next"), "new app");
   // The stand-in Couch records whether it starts as Node; a shell script stands in only off Windows.
@@ -306,25 +308,29 @@ test("the swap waits for Couch to exit, replaces app.asar and starts Couch again
   });
   // The stand-in Couch runs until the test ends it, so the first check can't race its exit.
   const couch = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"]);
-  const swap = Bun.spawn(
-    [electron, "-e", swapScript, String(couch.pid), temporary, posix ? relaunch : ""],
-    { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
-  );
+  let swap: Bun.Subprocess | undefined;
   try {
+    swap = Bun.spawn(
+      [electron, "-e", swapScript, String(couch.pid), temporary, posix ? relaunch : ""],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+    );
     await Bun.sleep(300);
     expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
-  } finally {
     couch.kill();
+    await couch.exited;
+    expect(await swap.exited).toBe(0);
+  } finally {
+    // A failure mustn't leave either process running and holding the test run open.
+    couch.kill();
+    swap?.kill();
   }
-  await couch.exited;
-  expect(await swap.exited).toBe(0);
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("new app");
   expect(existsSync(join(temporary, "app.next"))).toBe(false);
   expect(existsSync(join(temporary, "app.asar.old"))).toBe(false);
   if (!posix) return;
   while (!existsSync(started)) await Bun.sleep(20);
   expect(readFileSync(started, "utf8").trim()).toBe("node=");
-});
+}, 120_000);
 
 // Exercise electron-updater's actual NSIS launch and quit logic on any host.
 const windows = async (spawn?: (command: string, args: string[]) => Promise<boolean>) => {
