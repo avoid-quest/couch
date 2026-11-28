@@ -135,6 +135,7 @@ test("the searched artist's own album is credited, and their name alone or someo
   const { credited } = searchRelevance("miles davis kind of blue");
   const miles = { title: "Miles Davis", url: "https://open.spotify.com/artist/m" };
   expect(credited({ title: "Kind Of Blue", creator: miles })).toBe(true);
+  expect(credited({ title: "Kind of Blue", meta: "Miles Davis" })).toBe(true);
   expect(
     credited({
       title: "Miles Davis - Kind Of Blue",
@@ -142,6 +143,13 @@ test("the searched artist's own album is credited, and their name alone or someo
     }),
   ).toBe(false);
   expect(searchRelevance("miles davis").credited({ title: "So What", creator: miles })).toBe(false);
+  // An uploader named by one word of the query isn't the artist asked for.
+  expect(
+    searchRelevance("dj ale").credited({
+      title: "Set De Afro Dj Ale Para Malandros Y Fresas",
+      creator: { title: "Ale", url: "https://soundcloud.com/ale" },
+    }),
+  ).toBe(false);
 });
 
 test("a known host pasted without its scheme is its https link, and words never are", () => {
