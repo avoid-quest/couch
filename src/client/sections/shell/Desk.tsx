@@ -198,6 +198,7 @@ export function WhereList({
       {find}
       <button
         type="button"
+        data-desk-handle
         aria-label={open ? "Show fewer devices" : "Show all devices"}
         title={open ? "Show fewer devices" : "Show all devices"}
         onClick={fold}

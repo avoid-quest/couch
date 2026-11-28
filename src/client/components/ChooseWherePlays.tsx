@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, X } from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DeviceCell, MixerKey, ProgrammeArt, busyWith, type Channel } from "@/components/MixerKeys";
@@ -27,17 +28,6 @@ import {
  */
 export function ChooseLayer({ side, phone }: { side: PlayerSide; phone: boolean }) {
   const request = useChooseRequest();
-  // Escape (a remote's Back) cancels it from anywhere while it is open, as the page under it is dimmed.
-  useEffect(() => {
-    if (!request || phone) return;
-    const cancel = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      event.preventDefault();
-      closeChoose();
-    };
-    window.addEventListener("keydown", cancel);
-    return () => window.removeEventListener("keydown", cancel);
-  }, [request, phone]);
   if (!request) return null;
   if (phone)
     return (
@@ -53,25 +43,24 @@ export function ChooseLayer({ side, phone }: { side: PlayerSide; phone: boolean 
         </SheetContent>
       </Sheet>
     );
+  // A modal in the player's column: focus stays inside, and Escape (a remote's Back) or a press on the dimmed page
+  // cancels it. Its keys take the focus as it opens, and `from` takes it back as it closes (closeChoose).
   return (
-    <>
-      <div
-        aria-hidden="true"
-        onClick={closeChoose}
-        className="fixed inset-0 z-40 bg-[rgb(8_6_10/55%)]"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Choose where it plays"
+    <DialogPrimitive.Root open onOpenChange={(open) => !open && closeChoose()}>
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-[rgb(8_6_10/55%)]" />
+      <DialogPrimitive.Content
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
         className={cn(
-          "now-playing fixed top-3 bottom-3 z-40 flex w-(--side-player-width) flex-col justify-end",
+          "now-playing fixed top-3 bottom-3 z-40 flex w-(--side-player-width) flex-col justify-end outline-none",
           side === "left" ? "left-3" : "right-3",
         )}
       >
+        <DialogPrimitive.Title className="sr-only">Choose where it plays</DialogPrimitive.Title>
         <Choose key={request.title} request={request} />
-      </div>
-    </>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Root>
   );
 }
 

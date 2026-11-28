@@ -75,6 +75,7 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
   const programme = useStationShow();
   const [open, setOpen] = useWhereOpen(state);
   const [sheet, setSheet] = useState(false);
+  const dock = useRef<HTMLButtonElement>(null);
   // Choose where it plays takes the side player's column while it is open.
   const choosing = !!useChooseRequest();
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
@@ -100,11 +101,16 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
     onBlurCapture: () => {
       focusWithin.current = false;
     },
-    // Escape folds the desk's list before anything else closes.
+    // Escape folds the desk's list before anything else closes; a key that folds away hands the focus to its handle.
     onKeyDown: (event: React.KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || !open) return;
       event.preventDefault();
       setOpen(false);
+      const from = event.target as HTMLElement;
+      requestAnimationFrame(() => {
+        if (!from.isConnected || document.activeElement === document.body)
+          document.querySelector<HTMLElement>("[data-now-playing] [data-desk-handle]")?.focus();
+      });
     },
   };
   const parts = { state, connected, run, title, thumbnail, entry: current };
@@ -213,6 +219,7 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
       )}
       {(!live || playbackControls(state).leave) && (
         <Button
+          ref={dock}
           variant="ghost"
           size="icon-lg"
           aria-label={live ? "Your volume" : "Where it plays"}
@@ -227,6 +234,11 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
           side="bottom"
           aria-describedby={undefined}
           showCloseButton={false}
+          // It closes back onto the dock's control that raised it.
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            dock.current?.focus();
+          }}
           className="now-playing max-h-[calc(100dvh-2.75rem)] gap-0 overflow-hidden rounded-t-[1.75rem] px-4 pt-4 pb-3"
         >
           <SheetTitle className="sr-only">{live ? "Your volume" : "Where it plays"}</SheetTitle>
