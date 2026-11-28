@@ -161,6 +161,8 @@ export function HomePage() {
     {
       label: "Play on",
       disabled: !resumable(item) || !item.playable,
+      thumbnail: item.thumbnail,
+      verb: item.position > 0 ? "Resume" : undefined,
       playOn: (on) => resume.mutate({ item, fromStart: item.position === 0, on }),
     },
   ];
@@ -176,7 +178,7 @@ export function HomePage() {
         disabled: !connected,
         run: () => queueItem(item.title, () => loadForLater(credentials, item.id, "append")),
       },
-      { label: "Play on", disabled: !available, playOn: start },
+      { label: "Play on", disabled: !available, thumbnail: item.thumbnail, playOn: start },
       ...browserActions(item.url),
     ];
   };

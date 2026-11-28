@@ -13,10 +13,11 @@ and then takes it into the bathroom on their phone while they shower.
    in step; no extra setting.
 4. In the bathroom, turn on this phone's **Sound** (**Tap to hear** if the
    browser asks).
-5. Set each device's level, or the top **Volume** to scale them all together.
+5. Set each device's level, or the **Volume** at the bottom to scale them all
+   together.
 6. Next time, pick a group at the top of **Where it plays** ("Everywhere"),
-   check what it would change, and **Apply**. An admin saves one with
-   **Save as group**.
+   check what it would change, and **Apply**; or pick it in **Play on…**
+   before anything starts. An admin saves one with **Save as group**.
 
 ## Done when
 

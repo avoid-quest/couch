@@ -55,7 +55,9 @@ mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false }),
 }));
 mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
+const shell = await import("../src/client/sections/shell/shell-context");
 mock.module("../src/client/sections/shell/shell-context", () => ({
+  ...shell,
   useShell: () => ({
     section: "Home",
     current: state.queue.find((entry) => entry.id === state.currentEntryId),

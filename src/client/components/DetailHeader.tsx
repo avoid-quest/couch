@@ -202,6 +202,8 @@ export function DetailHeader({
             <PlayOnMenu
               size="lg"
               title={title}
+              thumbnail={thumbnail}
+              verb={started ? "Resume" : undefined}
               audioOnly={playOn.audioOnly}
               disabled={playOn.disabled}
               onPlay={playOn.run}

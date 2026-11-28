@@ -147,12 +147,17 @@ export function PlayOnGroup({
 /** "Play on…" beside a row's inline verbs: it opens Choose where it plays from itself. */
 export function PlayOnMenu({
   title,
+  thumbnail,
+  verb,
   audioOnly,
   onPlay,
   disabled,
   size,
 }: {
   title: string;
+  thumbnail?: string;
+  /** Play's word in the panel, "Resume" for an item partly played. */
+  verb?: string;
   audioOnly?: boolean;
   onPlay: (on: PlayOn) => void;
   disabled?: boolean;
@@ -163,6 +168,8 @@ export function PlayOnMenu({
   return (
     <ChooseWherePlays
       title={title}
+      thumbnail={thumbnail}
+      verb={verb}
       audioOnly={audioOnly}
       onPlay={onPlay}
       open={open}

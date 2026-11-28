@@ -1,5 +1,12 @@
 import type { ClientSessionState } from "./session";
-import { leaveAction, soundActions, type OutputAction, type Row } from "./where-it-plays";
+import {
+  leaveAction,
+  soundActions,
+  type Choice,
+  type ChoiceRow,
+  type OutputAction,
+  type Row,
+} from "./where-it-plays";
 import type { GroupMember, MixerGroup } from "../../shared/mixer-groups";
 
 // What applying a Group to the playback in view would change, from the Mixer's own rows (where-it-plays.ts): a group
@@ -38,23 +45,64 @@ export function planGroup(group: MixerGroup, rows: Row[], state: ClientSessionSt
         if (want) plan.same.push(line);
       } else if (!now.enabled)
         plan.left.push({ ...line, reason: (now.reason ?? "Private").toLowerCase(), stays: now.on });
-      else plan.changes.push({ ...line, on: want, from: want ? takenFrom(row, state) : undefined });
+      else
+        plan.changes.push({
+          ...line,
+          on: want,
+          from: want && !row.output ? takenFrom(row.device.id, state, state.playback) : undefined,
+        });
     }
   }
   if (!plan.same.length && !plan.changes.some((change) => change.on)) plan.changes = [];
   return plan;
 }
 
-/** The title of the other programme a device plays now, which the group would take it from. */
-function takenFrom(row: Row, state: ClientSessionState) {
-  if (row.output) return undefined;
+/** The title of the programme other than `except` a device plays now, which the group would take it from. */
+function takenFrom(deviceId: string, state: ClientSessionState, except?: string | null) {
   const other = state.playbacks?.find(
     (playback) =>
-      playback.id !== state.playback &&
+      playback.id !== except &&
       playback.status !== "idle" &&
-      playback.outputs.some((output) => output.deviceId === row.device.id),
+      playback.outputs.some((output) => output.deviceId === deviceId),
   );
   return other && (other.title ?? "something else");
+}
+
+/**
+ * The group's plan for Choose where it plays' choice, which its preview shows before Use this group fills it
+ * (groupChoice): members' channels a row can play are turned on, the rest of the choice off, and what a row can't play
+ * is left out. As in planGroup, a group none of which can play here changes nothing.
+ */
+export function planChoice(
+  group: MixerGroup,
+  rows: ChoiceRow[],
+  choice: Choice,
+  state: ClientSessionState,
+): Plan {
+  const plan: Plan = { same: [], changes: [], left: [], wanted: 0 };
+  for (const row of rows) {
+    const member = group.members.find((item) => item.deviceId === row.device.id);
+    for (const channel of ["picture", "sound"] as const) {
+      const now = row[channel];
+      if (now.reason === "No picture" || now.reason === "No sound") continue;
+      const on = !!choice[row.device.id]?.[channel] && now.enabled,
+        want = !!member?.[channel],
+        line = { deviceId: row.device.id, name: row.device.name, channel };
+      if (want) plan.wanted++;
+      if (want === on) {
+        if (want) plan.same.push(line);
+      } else if (!now.enabled)
+        plan.left.push({ ...line, reason: (now.reason ?? "Private").toLowerCase(), stays: false });
+      else
+        plan.changes.push({
+          ...line,
+          on: want,
+          from: want ? takenFrom(row.device.id, state) : undefined,
+        });
+    }
+  }
+  if (!plan.same.length && !plan.changes.some((change) => change.on)) plan.changes = [];
+  return plan;
 }
 
 /**
@@ -159,3 +207,25 @@ export const membersOf = (rows: Row[]): GroupMember[] =>
   rows
     .filter((row) => row.picture.on || row.sound.on)
     .map((row) => ({ deviceId: row.device.id, picture: row.picture.on, sound: row.sound.on }));
+
+/**
+ * A group as Choose where it plays' choice: each member's channels its row can play now, and the rest it leaves out
+ * ("Bedroom TV sound (offline)"). What the item lacks is no one's to leave out, so it isn't said.
+ */
+export function groupChoice(group: MixerGroup, rows: ChoiceRow[]) {
+  const choice: Choice = {},
+    left: string[] = [];
+  for (const member of group.members) {
+    const row = rows.find((item) => item.device.id === member.deviceId);
+    if (!row) continue;
+    const picture = member.picture && row.picture.enabled,
+      sound = member.sound && row.sound.enabled;
+    if (picture || sound) choice[member.deviceId] = { picture, sound };
+    for (const channel of ["picture", "sound"] as const) {
+      const reason = row[channel].reason;
+      if (member[channel] && reason && reason !== "No picture" && reason !== "No sound")
+        left.push(`${row.device.name} ${channel} (${reason.toLowerCase()})`);
+    }
+  }
+  return { choice, left };
+}

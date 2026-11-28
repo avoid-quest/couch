@@ -234,6 +234,8 @@ function Lead({
           {devices.length > 0 && (
             <ChooseWherePlays
               title={item.title}
+              thumbnail={item.thumbnail}
+              verb={item.position > 0 ? "Resume" : undefined}
               open={choosing}
               onOpenChange={setChoosing}
               onPlay={(on) => resume(item, { fromStart: false, on })}

@@ -428,11 +428,6 @@ export const firstChoice = (rows: ChoiceRow[]): Choice =>
       .map((row) => [row.device.id, { picture: row.picture.enabled, sound: row.sound.enabled }]),
   );
 
-/** A device alone, with everything it can play: what one press on its name plays. */
-export const onlyChoice = (row: ChoiceRow): Choice => ({
-  [row.device.id]: { picture: row.picture.enabled, sound: row.sound.enabled },
-});
-
 /** What a choice still plays: each device's chosen channels it can play now, so one that went offline or stopped lending drops out. */
 const current = (rows: ChoiceRow[], choice: Choice): Choice =>
   Object.fromEntries(
