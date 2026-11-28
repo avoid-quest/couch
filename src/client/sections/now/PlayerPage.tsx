@@ -282,11 +282,11 @@ export function PlayerPage({
   const retry =
     state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   // The controls stay up on a toast's action, which Back returns to them, or while one of their Popovers or Sheets is
-  // open (Volume, Where it plays), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
+  // open (Volume, Where it plays, the TV's playback picker), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
   // them. On the TV they hide wherever focus is, and the next key brings them back on Pause.
   const idle = () => {
     const opened = document.querySelector(
-      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]',
+      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"], [data-slot="dropdown-menu-content"][data-state="open"]',
     );
     if (
       opened ||
