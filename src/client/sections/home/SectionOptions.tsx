@@ -21,7 +21,7 @@ function whenDrawn(done: () => boolean, frames = 20) {
  * Where the focus goes when a section leaves Home (Hide, Remove): the next section's first control, else the
  * previous one's, so a remote stays on Home. Taken before the section goes; given once it has.
  */
-function focusAfter(section: Element | null | undefined) {
+export function focusAfter(section: Element | null | undefined) {
   const page = section?.closest("[data-page]");
   if (!section || !page) return;
   const sections = [...page.querySelectorAll<HTMLElement>("section")].filter(
@@ -102,7 +102,8 @@ function useSectionActions(id: HomeSectionId, name: string): MenuAction[] {
 
 /**
  * A Home section's "…", at the end of its heading's line; a followed section's adds Rename… and Remove from Home. Its
- * groups are how it stands (Rename…, Move up, Move down), taking it away (Hide, Remove from Home) and Edit Home. Its
+ * groups are the list's own (`list`: Up next's Save as list…), how it stands (Rename…, Move up, Move down), taking it
+ * away (Hide, Remove from Home) and Edit Home. Its
  * menu hangs from it on desktops and the TV; a phone's Sheet rises from the bottom.
  */
 export function SectionOptions({
@@ -110,14 +111,17 @@ export function SectionOptions({
   name,
   rename,
   remove,
+  list = [],
 }: {
   id: HomeSectionId;
   name: string;
   rename?: MenuAction;
   remove?: MenuAction;
+  list?: MenuAction[];
 }) {
   const router = useRouter();
   const actions = [
+    ...list,
     ...(rename ? [{ ...rename, group: "arrange" }] : []),
     ...useSectionActions(id, name),
     ...(remove ? [{ ...remove, group: "take away" }] : []),

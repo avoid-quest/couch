@@ -23,6 +23,7 @@ import { useHistoryMenu } from "./history-menu";
 import type { MenuAction } from "@/components/RowMenu";
 import { failed } from "@/toasts";
 import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
+import { useUpNextMenu } from "@/sections/now/UpNextMenu";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
 import { mediaIdentity } from "@/sections/find/provider-progress";
@@ -50,7 +51,7 @@ import { FollowShelf } from "./FollowShelf";
 import { AddSectionPanel, itemTarget, useHomeAction } from "./AddToHome";
 import { BoardArt, BoardList } from "./HomeBoard";
 import { ContinueSection, LeadSkeleton } from "./ContinueSection";
-import { HomeOrder, SectionOptions } from "./SectionOptions";
+import { focusAfter, HomeOrder, SectionOptions } from "./SectionOptions";
 import {
   Failed,
   LiveTvShelf,
@@ -290,7 +291,7 @@ export function HomePage() {
     upNext: !!upcoming.length && (
       <UpcomingBoard
         cursor={cursor}
-        options={options("upNext")}
+        name={homeRows.upNext.label}
         onMore={() => setQueueOpen(true)}
       />
     ),
@@ -566,11 +567,11 @@ export function HomePage() {
 // Only the timetable subscribes to playback time; a tick must not render Home's shelves and artwork.
 function UpcomingBoard({
   cursor,
-  options,
+  name,
   onMore,
 }: {
   cursor: number;
-  options: ReactNode;
+  name: string;
   onMore: () => void;
 }) {
   const { credentials, available, current } = useShell();
@@ -596,11 +597,27 @@ function UpcomingBoard({
     clock = clock == null || seconds == null ? null : clock + seconds;
     return { entry, starts, seconds };
   });
+  // Up next's own menu, as the player's has it: cleared, the section goes, so the focus moves on first.
+  const list = useUpNextMenu({
+    state,
+    credentials,
+    connected,
+    run,
+    upcoming: upcoming.length,
+    options: () => document.querySelector<HTMLElement>('[data-section-options="upNext"] button'),
+    onClear: () =>
+      focusAfter(document.querySelector('[data-section-options="upNext"]')?.closest("section")),
+  });
   return (
     <BoardList
       title="Up next"
       time={clock != null ? `until ${formatEndTime(clock, now)}` : undefined}
-      options={options}
+      options={
+        <>
+          <SectionOptions id="upNext" name={name} list={list.actions} />
+          {list.dialog}
+        </>
+      }
       more={
         upcoming.length > boardLength && (
           <Button
