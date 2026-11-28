@@ -362,13 +362,14 @@ export type Action =
   | { type: "undoStop"; stoppedId: string }
   // Undo of a change that took devices (Play on, Move here, a device's key, a group), all or nothing, and only while
   // each device it moved is still where it left it (left; playbackId null: nowhere) and what it started or replaced
-  // still plays its item. started stops; replaced's item plays again; each restore Playback gets back the channels the
-  // change took (only those, an off one leaving) and a publisher it held; resume plays again what it paused.
+  // still plays its item. started stops; replaced's item plays again (paused, when it was); each restore Playback gets
+  // back the channels the change took (only those, an off one leaving) and a publisher it held; resume plays again what
+  // it paused.
   | {
       type: "restoreOutputs";
       left: (Pick<Output, "deviceId" | "picture" | "sound"> & { playbackId: string | null })[];
       started?: { playbackId: string; entryId: string };
-      replaced?: { playbackId: string; entryId: string; newEntryId: string };
+      replaced?: { playbackId: string; entryId: string; newEntryId: string; paused?: true };
       restore: {
         playbackId: string;
         outputs: Pick<Output, "deviceId" | "picture" | "sound">[];

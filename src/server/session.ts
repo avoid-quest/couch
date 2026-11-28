@@ -709,7 +709,8 @@ export function createSession(
   const play = (
     entryId: string,
     fromStart = false,
-    reason: "play" | "next" | "retry" | "undoStop" = "play",
+    // undoPaused: Undo of Play on that replaced a paused item, which comes back paused.
+    reason: "play" | "next" | "retry" | "undoStop" | "undoPaused" = "play",
     authorize = () => {},
     playedBy?: PlaybackActor,
     selectedEntryIds: string[] = [],
@@ -762,7 +763,8 @@ export function createSession(
       cancelContinuation(endedAt !== undefined && listEnd(continuation, entry.id) === endedAt);
     if (reason === "retry") state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
-    if (reason === "play" || reason === "undoStop") reservation++;
+    const chosen = reason === "play" || reason === "undoStop" || reason === "undoPaused";
+    if (chosen) reservation++;
     activePlayIntent = ++playIntent;
     webRecovery = null;
     state.webRetry = null;
@@ -783,8 +785,9 @@ export function createSession(
     state.playedBy = undefined;
     state.currentEntryId = entry.id;
     const resume = reason === "undoStop" ? stopped?.player : undefined;
+    const paused = reason === "undoPaused" || resume?.status === "paused";
     forgetStop();
-    state.presentationId = reason === "play" || reason === "undoStop" ? playbackId : null;
+    state.presentationId = chosen ? playbackId : null;
     state.player = {
       ...state.player,
       playbackId,
@@ -870,7 +873,7 @@ export function createSession(
           playbackId,
           ...media,
           ...(resume?.seekable ? { startPosition: resume.position } : {}),
-          ...(resume?.status === "paused" ? { paused: true } : {}),
+          ...(paused ? { paused: true } : {}),
           ...(isRadio(currentEntry) ? { radio: true } : {}),
           preferences: { ...preferences, ...state.preferences!.device },
         });
@@ -1408,6 +1411,12 @@ export function createSession(
     },
     get pauses() {
       return pauses;
+    },
+    /** Undo of Play on that replaced a paused item: the item plays again paused, where its progress left it. */
+    playPaused(entryId: string, authorize = () => {}, playedBy?: PlaybackActor) {
+      assertAdmitted();
+      authorize();
+      play(entryId, false, "undoPaused", authorize, playedBy);
     },
     get stoppedId() {
       return stopped?.player.playbackId;

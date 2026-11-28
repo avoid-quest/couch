@@ -5801,11 +5801,14 @@ export async function createHub(options: HubOptions) {
             }
             if (replaced && action.replaced) {
               const permitted = authorizePlayback(replaced, authorize, deviceId);
-              await replaced.session.command(
-                { type: "play", entryId: action.replaced.entryId },
-                permitted,
-                playedBy,
-              );
+              if (action.replaced.paused)
+                replaced.session.playPaused(action.replaced.entryId, permitted, playedBy);
+              else
+                await replaced.session.command(
+                  { type: "play", entryId: action.replaced.entryId },
+                  permitted,
+                  playedBy,
+                );
               inspections.get(action.replaced.newEntryId)?.abort();
               await replaced.session.command(
                 { type: "remove", entryId: action.replaced.newEntryId },

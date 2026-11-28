@@ -3,7 +3,7 @@ import { restoringByUndo } from "./undo";
 
 // What made way for a change that takes devices (Play on, Move here, a device's Sound or Picture key, a group), so its
 // Undo puts back only what the change did: the Playback it started stops, an item it replaced in a device's own Playback
-// plays again from where it was, every Playback it took channels from gets those back, and what it paused plays again.
+// plays again from where it was (paused, when it was), every Playback it took channels from gets those back, and what it paused plays again.
 // Core does it all or nothing, and refuses once a device the change moved is elsewhere.
 
 type Channels = Pick<Output, "deviceId" | "picture" | "sound">;
@@ -61,7 +61,12 @@ export function madeWay(before: SessionState, after: SessionState, played = fals
   const previous = index > 0 ? after.queue[index - 1] : undefined;
   const replaced =
     reused && previous && after.currentEntryId && previous.title === reused.title
-      ? { playbackId: reused.id, entryId: previous.id, newEntryId: after.currentEntryId }
+      ? {
+          playbackId: reused.id,
+          entryId: previous.id,
+          newEntryId: after.currentEntryId,
+          ...(reused.status === "paused" ? { paused: true as const } : {}),
+        }
       : undefined;
   const restore = [...was.values()].flatMap((playback) => {
     const next = now.get(playback.id);

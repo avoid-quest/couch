@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
-import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
 import { applyUndo, undoPlan } from "../src/client/session/undo";
 import { madeWay, undoMadeWay } from "../src/client/session/made-way";
 import { withState } from "./whole-state.fixture";
@@ -771,6 +771,78 @@ test(
           !f.phone.state.queue.some((entry) => entry.id === "clip"),
       );
       assert.equal(f.phone.state.playback, before.playback);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of Play on that replaced a paused item brings it back paused where it was",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      // The phone plays what it loads: the film paused 42 s in, everything else playing.
+      const loads: Extract<PlaybackCommand, { type: "load" }>[] = [];
+      f.phone.socket.on("message", (data) => {
+        const message = JSON.parse(String(data)) as ServerMessage;
+        if (message.type !== "player" || message.command.type !== "load") return;
+        const { command } = message;
+        loads.push(command);
+        const film = loads.length === 1;
+        f.phone.socket.send(
+          JSON.stringify({
+            type: "player",
+            state: {
+              playbackId: command.playbackId,
+              status: film || command.paused ? "paused" : "playing",
+              buffering: false,
+              position: film ? 42 : (command.startPosition ?? 0),
+              duration: 600,
+              volume: 80,
+              seekable: true,
+              error: null,
+              speed: 1,
+              tracks: [],
+              audioDelay: 0,
+              subtitleDelay: 0,
+            },
+          }),
+        );
+      });
+      const entry = (id: string) => ({
+        ...f.entry(id),
+        source: `${f.hub.origin}/api/health?${id}`,
+      });
+      await f.phone.command({
+        type: "enqueue",
+        entry: entry("film"),
+        playNow: true,
+        deviceId: phoneId,
+      });
+      await until(() => f.phone.state.player.status === "paused");
+      const before = f.phone.state;
+      await f.phone.command({
+        type: "enqueue",
+        entry: entry("clip"),
+        playNow: true,
+        deviceId: phoneId,
+      });
+      await until(() => f.phone.state.player.status === "playing");
+      const plan = madeWay(before, f.phone.state, true);
+      assert.deepEqual(plan.undo.replaced, {
+        playbackId: before.playback,
+        entryId: "film",
+        newEntryId: "clip",
+        paused: true,
+      });
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(() => f.phone.state.currentEntryId === "film" && loads.length === 3);
+      assert.equal(loads[2]!.paused, true, "the film loads paused");
+      assert.equal(loads[2]!.startPosition, 42, "where it was");
+      await until(() => f.phone.state.player.status === "paused");
+      assert.equal(f.phone.state.player.position, 42);
     } finally {
       await f.close();
     }

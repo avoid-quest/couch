@@ -333,7 +333,8 @@ function validAction(value: unknown): value is Action {
           (object(value.replaced) &&
             id(value.replaced.playbackId) &&
             id(value.replaced.entryId) &&
-            id(value.replaced.newEntryId))) &&
+            id(value.replaced.newEntryId) &&
+            (value.replaced.paused === undefined || value.replaced.paused === true))) &&
         list(
           value.restore,
           (restore) =>
@@ -689,6 +690,7 @@ export function parseCommand(message: string): ClientMessage {
             playbackId: value.action.replaced.playbackId,
             entryId: value.action.replaced.entryId,
             newEntryId: value.action.replaced.newEntryId,
+            ...(value.action.replaced.paused ? { paused: true as const } : {}),
           },
         }),
         restore: value.action.restore.map((restore) => ({
