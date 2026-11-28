@@ -11,7 +11,7 @@ import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/comp
 import { MediaTile } from "@/components/MediaTile";
 import { historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
 import { mediaCaption, metaLine, savedCaption } from "@/media-caption";
-import { Shelf } from "@/components/Shelf";
+import { Shelf, StaleNote } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
 import { useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -281,6 +281,7 @@ export function HomePage() {
           resumable={resumable}
           menu={(item) => historyMenu(item, true)}
           playing={isPlaying}
+          note={history.isRefetchError && <StaleNote />}
         />
       ) : (
         history.error && (
@@ -302,7 +303,12 @@ export function HomePage() {
     ),
 
     later: savedMedia.length ? (
-      <Shelf title="For later" href="/saved?tab=later" options={options("later")}>
+      <Shelf
+        title="For later"
+        href="/saved?tab=later"
+        note={later.isRefetchError && <StaleNote />}
+        options={options("later")}
+      >
         {savedMedia.slice(0, shelfLength).map((item, index) => (
           <li key={item.id} className="flex shrink-0">
             <MediaTile
@@ -336,7 +342,12 @@ export function HomePage() {
     ),
 
     recent: recent.length ? (
-      <Shelf title="Played recently" href="/saved?tab=played" options={options("recent")}>
+      <Shelf
+        title="Played recently"
+        href="/saved?tab=played"
+        note={history.isRefetchError && <StaleNote />}
+        options={options("recent")}
+      >
         {recent.slice(0, shelfLength).map((item, index) => (
           <li key={item.mediaId} className="flex shrink-0">
             <MediaTile
@@ -376,7 +387,13 @@ export function HomePage() {
 
     // Every station on air, yours (played here lately, saved) first; the heading opens every station.
     radio: stations.length ? (
-      <Shelf title="Radio" label="Radio stations" href="/radio" options={options("radio")}>
+      <Shelf
+        title="Radio"
+        label="Radio stations"
+        href="/radio"
+        note={(favorites.isRefetchError || builtIn.isRefetchError) && <StaleNote />}
+        options={options("radio")}
+      >
         {stations.map((station, index) => {
           const show = onAir(station.id);
           const logo = !show?.artworkUrl || show.artworkUrl === station.logoUrl;

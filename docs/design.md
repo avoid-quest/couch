@@ -152,7 +152,9 @@ A problem shows where it belongs, never as a banner dropping into the page:
 
 - **One thing** (a shelf, a device's row, a setting, a panel) says so in that
   thing's own place, quietly: a shelf under its heading (`ShelfProblem`), a
-  device under its name, a setting under its row. Nothing else moves.
+  device under its name, a setting under its row. Nothing else moves. A shelf
+  that keeps its last list after a refresh fails says "Couldn't refresh" beside
+  its heading (`StaleNote`).
 - **What you just did** (an action failed) is a message (`failed()` in
   `toasts.ts`), beside nothing else.
 - **The whole app** (Couch out of reach, refusing this address, updated, its

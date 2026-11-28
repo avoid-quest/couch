@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +31,8 @@ type Props = {
   menu: (item: HistoryItem) => MenuAction[];
   /** Whether it plays now: what plays doesn't make way for itself. */
   playing: (item: HistoryItem) => boolean;
+  /** A quiet line after the heading (a refresh that failed). */
+  note?: ReactNode;
 };
 
 // The programme an item belongs to ("Splendida Cornice"), not the list it came from ("Clip").
@@ -49,7 +51,7 @@ const rowCaption = (item: HistoryItem) => {
  * beside a short list of the next. It keeps the order Home opened with, so nothing takes the lead's place while you
  * look at it; with nothing to continue there is no section.
  */
-export function ContinueSection({ items, loading, resume, resumable, menu, playing }: Props) {
+export function ContinueSection({ items, loading, resume, resumable, menu, playing, note }: Props) {
   const [lead, ...next] = items;
   if (!loading && !lead) return null;
   const rows = next.slice(0, 3);
@@ -58,6 +60,7 @@ export function ContinueSection({ items, loading, resume, resumable, menu, playi
     <section aria-label="Continue" aria-busy={loading || undefined} className="grid min-w-0 gap-3">
       <div className="flex items-center gap-4">
         <ShelfHeading title="Continue" href="/saved?tab=played" loading={loading} />
+        {note}
         <SectionOptions id="continue" name="Continue" />
       </div>
       {!lead ? (

@@ -115,6 +115,15 @@ export function Shelf({
   );
 }
 
+/** A shelf still showing its last list after a refresh failed says so quietly, beside its heading. */
+export function StaleNote() {
+  return (
+    <span role="status" className="text-meta text-muted-foreground">
+      Couldn't refresh
+    </span>
+  );
+}
+
 /**
  * A shelf that can't load says so in its own place, under its heading, with Try again (docs/design.md "Problems"):
  * what couldn't happen, then Core's own sentence when it sent one.

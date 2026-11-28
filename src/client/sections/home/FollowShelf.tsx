@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
-import { Shelf, ShelfHeading, ShelfProblem } from "@/components/Shelf";
+import { Shelf, ShelfHeading, ShelfProblem, StaleNote } from "@/components/Shelf";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -172,7 +172,22 @@ export function FollowShelf({
       ) : !loading && !shelved.length ? (
         quiet(`${source} lists nothing here right now.`)
       ) : (
-        <Shelf title={follow.name} href={href} loading={loading} note={note} options={menu}>
+        <Shelf
+          title={follow.name}
+          href={href}
+          loading={loading}
+          note={
+            opening?.error || summary?.error ? (
+              <>
+                {note}
+                <StaleNote />
+              </>
+            ) : (
+              note
+            )
+          }
+          options={menu}
+        >
           {loading ? (
             <MediaTilesSkeleton shape={frame} />
           ) : (
