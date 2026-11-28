@@ -48,7 +48,8 @@ import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { WhereTokens, useBottomBar } from "@/sections/shell/NowPlaying";
+import { PlayingChip, UpNext, WhereBox, WhereTokens } from "@/sections/shell/NowPlayingParts";
+import { useBottomBar } from "@/sections/shell/bottom-bar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
 import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
 import { useCouchPlayer } from "@/components/CouchPlayer";
@@ -95,6 +96,15 @@ const subscribeWide = (onChange: () => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 const isWide = () => window.matchMedia(wideQuery).matches;
+// Below the band's breakpoint (max-sm) a phone's player is one column, as the prototype's: the artwork and the title at
+// the top, then Where it plays and Up next, the band under them.
+const narrowQuery = "(max-width: 39.99rem)";
+const subscribeNarrow = (onChange: () => void) => {
+  const media = window.matchMedia(narrowQuery);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isNarrow = () => window.matchMedia(narrowQuery).matches;
 // The band's controls that open something to take focus (Popovers, Up next); Info shows its part in place.
 const opened = '[aria-expanded="true"]:not([data-info-toggle])';
 // Info over a picture opens on its first button, as the controls it hides would have held focus.
@@ -214,6 +224,8 @@ export function PlayerPage({
   const artworkStage = audioOnly || !picture;
   const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false);
+  const stacked = narrow && artworkStage && !!current && !!state;
   // Now playing is calm: artwork, title and where it comes from. Info shows the rest in place (a show's genres and host,
   // its broadcast, synopsis and the next show; an item's trail and end). It belongs to what this Playback shows, so
   // another entry or Playback starts calm, while a new programme on the same station keeps it open.
@@ -656,6 +668,7 @@ export function PlayerPage({
     <>
       <MediaContext
         creator={current.creator}
+        collection={current.collection}
         radio={
           radio && currentProgramme && current.source.startsWith("radio:")
             ? { id: current.source.slice(6), title: current.title }
@@ -767,6 +780,7 @@ export function PlayerPage({
       data-page="Now"
       data-osd={osd || undefined}
       data-artwork-stage={artworkStage || undefined}
+      data-stacked={stacked || undefined}
       data-info={info || undefined}
       data-queue-open={queueOpen || undefined}
       data-player-idle={!current || undefined}
@@ -962,7 +976,7 @@ export function PlayerPage({
                     {linkedTitle}
                   </h1>
                 )}
-                <PlaysOnLine at={at}>
+                <PlaysOnLine at={stacked ? null : at}>
                   {livePlayback(state) && current.subtitle && (
                     <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
                       {current.subtitle}
@@ -1020,6 +1034,20 @@ export function PlayerPage({
                   </p>
                 )}
                 {statusView}
+                {stacked && (
+                  <>
+                    <span className="empty:hidden">
+                      <PlayingChip state={state} />
+                    </span>
+                    <WhereBox state={state} connected={connected} run={run} />
+                    <UpNext
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      onOpen={() => setQueueOpen(true)}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1167,27 +1195,28 @@ export function PlayerPage({
                   {state && livePlayback(state) && (
                     <VolumeButton state={state} connected={connected} run={run} />
                   )}
-                  {/* Where it plays, said as the devices it plays on: the Mixer opens from it. */}
-                  {state && !livePlayback(state) && (
+                  {/* Where it plays, said as the devices it plays on, or its icon on a phone: the Mixer opens from it. One
+                    instance, so a request to choose opens one Mixer; stacked, the Where it plays box above is it. */}
+                  {state && !livePlayback(state) && !stacked && (
                     <WhereItPlays
                       state={state}
                       connected={connected}
                       run={run}
-                      className="mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 pr-3 pl-3.5 font-medium hover:bg-white/20 max-sm:hidden"
+                      className={
+                        narrow
+                          ? undefined
+                          : "mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 pr-3 pl-3.5 font-medium hover:bg-white/20"
+                      }
                     >
-                      <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
-                        <WhereTokens state={state} compact />
-                      </span>
-                      <SlidersVertical aria-hidden="true" />
+                      {!narrow && (
+                        <>
+                          <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
+                            <WhereTokens state={state} compact />
+                          </span>
+                          <SlidersVertical aria-hidden="true" />
+                        </>
+                      )}
                     </WhereItPlays>
-                  )}
-                  {state && !livePlayback(state) && (
-                    <WhereItPlays
-                      state={state}
-                      connected={connected}
-                      run={run}
-                      className="sm:hidden"
-                    />
                   )}
                   {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                     turns subtitles on and off. It opens over the picture above the gear. */}

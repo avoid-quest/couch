@@ -38,8 +38,10 @@ import {
 } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { NowPlaying, useBottomBar, type PlayerSize } from "./NowPlaying";
+import { NowPlaying, type PlayerSize } from "./NowPlaying";
+import { useBottomBar } from "./bottom-bar";
 import { RoomLight, useRoomLight } from "./RoomLight";
+import { usePlayerSide } from "./player-side";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
@@ -729,6 +731,7 @@ function ShellChrome({ children }: PropsWithChildren) {
   const phone =
     useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
   const [minimised, setMinimised] = useState(false);
+  const { side: playerSide } = usePlayerSide();
   const playerSize: PlayerSize = phone ? "dock" : minimised ? "mini" : "side";
   const sidePlayer = paired && nowPlaying && !!state && playerSize === "side";
   // The footer holds the capsule or the dock and the phone tab bar; its height is --bottom-bar.
@@ -740,7 +743,8 @@ function ShellChrome({ children }: PropsWithChildren) {
       connected={connected}
       run={run}
       size={playerSize}
-      onOpen={shell.openPlayer}
+      side={playerSide}
+      onOpen={() => shell.openPlayer()}
       onSize={(size) => setMinimised(size === "mini")}
     />
   );
@@ -772,6 +776,7 @@ function ShellChrome({ children }: PropsWithChildren) {
         !paired && "drag-region",
       )}
       data-side-player={sidePlayer || undefined}
+      data-player-side={playerSide}
       style={room.style}
       data-light={room.state}
     >

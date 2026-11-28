@@ -23,6 +23,7 @@ import { ErrorReportingSetting } from "./this-device/ErrorReportingSetting";
 import { DeviceNameSettings } from "./this-device/DeviceNameSettings";
 import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
 import { DeviceTextSize } from "./this-device/DeviceTextSize";
+import { PlayerSideSetting } from "./this-device/PlayerSideSetting";
 import { QuitAppSettings } from "./this-device/QuitAppSettings";
 
 // What changes only on the device in hand, and what it lets others do.
@@ -68,6 +69,7 @@ export function ThisDevicePage() {
             />
           )
         )}
+        <PlayerSideSetting />
         {!nativeHost && (
           <SettingsRow
             label="Keep screen awake"

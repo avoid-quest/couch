@@ -611,7 +611,7 @@ export function PlaybackVolume({
  * as the panel opens.
  */
 export function toolPanel(trigger: HTMLElement | null): {
-  side: "top" | "right";
+  side: "top" | "right" | "left";
   align: "start" | "end";
   sideOffset?: number;
 } {
@@ -620,14 +620,14 @@ export function toolPanel(trigger: HTMLElement | null): {
     align = at.left + at.width / 2 < window.innerWidth / 2 ? "start" : "end",
     row = trigger.closest<HTMLElement>("[data-player-band], [data-now-playing]");
   if (!row) return { side: "top", align };
-  // The side player stands the window's height at its left edge: its panels open past its right edge, level with
-  // the control's top.
-  if (row.matches('[data-size="side"]'))
-    return {
-      side: "right",
-      align: "start",
-      sideOffset: row.getBoundingClientRect().right - at.right + 12,
-    };
+  // The side player stands the window's height at one edge (Player side): its panels open past its inner edge, over
+  // the page, level with the control's top.
+  if (row.matches('[data-size="side"]')) {
+    const panel = row.getBoundingClientRect();
+    return panel.left > window.innerWidth / 2
+      ? { side: "left", align: "start", sideOffset: at.left - panel.left + 12 }
+      : { side: "right", align: "start", sideOffset: panel.right - at.right + 12 };
+  }
   return { side: "top", align, sideOffset: at.top - row.getBoundingClientRect().top + 8 };
 }
 

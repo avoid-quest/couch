@@ -1,5 +1,5 @@
 import type { Action, SessionState } from "../../shared/protocol";
-import { isRadio } from "../../shared/radio";
+import { keepsProgress } from "../../shared/viewing";
 
 type Resume = {
   entryId: string;
@@ -34,26 +34,21 @@ function resume(state: SessionState): Resume {
 const names = new Intl.ListFormat("en", { type: "conjunction" });
 
 /**
- * Stop says where it stopped, unless that was only `here`, and that the item waits in Continue when Core keeps its
- * place: something with a length, started and short of the 90% that counts as watched (server/progress.ts).
+ * Stop says where it stopped, This device included, and that the item waits in Continue when Core kept its place: media
+ * it keeps progress for (keepsProgress), started, and seekable, as Core saves no place it couldn't return to
+ * (server/progress.ts). Stopping never marks it watched.
  */
 function stopped(before: SessionState, here: string) {
   const ids = [...new Set(before.outputs?.map((output) => output.deviceId) ?? [])];
   const where = ids
-    .map((id) => before.devices?.find((device) => device.id === id)?.name)
+    .map((id) =>
+      id === here ? "This device" : before.devices?.find((device) => device.id === id)?.name,
+    )
     .filter((name): name is string => !!name);
-  const elsewhere = where.length > 0 && !(ids.length === 1 && ids[0] === here);
   const entry = before.queue.find((item) => item.id === before.currentEntryId);
-  const length = before.player.duration ?? entry?.duration ?? 0;
   const kept =
-    !!entry &&
-    !entry.endless &&
-    !entry.liveSourceId &&
-    !isRadio(entry) &&
-    length > 0 &&
-    before.player.position > 1 &&
-    before.player.position / length < 0.9;
-  return `Stopped${elsewhere ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : ""}`;
+    !!entry && keepsProgress(entry) && before.player.seekable && before.player.position > 0;
+  return `Stopped${where.length ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : ""}`;
 }
 
 export function undoPlan(

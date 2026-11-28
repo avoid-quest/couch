@@ -29,7 +29,7 @@ import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueAct
 import { useShell } from "@/sections/shell/AppShell";
 import { mediaIdentity } from "@/sections/find/provider-progress";
 import { useSessionGate } from "@/session/session-context";
-import { returnLostFocus } from "@/sections/shell/NowPlaying";
+import { returnLostFocus } from "@/sections/shell/lost-focus";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
 import {

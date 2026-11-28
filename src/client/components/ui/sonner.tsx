@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 // Couch: top right at the page gutter, below the header's row (min-h-14), or in the player below its top band
 // (PlayerPage publishes --player-top). Phones (sonner's own breakpoint) keep the top for the artwork: their toasts sit
 // at the bottom, just above the footer or the player's band (--bottom-bar). Two at most, both open: a remote can't hover.
+// Beside the side player they keep clear of it (--content-inset-left, --content-inset-right; index.css).
 const offset = {
-  left: "var(--gutter)",
-  right: "var(--gutter)",
+  left: "calc(var(--content-inset-left, 0px) + var(--gutter))",
+  right: "calc(var(--content-inset-right, 0px) + var(--gutter))",
   top: "calc(var(--player-top, var(--top-bar, 3.5rem)) + 1rem)",
   // Undo shows in the corner nearest its control (toasts.ts); at the bottom it clears the bar or the band.
   bottom: "calc(var(--bottom-bar, 0px) + .5rem)",
