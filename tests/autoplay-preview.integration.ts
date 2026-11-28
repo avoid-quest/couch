@@ -316,3 +316,41 @@ test("a list whose first part ends, or is skipped past, before its later part co
     store.close();
   }
 });
+
+test("a queued item played after a list's last loaded item keeps the list's later part", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("queued-part");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    { resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }) },
+  );
+  const ended = () =>
+    session.observe({ ...state!.player, status: "ended", position: 100, duration: 100 });
+  try {
+    session.playNewEntries([entry("first")], {
+      continuation: { title: "Collection", entries: [entry("second")] },
+    });
+    await flush();
+    let deliver!: (entries: ReturnType<typeof entry>[]) => void;
+    const extended = session.extendContinuation("second", new Promise((done) => (deliver = done)));
+    ended();
+    assert.equal(state!.currentEntryId, "second");
+    session.command({ type: "enqueue", entry: entry("queued") });
+    ended();
+    assert.equal(state!.currentEntryId, "queued");
+    deliver([entry("third")]);
+    assert.equal(await extended, true);
+    assert.deepEqual(
+      state!.autoplay?.upcoming.map((item) => item.id),
+      ["third"],
+    );
+    ended();
+    assert.equal(state!.currentEntryId, "third");
+  } finally {
+    session.close();
+    store.close();
+  }
+});

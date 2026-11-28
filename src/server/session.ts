@@ -341,9 +341,11 @@ export function createSession(
   };
   const remainingContinuation = () =>
     continuation ? { ...continuation, entries: continuation.entries.slice(1) } : null;
+  // Once the list's loaded entries have all played, it still ends at `lastEntryId` until its part comes, though a
+  // queued item may play meanwhile; Stop and a replacing Play cancel the part instead.
   const extendWith = (lastEntryId: string, entries: QueueEntry[]) => {
     if (!continuation) return false;
-    if ((continuation.entries.at(-1)?.id ?? state.currentEntryId) !== lastEntryId) return false;
+    if ((continuation.entries.at(-1)?.id ?? lastEntryId) !== lastEntryId) return false;
     const extended = { ...continuation, entries: [...continuation.entries, ...entries] };
     try {
       store.savePlaybackContinuation(extended);
