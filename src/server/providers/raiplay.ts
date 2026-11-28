@@ -190,6 +190,8 @@ const blockName = (row: Record<string, unknown>, fallback: string) =>
   isLive(row) ? "On now" : isHero(row) ? "In evidenza" : text(row.name).trim() || fallback;
 // A section's first lists, which its door names: read with the front page, kept a quarter of an hour.
 const sectionLists = new Map<string, { names: string[]; expires: number }>();
+// How long a room waits for its sections' pages to name their doors.
+const doorWait = 300;
 
 function page(items: ProviderItem[], offset: number, title: string, size = pageSize): ProviderPage {
   return {
@@ -512,12 +514,16 @@ async function raiPlayDoors(
     const item = card({ ...row, ...(section ? { weblink: section } : {}) });
     return item && item.kind === "collection" ? [{ ...item, description: undefined }] : [];
   });
-  const named = await Promise.all(
-    doors.map(async (door) => {
-      if (!new URL(door.url).pathname.startsWith("/tipologia/"))
-        return { ...door, subtitle: "A to Z" };
-      const kept = sectionLists.get(door.url);
-      if (kept && kept.expires > Date.now()) return { ...door, subtitle: kept.names.join(", ") };
+  const sections = doors.filter((door) => new URL(door.url).pathname.startsWith("/tipologia/"));
+  const fresh = (url: string) => {
+    const kept = sectionLists.get(url);
+    return kept && kept.expires > Date.now() ? kept.names : undefined;
+  };
+  // The room doesn't wait on every section's page for its doors' words: what answers in a moment names its door now,
+  // the rest are kept for the next visit.
+  const reading = sections
+    .filter((door) => !fresh(door.url))
+    .map(async (door) => {
       try {
         const names = array(object(await json(`${door.url}/index.json`)).contents)
           .filter((row) => isShelf(row) && array(row.contents).length)
@@ -525,12 +531,17 @@ async function raiPlayDoors(
           .map((row) => blockName(row, door.title));
         if (sectionLists.size > 100) sectionLists.clear();
         sectionLists.set(door.url, { names, expires: Date.now() + 15 * 60_000 });
-        return { ...door, subtitle: names.join(", ") };
       } catch {
-        return door;
+        // The door goes without its words.
       }
-    }),
-  );
+    });
+  if (reading.length)
+    await Promise.race([Promise.all(reading), new Promise((done) => setTimeout(done, doorWait))]);
+  const named = doors.map((door) => {
+    if (!sections.includes(door)) return { ...door, subtitle: "A to Z" };
+    const names = fresh(door.url);
+    return names ? { ...door, subtitle: names.join(", ") } : door;
+  });
   return channels
     ? [
         {
