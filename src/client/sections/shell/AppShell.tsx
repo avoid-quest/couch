@@ -14,6 +14,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ErrorInfo,
   type PropsWithChildren,
   type ReactNode,
@@ -37,7 +38,10 @@ import {
 } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
+import { NowPlaying, type PlayerSize } from "./NowPlaying";
+import { useBottomBar } from "./bottom-bar";
+import { RoomLight, useRoomLight } from "./RoomLight";
+import { usePlayerSide } from "./player-side";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
@@ -714,11 +718,31 @@ function ShellChrome({ children }: PropsWithChildren) {
     (active || player?.status === "error" || player?.status === "ended") &&
     !playerVisible &&
     !remoteVisible;
-  // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
+  // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and
+  // is the dock above a phone's tabs.
+  const phone =
+    useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
+  const [minimised, setMinimised] = useState(false);
+  const { side: playerSide } = usePlayerSide();
+  const playerSize: PlayerSize = phone ? "dock" : minimised ? "mini" : "side";
+  const sidePlayer = paired && nowPlaying && !!state && playerSize === "side";
+  // The footer holds the capsule or the dock and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
-  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying);
+  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying && !sidePlayer);
+  const nowPlayingView = state && (
+    <NowPlaying
+      state={state}
+      connected={connected}
+      run={run}
+      size={playerSize}
+      side={playerSide}
+      onOpen={() => shell.openPlayer()}
+      onSize={(size) => setMinimised(size === "mini")}
+    />
+  );
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
+  const room = useRoomLight();
 
   // A failed action is a message beside nothing else (docs/design.md "Problems"); Remote says it on its own page.
   useEffect(() => {
@@ -742,11 +766,16 @@ function ShellChrome({ children }: PropsWithChildren) {
   return (
     <div
       className={cn(
-        "app-shell flex flex-col bg-background",
+        "app-shell flex flex-col",
         tvPresentation && "tv-shell",
         !paired && "drag-region",
       )}
+      data-side-player={sidePlayer || undefined}
+      data-player-side={playerSide}
+      style={room.style}
+      data-light={room.state}
     >
+      <RoomLight picture={room.picture} />
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && paired && (
           <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
@@ -773,14 +802,14 @@ function ShellChrome({ children }: PropsWithChildren) {
             <header
               ref={header}
               hidden={onPlayer}
-              className="app-header drag-region @container/header sticky top-0 z-30 shrink-0 bg-background motion-safe:transition-colors motion-safe:duration-200"
+              className="app-header room-ground drag-region @container/header sticky top-0 z-30 shrink-0"
             >
               <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
                 {/* On a phone the open search takes the whole row. */}
                 <div className="app-header-couch flex min-w-0 items-center">
                   {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
                   {tvPresentation ? (
-                    <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground">
+                    <span className="flex min-w-0 items-center gap-2 font-display text-lg font-semibold tracking-tight [font-stretch:118%]">
                       <CouchMark connected={connected} />
                       <span className="truncate">{tvName}</span>
                     </span>
@@ -824,6 +853,7 @@ function ShellChrome({ children }: PropsWithChildren) {
               </div>
             </header>
           )}
+          {sidePlayer && nowPlayingView}
           <AppPage>
             {!paired ? (
               <PairingPage status={<ConnectionStatus />} />
@@ -836,8 +866,7 @@ function ShellChrome({ children }: PropsWithChildren) {
                     openerRef={shortcutsOpener}
                   />
                 )}
-                {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. The page is its own layer,
-                  so a Stage's room lies under its content and over the shell's black. */}
+                {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. */}
                 <div
                   className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}
                 >
@@ -853,15 +882,8 @@ function ShellChrome({ children }: PropsWithChildren) {
               ref={footer}
               className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
             >
-              {nowPlaying && state && (
-                <NowPlayingBar
-                  state={state}
-                  connected={connected}
-                  run={run}
-                  onOpen={shell.openPlayer}
-                />
-              )}
-              <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
+              {nowPlaying && !sidePlayer && nowPlayingView}
+              <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
             </div>
           )}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
@@ -872,6 +894,15 @@ function ShellChrome({ children }: PropsWithChildren) {
     </div>
   );
 }
+
+// Where the phone's layout starts (the touch variant, index.css): bottom tabs, and Now playing as their dock.
+const phoneLayout = "(max-width: 959px), (pointer: coarse)";
+const subscribePhoneLayout = (onChange: () => void) => {
+  const media = window.matchMedia(phoneLayout);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isPhoneLayout = () => window.matchMedia(phoneLayout).matches;
 
 function AppPage({ children }: PropsWithChildren) {
   const { nativeHost, tvPresentation } = useSessionGate();
@@ -930,7 +961,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
               asChild
               variant="ghost"
               className={cn(
-                "relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
+                "relative border-0 font-medium text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
                 bar
                   ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
                   : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",
@@ -944,10 +975,10 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
               >
                 <Icon
                   aria-hidden="true"
-                  className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")}
+                  className={cn("size-5", !bar && "@min-[52rem]/header:hidden tv:hidden")}
                 />
                 <span
-                  className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}
+                  className={cn(!bar && "sr-only @min-[52rem]/header:not-sr-only tv:not-sr-only")}
                 >
                   {name}
                 </span>
@@ -958,7 +989,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
                       "size-1.5 shrink-0 rounded-full bg-foreground",
                       bar
                         ? "absolute top-2.5 left-[calc(50%+0.625rem)]"
-                        : "absolute top-2 right-2 @min-[60rem]/header:static tv:static",
+                        : "absolute top-2 right-2 @min-[52rem]/header:static tv:static",
                     )}
                   />
                 )}

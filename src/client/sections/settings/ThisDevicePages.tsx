@@ -26,6 +26,7 @@ import { DeviceNameSettings } from "./this-device/DeviceNameSettings";
 import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
 import { DeviceTextSize } from "./this-device/DeviceTextSize";
 import { MessageSettings } from "./this-device/MessageSettings";
+import { PlayerSideSetting } from "./this-device/PlayerSideSetting";
 import { QuitAppSettings } from "./this-device/QuitAppSettings";
 
 // What changes only on the device in hand, and what it lets others do, by intent: who it is, what you play from here, the
@@ -72,6 +73,7 @@ export function ThisDevicePage() {
             />
           )
         )}
+        <PlayerSideSetting />
         {!nativeHost && (
           <SettingsRow
             label="Keep screen awake"

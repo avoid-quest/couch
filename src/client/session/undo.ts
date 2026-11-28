@@ -1,4 +1,5 @@
 import type { Action, SessionState } from "../../shared/protocol";
+import { keepsProgress } from "../../shared/viewing";
 
 type Resume = {
   entryId: string;
@@ -30,15 +31,36 @@ function resume(state: SessionState): Resume {
     : null;
 }
 
+const names = new Intl.ListFormat("en", { type: "conjunction" });
+
+/**
+ * Stop says where it stopped, This device included, and that the item waits in Continue when Core kept its place: media
+ * it keeps progress for (keepsProgress), started, and seekable, as Core saves no place it couldn't return to
+ * (server/progress.ts). Stopping never marks it watched.
+ */
+function stopped(before: SessionState, here: string) {
+  const ids = [...new Set(before.outputs?.map((output) => output.deviceId) ?? [])];
+  const where = ids
+    .map((id) =>
+      id === here ? "This device" : before.devices?.find((device) => device.id === id)?.name,
+    )
+    .filter((name): name is string => !!name);
+  const entry = before.queue.find((item) => item.id === before.currentEntryId);
+  const kept =
+    !!entry && keepsProgress(entry) && before.player.seekable && before.player.position > 0;
+  return `Stopped${where.length ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : ""}`;
+}
+
 export function undoPlan(
   action: Action,
   before: SessionState,
   after: SessionState,
+  here: string,
 ): UndoPlan | null {
   if (action.type === "stop") {
     const stoppedId = resume(before)?.playbackId;
     return stoppedId && (!action.playbackId || action.playbackId === stoppedId)
-      ? { text: "Stopped.", stoppedId }
+      ? { text: stopped(before, here), stoppedId }
       : null;
   }
   if (action.type === "remove") {

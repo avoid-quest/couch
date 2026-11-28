@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button";
 
 // Couch: one place for every message, the person's choice (This device → General): centred over the content, beside the
-// side player (--side-player, NowPlaying's width), at the bottom clear of the dock and tabs or the full player's controls
+// side player (--content-inset-left or -right, index.css), at the bottom clear of the dock and tabs or the full player's controls
 // (--bottom-bar), or at the top below the header (--top-bar) or the player's top band (--player-top). Sonner's own
 // breakpoint (600px) uses mobileOffset. Two at most, both open: a remote can't hover.
 const bottom = "calc(var(--bottom-bar, 0px) + 1.25rem)";

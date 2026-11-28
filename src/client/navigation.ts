@@ -28,6 +28,7 @@ const visible = (element: HTMLElement) =>
   rendered(element) &&
   !element.closest('[inert], [aria-hidden="true"]') &&
   !element.matches(':disabled, [aria-disabled="true"]');
+const sidePlayer = '[data-now-playing][data-size="side"]';
 const lastVisible = (selector: string) =>
   [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
 const navigationScope = () =>
@@ -115,10 +116,17 @@ function moveFocus(key: string) {
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const own = active.closest(navigationRow);
   const row = key === "ArrowRight" ? own : null;
+  // The side player is a column of its own, at either side: Up and Down stay in it, or beside it, and Left and Right
+  // cross over.
+  const side = active.closest(sidePlayer);
   const destinations = row
     ? controls.filter((element) => row.contains(element))
-    : !horizontal && content?.contains(active)
-      ? controls.filter((element) => !element.closest("[data-nav-rail]"))
+    : !horizontal
+      ? controls.filter(
+          (element) =>
+            !!element.closest(sidePlayer) === !!side &&
+            !(content?.contains(active) && element.closest("[data-nav-rail]")),
+        )
       : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2,
@@ -133,7 +141,7 @@ function moveFocus(key: string) {
       : Math.max(to.left - from.right, from.left - to.right);
     return gap < 0 ? 0 : gap * 2 + 1000;
   };
-  // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
+  // The header and the footer (the capsule or the dock, phone tabs) come after the page's controls, which scroll under them.
   const bar =
     key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
@@ -201,6 +209,23 @@ function moveFocus(key: string) {
   const best = next
     ? candidates.find((candidate) => next.contains(candidate.element))
     : candidates[nearest];
+  // Left and Right between the page and the side player (at either side) cross over though nothing there lines up,
+  // from a row's last control too: to the other column's control nearest in height.
+  const across =
+    horizontal && !best
+      ? controls
+          .filter((element) => element !== active && !!element.closest(sidePlayer) !== !!side)
+          .map((element) => {
+            const to = box(element);
+            return {
+              element,
+              forward: (to.x + to.width / 2 - cx) * sign,
+              distance: Math.abs(to.y + to.height / 2 - cy),
+            };
+          })
+          .filter((candidate) => candidate.forward > 1)
+          .sort((a, b) => a.distance - b.distance)[0]?.element
+      : undefined;
   const rail =
     key === "ArrowLeft" && content?.contains(active) && !content.contains(best?.element ?? null)
       ? controls.find((element) => element.matches('[data-nav-rail] [aria-current="page"]'))
@@ -223,7 +248,7 @@ function moveFocus(key: string) {
           ),
         ].find((element) => visible(element) && (!remoteNavigation || !element.closest(localOnly)))
       : undefined;
-  focus(rail ?? tab ?? best?.element ?? toast);
+  focus(rail ?? tab ?? best?.element ?? across ?? toast);
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */

@@ -92,7 +92,7 @@ export function hasUpNext(state: ClientSessionState | null | undefined) {
 }
 
 /**
- * Up next's button in the band and the now-playing bar. While there is nothing to show it keeps its slot, disabled, and
+ * Up next's button in the full player's band. While there is nothing to show it keeps its slot, disabled, and
  * says so as its tooltip (a disabled button takes no pointer, so its slot holds the tooltip).
  */
 export function UpNextButton({

@@ -2,7 +2,8 @@
 
 Couch is one app on three kinds of screen: the TV (a remote), a desktop window
 (mouse and keyboard) and phones (touch). It is a dark living room lit by what
-plays. **One layout**: the TV's layout is Couch's layout everywhere, one
+plays: playing lights the room from the picture's own colours, paused dims it,
+and once nothing plays the light goes out. **One layout**: the TV's layout is Couch's layout everywhere, one
 component tree. Screens differ only where input demands it, through the `tv:`
 and `touch:` variants and, where keys or focus differ, a `tvPresentation`
 branch. Phones keep a bottom tab bar for thumb reach.
@@ -14,11 +15,11 @@ branch. Phones keep a bottom tab bar for thumb reach.
   custom.
 - **Flat.** Pages, rows, tiles and menus have no Cards or bordered panels: open
   typography, whitespace and divided rows. A tile is a picture and a caption.
-  Only what floats casts a shadow: the now-playing bar, toasts, an object on the
-  Stage, Up next over the picture.
+  Only what floats casts a shadow: Now playing, toasts, an object on the Stage,
+  Up next over the picture.
 - **Show only what people need.** No filler copy, no headers or labels that
-  repeat the screen, nothing said twice (the bar holds the transport, so nothing
-  else repeats it while something plays).
+  repeat the screen, nothing said twice (Now playing holds the transport, so
+  nothing else repeats it while something plays).
 - **Show the whole picture.** Artwork keeps its true shape, never cropped into a
   band or used as a backdrop.
 - **Real content only.** Browse pages show what a source returns; Couch picks
@@ -30,20 +31,41 @@ branch. Phones keep a bottom tab bar for thumb reach.
   an AlertDialog.
 - **Disabled keeps its place**: half ink (`disabled:opacity-50`), nothing moves.
 
-## Room, glass and stage
+## Room, surfaces and stage
 
-- **Room** (`.room`, `artwork-light.ts`): behind a Stage and the player's Now
-  playing, the room is painted with two colours read from the artwork (via
-  `/api/artwork`), set dark enough that ink keeps 7:1, with a static grain.
-  Artwork colour is the only colour besides danger's red. Video keeps black bars
-  and no artwork light.
-- **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
-  page, its backdrop blurred and tinted with the artwork's tone. Besides the
-  player's Up next panel, it's the one backdrop filter on a page.
+- **Room** (`RoomLight.tsx`, `.room`, `artwork-light.ts`): every screen stands in
+  one warm dark room (`#110f13`) with a static grain. What plays lights it, a
+  video too: two colours read from its picture (via `/api/artwork`) as a lamp
+  by the player and a spill from the bottom left, at full strength while it
+  plays, dimmed while paused, out once nothing plays. With nothing playing, the
+  picture a page leads with (a Stage, `useRoomLead`) lights it a little. The
+  header and the phone's tabs paint the same room (`.room-ground`), so it runs
+  on under them. The full player throws the picture itself, blurred, on its
+  wall; the full video player stays black. Artwork colour is the only colour
+  besides danger's red. Artwork Core can't read (an SVG logo) gives no light.
+- **Now playing** (`NowPlaying.tsx`, `.now-playing`): while something plays it
+  stands at one side of every screen on desktops and the TV, a panel the
+  window's height that the page steps beside: the right unless This device →
+  **Player side** says the left (`player-side.ts`). The page's inset at each
+  edge is `--content-inset-left` and `--content-inset-right` (0 without a side
+  player), which messages keep clear of; its panels open toward the page, and
+  the room's lamp stands by it. Its picture and title open the full player
+  ("Open player" on hover and focus); **Minimise player** (a chevron) folds it
+  to a capsule in that side's bottom corner, for this window only, which shows
+  it again when pressed. A phone keeps it as a dock above its tabs, which opens
+  the full player. Play/Pause, Next and a labelled Stop start from its
+  bottom-left corner at every size, the full player's too. It is a lit panel
+  (below), the side player with its picture on the wall behind it.
+- **Surfaces**: Now playing is a **lit panel** (`.lit-panel`): a warm
+  dark that takes the lamps' colours, with a hairline edge, a deep shadow and a
+  little of the light around it; a panel that shows the picture (the side
+  player) puts a blurred copy of it behind (`.room-picture`). What opens over
+  the page (popovers, menus, dialogs, sheets) is a warm dark, a little
+  see-through, blurring the light behind it, with the same edge and shadow.
+  A toast is ink, the one light surface, with a dark verb.
 - **Stage** (`components/Stage.tsx`): opens Home and every Details page
-  (`DetailHeader`), reaching under the header in its picture's room. The picture
-  stands whole at the right as an **object** with a shadow, or as a **mark**
-  (a logo on nothing) without one.
+  (`DetailHeader`). The picture stands whole as an **object** with a shadow, or
+  as a **mark** (a logo on nothing) without one.
 
 ## Tokens
 
@@ -58,6 +80,10 @@ Tailwind names, never hex values in components. Couch's scales are in the
 | Type | `caption`, `meta`, `body`, `title`, `heading`, `page` |
 | Spacing | `caption`, `stack`, `item`, `section`; the page gutter is `px-(--gutter)` |
 
+- **Colour**: room `#110f13`, ink `#f6f2ec`, quieter ink at 70%
+  (`text-muted-foreground`, an unchosen tab too, so it reads over the light) and 48%
+  for what only labels (`text-subtle-foreground`: a placeholder), lines at 11%.
+  No fixed accent: the light comes from what plays.
 - **Focus inverts** the focused control to white with black ink; the TV's
   highlight is the same, and a focused tile rings its picture and lifts.
 - **One hover language**: a pointer brightens (ink to white, a fill one step up)
@@ -70,7 +96,8 @@ Tailwind names, never hex values in components. Couch's scales are in the
 alike.
 
 - **Mona Sans** (`font-display`, `font-heading`) sets display titles
-  (`.display-title`), page titles and section headings, always at normal width.
+  (`.display-title`), page titles, section headings, the Couch's name and the
+  Browse line, always expanded (`wdth` 112 to 120, widest for page titles).
   `titleLength` steps a title's size down as it grows and `titleFit` sizes it so
   its longest word usually fits one line (very wide words can still break), so
   titles wrap whole instead of ellipsing.
@@ -106,7 +133,7 @@ action, never taking focus) for a failed action, Undo and unexpected outcomes;
 routine actions stay quiet. A message is a short pill in ink, its action a dark capsule
 inside, an Undo draining a thin bar over its time; a problem keeps the bar's dark
 surface and its icon. Every message shows in one place, centred over the content
-beside the side player (`--side-player`), at the bottom clear of the dock, tabs
+beside the side player (`--content-inset-left`, `--content-inset-right`), at the bottom clear of the dock, tabs
 or player controls (`--bottom-bar`), or at the top: each device chooses in This
 device → General, and can turn off confirmations (Queued, Playing on).
 **Alert** for a problem (see Problems), **Empty** for empty states, **Dialog**

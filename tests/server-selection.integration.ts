@@ -172,7 +172,7 @@ test("Stop returns to this Device's film and Undo returns to the stopped Playbac
     await until(() => f.phone.state.playback === film);
     assert.equal(f.phone.state.controlling, phoneId);
     assert.equal(f.phone.state.currentEntryId, "film");
-    const undo = undoPlan({ type: "stop", playbackId: stoppedId }, radio, f.phone.state);
+    const undo = undoPlan({ type: "stop", playbackId: stoppedId }, radio, f.phone.state, phoneId);
     assert.ok(undo);
     await applyUndo(undo, f.phone.command, () => f.phone.state);
     await until(

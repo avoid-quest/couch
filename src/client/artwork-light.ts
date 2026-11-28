@@ -8,10 +8,11 @@ import { apiFetch, type ApiCredentials } from "./api/client";
  */
 export type Rgb = readonly [number, number, number];
 /**
- * `a` and `b` light the picture (the backlight and the haze); `room` and `deep` paint the room it stands in (the
- * Stage, the player's Now playing) and `tone` tints the now-playing bar's glass.
+ * `a` lights a tile or a row while it is hovered or focused. `lamp` and `spill` are the lights that light the room from
+ * what plays (RoomLight.tsx): the picture's first hue, and its second, at one even strength, so a dark still and a
+ * bright one light the room alike.
  */
-export type Light = { key: string; a: Rgb; b: Rgb; room: Rgb; deep: Rgb; tone: Rgb };
+export type Light = { key: string; a: Rgb; lamp: Rgb; spill: Rgb };
 /** What a read learns of a picture: its light, if it has colour, and whether its edges are see-through (a logo). */
 export type Art = { light: Light | null; clear: boolean };
 
@@ -46,29 +47,23 @@ function atLuminance(colour: Rgb, target: number): Rgb {
 }
 
 /**
- * How bright each colour may be. The first is a backlight that hugs the artwork and is gone a few rem out; at its
- * brightest white ink keeps 7:1 over it (1.05 / 7 − 0.05 = 0.1). The second is a wide haze that may lie under any
- * text, so it stays dark enough for muted ink (#a3a3a3) to keep 7:1 too (0.416 / 7 − 0.05 = 0.0094), with room for
- * the backlight's last trace where text comes near the artwork.
+ * How bright each colour may be. The item light hugs the artwork and is gone a few rem out; at its brightest white ink
+ * keeps 7:1 over it (1.05 / 7 − 0.05 = 0.1). The lamps are as bright as the stills the design was drawn from; the room
+ * mixes them into its dark at most at 40% and 34% (index.css, Room), where ink and its 70% keep 4.5:1.
  */
-export const peak = 0.07,
-  haze = 0.004;
-/**
- * The room may lie under any text, so muted ink (#bdbdbd, luminance .509) keeps 7:1 over its brightest colour
- * (.559 / 7 − .05 = .03), with room to spare; its second colour is deeper still. The bar's tone is mixed into glass
- * over a dimmed backdrop, and the bar's ink is checked over white behind it (docs/design.md, Glass).
- */
-export const roomPeak = 0.022,
-  deepPeak = 0.01,
-  tonePeak = 0.03;
+export const peak = 0.07;
+const lampPeak = 0.24,
+  spillPeak = 0.14;
 
 /**
  * The two colours of a picture's pixels (RGBA, as getImageData gives them): the strongest hue, by how vivid its pixels
- * are, and the strongest hue at least 60° from it (else the first again). Near-black, near-white and transparent
- * pixels carry no light; a picture of only those gives none, and one under a tenth coloured lights in its grey.
+ * are, and the strongest hue at least 60° from it. Without one, the hue beside the first whose pixels are most vivid,
+ * so an orange with a red beside it lights orange and red, not orange and the cream beside it; else the first again.
+ * Near-black, near-white and transparent pixels carry no light; a picture of only those gives none, and one under a
+ * tenth coloured lights in its grey.
  */
 function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
-  const bins = Array.from({ length: 12 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+  const bins = Array.from({ length: 12 }, () => ({ weight: 0, count: 0, r: 0, g: 0, b: 0 }));
   let grey = { weight: 0, r: 0, g: 0, b: 0 },
     coloured = 0;
   for (let index = 0; index + 3 < pixels.length; index += 4) {
@@ -95,6 +90,7 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
       weight = chroma * value;
     coloured++;
     bin.weight += weight;
+    bin.count++;
     bin.r += r * weight;
     bin.g += g * weight;
     bin.b += b * weight;
@@ -112,21 +108,25 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
   // A picture with hardly any colour (a black-and-white photo, a white cover) lights in its own grey.
   if (!first || coloured < (coloured + grey.weight) * 0.1)
     return grey.weight ? [mean(grey), mean(grey)] : null;
-  const apart = (index: number) =>
-    Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)) >= 2;
+  const steps = (index: number) =>
+      Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)),
+    strong = ranked.filter(({ bin }) => bin.weight >= first.bin.weight * 0.15),
+    vividness = ({ bin }: (typeof ranked)[number]) => bin.weight / bin.count;
   const second =
-    ranked.find(({ bin, index }) => apart(index) && bin.weight >= first.bin.weight * 0.15) ?? first;
+    strong.find(({ index }) => steps(index) >= 2) ??
+    strong
+      .filter(({ index }) => steps(index) === 1)
+      .sort((x, y) => vividness(y) - vividness(x))[0] ??
+    first;
   return [mean(first.bin), mean(second.bin)];
 }
 
-/** Light from two picked colours: the first as the backlight, the second as the haze. */
+/** Light from two picked colours: the first lights items and the room's main lamp, the second its spill. */
 export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({
   key,
   a: atLuminance(a, peak),
-  b: atLuminance(b, haze),
-  room: atLuminance(a, roomPeak),
-  deep: atLuminance(b, deepPeak),
-  tone: atLuminance(a, tonePeak),
+  lamp: atLuminance(a, lampPeak),
+  spill: atLuminance(b, spillPeak),
 });
 
 /** A picture whose edge is mostly see-through (a logo on nothing) stands without a shadow, which would outline its box. */
@@ -148,8 +148,11 @@ const cache = new Map<string, Art>();
 export const cachedArt = (src: string) => cache.get(src) ?? null;
 const pending = new Map<string, Promise<Art | null>>();
 
-/** The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS); a blob: is the page's own. */
-const picture = async (src: string, credentials: ApiCredentials | null | undefined) =>
+/**
+ * The picture's bytes: through Core, which reads hosts that don't allow a page to (CORS) or a browser to at all; a blob:
+ * is the page's own.
+ */
+export const artworkBytes = async (src: string, credentials: ApiCredentials | null | undefined) =>
   (src.startsWith("blob:") || !credentials
     ? await fetch(src, { referrerPolicy: "no-referrer" })
     : await apiFetch(credentials, `/api/artwork?${new URLSearchParams({ url: src })}`)
@@ -165,7 +168,7 @@ export function readArt(src: string, credentials?: ApiCredentials | null): Promi
   let read = pending.get(src);
   if (!read) {
     read = (async () => {
-      const bitmap = await createImageBitmap(await picture(src, credentials));
+      const bitmap = await createImageBitmap(await artworkBytes(src, credentials));
       try {
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = size;

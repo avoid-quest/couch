@@ -16,7 +16,17 @@ import {
   type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronRight, Info, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Info,
+  Maximize,
+  Minimize,
+  Minimize2,
+  Music2,
+  Settings,
+  SlidersVertical,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
@@ -24,8 +34,10 @@ import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { AddToHomeButton } from "@/sections/home/AddToHome";
 import {
+  PlaybackTime,
   PlaybackTimeline,
   PlaybackTransport,
+  PlaybackVolume,
   VolumeButton,
   playbackCapabilities,
   useEndTime,
@@ -36,7 +48,8 @@ import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { useBottomBar } from "@/sections/shell/NowPlayingBar";
+import { PlayingChip, UpNext, WhereBox, WhereTokens } from "@/sections/shell/NowPlayingParts";
+import { useBottomBar } from "@/sections/shell/bottom-bar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
 import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
 import { useCouchPlayer } from "@/components/CouchPlayer";
@@ -54,7 +67,6 @@ import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
@@ -84,6 +96,15 @@ const subscribeWide = (onChange: () => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 const isWide = () => window.matchMedia(wideQuery).matches;
+// Below the band's breakpoint (max-sm) a phone's player is one column, as the prototype's: the artwork and the title at
+// the top, then Where it plays and Up next, the band under them.
+const narrowQuery = "(max-width: 39.99rem)";
+const subscribeNarrow = (onChange: () => void) => {
+  const media = window.matchMedia(narrowQuery);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isNarrow = () => window.matchMedia(narrowQuery).matches;
 // The band's controls that open something to take focus (Popovers, Up next); Info shows its part in place.
 const opened = '[aria-expanded="true"]:not([data-info-toggle])';
 // Info over a picture opens on its first button, as the controls it hides would have held focus.
@@ -203,6 +224,8 @@ export function PlayerPage({
   const artworkStage = audioOnly || !picture;
   const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false);
+  const stacked = narrow && artworkStage && !!current && !!state;
   // Now playing is calm: artwork, title and where it comes from. Info shows the rest in place (a show's genres and host,
   // its broadcast, synopsis and the next show; an item's trail and end). It belongs to what this Playback shows, so
   // another entry or Playback starts calm, while a new programme on the same station keeps it open.
@@ -453,10 +476,8 @@ export function PlayerPage({
     window.addEventListener("couch-info", toggleInfo);
     return () => window.removeEventListener("couch-info", toggleInfo);
   });
-  // Beside the artwork the room takes its colours, and the artwork stands at its own shape (docs/design.md, Room).
-  const roomArt = currentProgramme?.artworkUrl || current?.thumbnail;
-  const roomLight = useArtworkLight(artworkStage ? roomArt : undefined);
-  const [artFrame, artRatio] = useArtRatio(roomArt, 1);
+  // The artwork stands at its own shape in the room its picture lights (docs/design.md, Room).
+  const [artFrame, artRatio] = useArtRatio(currentProgramme?.artworkUrl || current?.thumbnail, 1);
   const radio = isRadio(current);
   const osd = !!current && !artworkStage;
   // iPhone Safari fills the window with the Player but has no document fullscreen.
@@ -572,18 +593,19 @@ export function PlayerPage({
         : undefined,
     );
   };
-  // Back leads the top line on every screen: a pointer has no Back key, and on the TV a controller reaches it too.
-  const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
+  // Back leads the top line on every screen, naming where it goes: a pointer has no Back key, and on the TV a
+  // controller reaches it too. It never stops anything.
+  const backTo = playerTarget ? "Remote" : shell.playerBackLabel;
   const back = (
     <Button
       variant="ghost"
-      size="icon-lg"
-      className="-ml-2.5 size-(--player-target) shrink-0"
-      aria-label={backLabel}
-      title={backLabel}
+      className="-ml-1 h-(--player-target) shrink-0 gap-1.5 rounded-full bg-black/35 pr-4 pl-3 hover:bg-black/50"
+      aria-label={`Back to ${backTo}`}
+      title={`Back to ${backTo}. It keeps playing.`}
       onClick={shell.leavePlayer}
     >
-      <ArrowLeft aria-hidden="true" />
+      <ChevronDown aria-hidden="true" />
+      {backTo}
     </Button>
   );
   const infoButton = (
@@ -646,6 +668,7 @@ export function PlayerPage({
     <>
       <MediaContext
         creator={current.creator}
+        collection={current.collection}
         radio={
           radio && currentProgramme && current.source.startsWith("radio:")
             ? { id: current.source.slice(6), title: current.title }
@@ -749,18 +772,15 @@ export function PlayerPage({
   return (
     <section
       ref={root}
-      style={
-        artworkStage
-          ? ({ ...roomStyle(roomLight), "--art-ratio": artRatio } as CSSProperties)
-          : undefined
-      }
+      style={artworkStage ? ({ "--art-ratio": artRatio } as CSSProperties) : undefined}
       className={cn(
-        "player-page fixed inset-0 isolate overflow-hidden bg-background",
+        "player-page fixed inset-0 isolate overflow-hidden bg-black data-artwork-stage:bg-transparent",
         !shown && "cursor-none [&_*]:cursor-none",
       )}
       data-page="Now"
       data-osd={osd || undefined}
       data-artwork-stage={artworkStage || undefined}
+      data-stacked={stacked || undefined}
       data-info={info || undefined}
       data-queue-open={queueOpen || undefined}
       data-player-idle={!current || undefined}
@@ -769,8 +789,7 @@ export function PlayerPage({
       onFocus={wake}
       onBlur={wake}
     >
-      {/* Video keeps black letterbox bars in every view. Artwork stands in its room. */}
-      {current && artworkStage && <div aria-hidden="true" className="room" />}
+      {/* Video keeps black letterbox bars in every view. Artwork stands in the shell's room (RoomLight.tsx). */}
       <Container
         ref={showPicture}
         data-player-surface
@@ -903,33 +922,34 @@ export function PlayerPage({
             </div>
           </div>
         )}
+        {/* Over a picture one quiet line: Back, the title (opening Details) and where it comes from; the TV adds its
+          clock and Info at the right. */}
         {osd && (
           <div
             data-player-heading
-            className="drag-region window-controls-inset grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-(--gutter)"
+            className="drag-region window-controls-inset flex min-h-11 items-center gap-3.5 px-(--gutter)"
           >
-            {trail && <div className="col-start-2 col-end-4 min-w-0">{trail}</div>}
-            <div className="row-start-2">{back}</div>
+            {back}
             <h1
               title={title}
-              className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl"
+              className="min-w-0 shrink-0 basis-auto truncate text-sm font-semibold max-w-[50%]"
             >
               {linkedTitle}
             </h1>
-            <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
-              {sharing && <LiveSharingStatus />}
-              {!radio && <PlayerEndTime state={state} />}
-              {tvPresentation && <DigitalClock />}
-              {tvPresentation && <span className="self-center">{infoButton}</span>}
-            </div>
             {(byline || context) && (
-              <div className="col-start-2 col-end-4 flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
+              <div className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden text-sm whitespace-nowrap text-muted-foreground [&_[data-media-context]]:text-sm">
                 <PlaysOnLine at={at} overPicture>
                   {byline && <p className="min-w-0 truncate">{byline}</p>}
                   {context}
                 </PlaysOnLine>
               </div>
             )}
+            <div className="ml-auto flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
+              {sharing && <LiveSharingStatus />}
+              {tvPresentation && !radio && <PlayerEndTime state={state} />}
+              {tvPresentation && <DigitalClock />}
+              {tvPresentation && <span className="self-center">{infoButton}</span>}
+            </div>
           </div>
         )}
       </div>
@@ -956,7 +976,7 @@ export function PlayerPage({
                     {linkedTitle}
                   </h1>
                 )}
-                <PlaysOnLine at={at}>
+                <PlaysOnLine at={stacked ? null : at}>
                   {livePlayback(state) && current.subtitle && (
                     <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
                       {current.subtitle}
@@ -1014,6 +1034,20 @@ export function PlayerPage({
                   </p>
                 )}
                 {statusView}
+                {stacked && (
+                  <>
+                    <span className="empty:hidden">
+                      <PlayingChip state={state} />
+                    </span>
+                    <WhereBox state={state} connected={connected} run={run} />
+                    <UpNext
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      onOpen={() => setQueueOpen(true)}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1142,26 +1176,48 @@ export function PlayerPage({
                     className="player-transport"
                   />
                 )}
-                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-                  {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
-                    with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-                  {state && (
-                    <VolumeButton
+                {/* Volume's level and the time follow the transport, as YouTube's do. A phone has its own volume keys,
+                  as YouTube's and Netflix's phone players assume, and Where it plays leads with the same Volume, so
+                  the narrowest row leaves it out and keeps one line. */}
+                {state && !livePlayback(state) && (
+                  <div data-player-lead className="flex min-w-0 items-center gap-2 max-sm:hidden">
+                    <PlaybackVolume
                       state={state}
                       connected={connected}
                       run={run}
-                      className={livePlayback(state) ? undefined : "max-sm:hidden"}
+                      showValue={false}
+                      className="w-32 min-w-0 flex-none gap-0"
                     />
+                    <PlaybackTime state={state} className="text-muted-foreground" />
+                  </div>
+                )}
+                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                  {state && livePlayback(state) && (
+                    <VolumeButton state={state} connected={connected} run={run} />
                   )}
-                  {state && !livePlayback(state) && (
-                    <WhereItPlays state={state} connected={connected} run={run} />
+                  {/* Where it plays, said as the devices it plays on, or its icon on a phone: the Mixer opens from it. One
+                    instance, so a request to choose opens one Mixer; stacked, the Where it plays box above is it. */}
+                  {state && !livePlayback(state) && !stacked && (
+                    <WhereItPlays
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className={
+                        narrow
+                          ? undefined
+                          : "mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 pr-3 pl-3.5 font-medium hover:bg-white/20"
+                      }
+                    >
+                      {!narrow && (
+                        <>
+                          <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
+                            <WhereTokens state={state} compact />
+                          </span>
+                          <SlidersVertical aria-hidden="true" />
+                        </>
+                      )}
+                    </WhereItPlays>
                   )}
-                  <UpNextButton
-                    ref={queueTrigger}
-                    state={state}
-                    aria-expanded={queueOpen}
-                    onClick={() => setQueueOpen(!queueOpen)}
-                  />
                   {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                     turns subtitles on and off. It opens over the picture above the gear. */}
                   {!livePlayback(state) && (
@@ -1203,9 +1259,14 @@ export function PlayerPage({
                   )}
                   {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                     already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
-                  {!tvPresentation ? (
+                  <UpNextButton
+                    ref={queueTrigger}
+                    state={state}
+                    aria-expanded={queueOpen}
+                    onClick={() => setQueueOpen(!queueOpen)}
+                  />
+                  {!tvPresentation && (
                     <Button
-                      data-player-last
                       variant="ghost"
                       size="icon-lg"
                       disabled={!canFullscreen}
@@ -1219,15 +1280,19 @@ export function PlayerPage({
                         <Maximize aria-hidden="true" />
                       )}
                     </Button>
-                  ) : (
-                    !artworkStage && (
-                      <span
-                        data-player-last
-                        aria-hidden="true"
-                        className="size-(--player-target) shrink-0"
-                      />
-                    )
                   )}
+                  {/* Back to the side player: the last slot, as the side player's Open player is its first. Phones have Back. */}
+                  <Button
+                    data-player-last
+                    variant="ghost"
+                    size="icon-lg"
+                    className="max-sm:hidden"
+                    aria-label="Back to the side"
+                    title="Back to the side. It keeps playing."
+                    onClick={shell.leavePlayer}
+                  >
+                    <Minimize2 aria-hidden="true" />
+                  </Button>
                 </div>
               </div>
             </div>

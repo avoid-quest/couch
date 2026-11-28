@@ -448,7 +448,7 @@ export function SessionGate({
           const undoable =
             action.type === "remove" || (!!before.currentEntryId && action.type === "stop");
           let after = readObservation();
-          let plan = undoable && after && undoPlan(action, before, after);
+          let plan = undoable && after && undoPlan(action, before, after, deviceId());
           for (
             let tries = 0;
             undoable && !plan && tries < 20 && current() && attempt === commandAttempt.current;
@@ -456,7 +456,7 @@ export function SessionGate({
           ) {
             await new Promise((resolve) => setTimeout(resolve, 25));
             after = readObservation();
-            plan = after && undoPlan(action, before, after);
+            plan = after && undoPlan(action, before, after, deviceId());
           }
           // Core keeps a removed entry six seconds, a stopped Playback longer.
           const remaining =
