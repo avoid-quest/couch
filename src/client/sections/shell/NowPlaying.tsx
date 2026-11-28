@@ -31,6 +31,7 @@ import { returnLostFocus } from "./lost-focus";
 import type { PlayerSide } from "./player-side";
 import { PlayingChip, UpNext, WhereBox, WhereTokens } from "./NowPlayingParts";
 import { WhereItPlays } from "./Outputs";
+import { StationNotes } from "./StationNotes";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import { isRadio } from "../../../shared/radio";
 
@@ -68,6 +69,8 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
     [router],
   );
   const programme = useStationShow();
+  // Identify song's button sits beside Volume; what it finds shows in the station's notes.
+  const [identify, setIdentify] = useState<HTMLDivElement | null>(null);
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
   const thumbnail = programme?.artworkUrl || current?.thumbnail;
   // The side player throws its picture, blurred, on the wall behind it (index.css, .lit-panel).
@@ -226,7 +229,25 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
             </div>
             {status && <p className="mt-1.5 flex text-sm text-muted-foreground">{statusLine}</p>}
             <WhereBox state={state} connected={connected} run={run} />
-            <UpNext state={state} connected={connected} run={run} />
+            {/* What's left of the panel: only the notes give way, never the title or Where it plays above them. */}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {isRadio(current) && (
+                <StationNotes
+                  state={state}
+                  connected={connected}
+                  station={current}
+                  show={programme}
+                  identify={identify}
+                />
+              )}
+              <UpNext
+                state={state}
+                connected={connected}
+                run={run}
+                // After a station's notes, room for its heading and first row (the notes give way).
+                className={isRadio(current) ? "min-h-24" : undefined}
+              />
+            </div>
           </div>
         </div>
         <div className="relative shrink-0 px-3.5 pb-3.5">
@@ -236,9 +257,6 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
             said
             className="px-0.5 pt-2 pb-1 [&_[data-time-labels]]:text-xs"
           />
-          {isRadio(current) && state.player.status === "playing" && (
-            <p className="px-1 pt-2.5 pb-2 text-sm text-muted-foreground">On air now</p>
-          )}
           <div className="flex min-h-(--player-target) items-center gap-1.5">
             <PlaybackTransport
               state={state}
@@ -256,6 +274,7 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
                 className="ml-auto max-w-32 min-w-0 flex-1 gap-0"
               />
             )}
+            {isRadio(current) && <div ref={setIdentify} className="contents" />}
           </div>
         </div>
       </aside>

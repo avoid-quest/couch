@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Monitor, SlidersVertical, Volume2 } from "lucide-react";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import type { ClientSessionState } from "@/session/session";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useShell } from "./shell-context";
 import { PlaybackPicker, playbackChoices } from "./PlaysOnLine";
 import { WhereItPlays } from "./Outputs";
+import { useUncut } from "./uncut";
 import type { Action } from "../../../shared/protocol";
 import { upcomingQueue } from "../../../shared/queue";
 
@@ -133,7 +134,13 @@ export function PlayingChip({
  * Up next, as many of its first items as the panel has room for; each plays at once. Its heading opens the whole list,
  * with its own verbs, beside it (or, with `onOpen`, in the full player's own place for it).
  */
-export function UpNext({ state, connected, run, onOpen }: Props & { onOpen?: () => void }) {
+export function UpNext({
+  state,
+  connected,
+  run,
+  onOpen,
+  className,
+}: Props & { onOpen?: () => void; className?: string }) {
   const list = useRef<HTMLDivElement>(null);
   const entries = playbackControls(state).queue
     ? [...upcomingQueue(state), ...(state.autoplay?.enabled ? state.autoplay.upcoming : [])].slice(
@@ -142,21 +149,8 @@ export function UpNext({ state, connected, run, onOpen }: Props & { onOpen?: () 
       )
     : [];
   const ids = entries.map((entry) => entry.id).join(" ");
-  // Rows that would be cut by the panel's foot wait unseen, as the prototype's do.
-  useLayoutEffect(() => {
-    const box = list.current;
-    if (!box) return;
-    const fit = () => {
-      const rows = [...box.querySelectorAll<HTMLElement>("[data-up-next-row]")];
-      for (const row of rows) row.hidden = false;
-      const limit = box.getBoundingClientRect().bottom + 1;
-      for (const row of rows) row.hidden = row.getBoundingClientRect().bottom > limit;
-    };
-    const observer = new ResizeObserver(fit);
-    observer.observe(box);
-    fit();
-    return () => observer.disconnect();
-  }, [ids]);
+  // Rows that would be cut by the panel's foot wait unseen, as the prototype's do; none at all hides the list.
+  useUncut(list, "[data-up-next-row]", ids);
   const { available } = playbackCapabilities(state, connected);
   // Offered as the full player's Up next button is: while there is anything to show, played rows included.
   if (!hasUpNext(state)) return <div className="flex-1" />;
@@ -165,7 +159,10 @@ export function UpNext({ state, connected, run, onOpen }: Props & { onOpen?: () 
   return (
     <div
       ref={list}
-      className="mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border pt-2"
+      className={cn(
+        "mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border pt-2",
+        className,
+      )}
     >
       {onOpen ? (
         <Button variant="ghost" className={heading} onClick={onOpen}>
