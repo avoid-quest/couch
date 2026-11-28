@@ -10,6 +10,8 @@ import type { LinkTarget, ProviderId } from "../shared/providers";
 
 // Couch's queue limit: a longer list queues its first 500.
 const queueLimit = 500;
+// A list Core answers sooner than this starts without a loading notice flashing first.
+const loadingDelay = 400;
 export type LinkVerb = "play" | "queue" | "next";
 
 // An episode's, a mix's or a Spotify song's page comes over plain HTTP, so it's cheap enough to name what plays.
@@ -95,8 +97,8 @@ export const listUnit = (provider: ProviderId, count: number) => {
 };
 
 /**
- * A pasted list's verb, which can take half a minute while its source loads: "Loading Baile Funk…" shows at once and
- * goes when Core answers. When Play all keeps fewer than the count the list showed, a notice says how many it plays.
+ * A pasted list's verb, which can take half a minute while its source loads: "Loading Baile Funk…" shows unless Core
+ * answers within `loadingDelay`, and goes when it does. When Play all keeps fewer than the count the list showed, a notice says how many it plays.
  */
 export function useListCommand(run: ((action: Action) => Promise<boolean>) | undefined) {
   const autoplay = useOptionalSessionGate()?.state?.autoplay;
@@ -108,8 +110,11 @@ export function useListCommand(run: ((action: Action) => Promise<boolean>) | und
     async (action: Action, list: { title?: string; count?: number }, name: string) => {
       if (!run) return false;
       if (action.type !== "enqueueProvider" || action.shape !== "playlist") return run(action);
-      pendingNotice(`Loading ${list.title ?? name}…`);
-      const ok = await run(action);
+      const loading = setTimeout(
+        () => pendingNotice(`Loading ${list.title ?? name}…`),
+        loadingDelay,
+      );
+      const ok = await run(action).finally(() => clearTimeout(loading));
       // The snapshot with the list's Autoplay can render just after the reply.
       const answered = latest.current;
       for (let tries = 0; ok && latest.current === answered && tries < 10; tries++)
