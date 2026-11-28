@@ -100,11 +100,20 @@ export function useMediaSession() {
     state?.radioProgramme?.playbackId === playbackId
       ? freshRadioProgramme(state?.radioProgramme, now)
       : null;
+  // A Twitch stream's subtitle is its game and how many watch, not who: its channel (the item's title) is the artist,
+  // and what it streams now the title.
+  const stream =
+    !!current?.endless &&
+    current.source.startsWith("https://www.twitch.tv/") &&
+    !player?.nowPlaying;
   const title = listening
     ? source
       ? liveTitle(source)
       : "Couch Live"
-    : (programme?.title ?? player?.nowPlaying?.title ?? current?.title ?? "");
+    : (programme?.title ??
+      player?.nowPlaying?.title ??
+      (stream ? current?.description || current?.title : current?.title) ??
+      "");
   const station = current?.station?.name;
   const otherStation = station && station !== title ? station : "";
   // A show or song with no artist names its station or channel instead, and then not again as its album.
@@ -112,7 +121,7 @@ export function useMediaSession() {
     ? (source?.metadata?.description ?? "")
     : (programme?.artist ??
       player?.nowPlaying?.artist ??
-      current?.subtitle ??
+      (stream ? current?.title : current?.subtitle) ??
       current?.creator?.title ??
       otherStation);
   // A station's show or song names the station as its album; an episode names its series.
