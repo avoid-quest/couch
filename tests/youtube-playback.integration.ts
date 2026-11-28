@@ -306,9 +306,11 @@ test("Web playback selection and safe extraction errors", async (t) => {
       "/low.mp4",
     );
   });
-  await t.test("above-cap-only video stays unavailable", real, () =>
-    noFormat(select([video("large", 3840, 2160), aac], "auto")),
-  );
+  await t.test("above-cap-only video plays the smallest there is, named so", real, async () => {
+    const media = await select([video("2160", 3840, 2160), video("1440", 2560, 1440), aac], "480p");
+    assert.equal(new URL(media.source).pathname, "/1440.mp4");
+    assert.equal(media.videoQualities?.["480p"], "1440p");
+  });
   for (const [width, height] of [
     [undefined, undefined],
     [640, undefined],
@@ -324,8 +326,15 @@ test("Web playback selection and safe extraction errors", async (t) => {
     [1920, undefined],
     [undefined, 1920],
   ])
-    await t.test(`one known dimension ${width}x${height} still enforces Auto's cap`, real, () =>
-      noFormat(select([video("partly-known", width, height), aac])),
+    await t.test(
+      `one known dimension ${width}x${height} above Auto's cap plays`,
+      real,
+      async () => {
+        assert.equal(
+          new URL((await select([video("partly-known", width, height), aac])).source).pathname,
+          "/partly-known.mp4",
+        );
+      },
     );
   await t.test("known under-cap video outranks unknown dimensions", real, async () => {
     assert.equal(
@@ -510,6 +519,119 @@ test("Web playback selection and safe extraction errors", async (t) => {
       "https://www.dailymotion.com/video/fixture",
     );
     assert.equal(new URL(media.source).pathname, "/small.mp4");
+    const above = await select(
+      [video("720", 1280, 720, "vp9"), video("1080", 1920, 1080, "vp9"), opus],
+      "480p",
+      false,
+      "https://www.dailymotion.com/video/fixture",
+    );
+    assert.equal(new URL(above.source).pathname, "/720.mp4");
+    // The closest size keeps yt-dlp's ranking at one size: HTTPS over a same-size FLV copy, and a
+    // Twitch clip's landscape copy over its portrait one (quality -2). A websocket copy never plays.
+    const flv = await select(
+      [
+        video("ws", 1280, 720, "h264", { protocol: "websocket_frag", quality: 2 }),
+        video("flv", 1280, 720, "h264", { protocol: "f4m", ext: "flv" }),
+        video("https", 1280, 720, "h264"),
+        video("1080", 1920, 1080, "h264"),
+        opus,
+      ],
+      "480p",
+      false,
+      "https://www.dailymotion.com/video/fixture",
+    );
+    assert.equal(new URL(flv.source).pathname, "/https.mp4");
+    const clip = await select(
+      [
+        video("portrait-1080", undefined, 1080, "h264", { acodec: "aac", quality: -2 }),
+        video("landscape-720", 1280, 720, "h264", { acodec: "aac" }),
+        video("landscape-360", 640, 360, "h264", { acodec: "aac" }),
+      ],
+      "480p",
+      false,
+      "https://clips.twitch.tv/fixture",
+    );
+    assert.equal(new URL(clip.source).pathname, "/landscape-360.mp4");
+    assert.deepEqual(clip.videoQualities, {
+      best: "720p",
+      "1080p": "1080p",
+      "720p": "720p",
+      "480p": "360p",
+    });
+    const portrait = await select(
+      [
+        video("portrait-1080", undefined, 1080, "h264", { acodec: "aac", quality: -2 }),
+        video("landscape-720", 1280, 720, "h264", { acodec: "aac" }),
+      ],
+      "480p",
+      false,
+      "https://clips.twitch.tv/fixture",
+    );
+    assert.equal(new URL(portrait.source).pathname, "/landscape-720.mp4");
+    // Twitch ranks its Source rendition first (quality 10); every cap still plays the rung under it.
+    const rung = (height: number, fps = 30, extra: Format = {}) =>
+      video(`${height}p${fps}`, (height * 16) / 9, height, "avc1.64002a", {
+        acodec: "mp4a.40.2",
+        fps,
+        ...extra,
+      });
+    const twitch = "https://www.twitch.tv/videos/fixture";
+    const ladder = [
+      rung(1080, 60, { quality: 10 }),
+      rung(720, 60),
+      rung(480),
+      rung(360),
+      rung(160),
+    ];
+    for (const [quality, played] of [
+      ["720p", "/720p60.mp4"],
+      ["480p", "/480p30.mp4"],
+    ] as const) {
+      const media = await select(ladder, quality, false, twitch);
+      assert.equal(new URL(media.source).pathname, played);
+      assert.deepEqual(media.videoQualities, {
+        best: "1080p60",
+        "1080p": "1080p60",
+        "720p": "720p60",
+        "480p": "480p",
+      });
+    }
+    // A Source above 1080p plays the 1080p transcode at the default cap.
+    const source = await select(
+      [rung(1440, 60, { quality: 10 }), rung(1080, 60), rung(720, 60)],
+      "auto",
+      false,
+      twitch,
+    );
+    assert.equal(new URL(source.source).pathname, "/1080p60.mp4");
+    // With nothing under the cap, the closest transcode plays before Source.
+    for (const ladder of [
+      [rung(1440, 60, { quality: 10 }), rung(1080, 60), rung(720, 60)],
+      [rung(1080, 60, { quality: 10 }), rung(720, 60)],
+    ]) {
+      const above = await select(ladder, "480p", false, twitch);
+      assert.equal(new URL(above.source).pathname, "/720p60.mp4");
+      assert.equal(above.videoQualities?.["480p"], "720p60");
+    }
+    // A dub under the cap plays before the original language above it.
+    const dub = await select(
+      [rung(1080, 30, { language_preference: 10 }), rung(480)],
+      "480p",
+      false,
+      "https://www.dailymotion.com/video/fixture",
+    );
+    assert.equal(new URL(dub.source).pathname, "/480p30.mp4");
+    // Best keeps yt-dlp's own order, which ranks by the smaller side: landscape 1080p over portrait 720p.
+    const mixed = await select(
+      [
+        video("portrait", 720, 1280, "h264", { acodec: "aac" }),
+        video("landscape", 1920, 1080, "h264", { acodec: "aac" }),
+      ],
+      "best",
+      false,
+      "https://www.dailymotion.com/video/fixture",
+    );
+    assert.equal(new URL(mixed.source).pathname, "/landscape.mp4");
   });
   for (const vp9 of [false, true])
     await t.test(

@@ -1687,6 +1687,7 @@ export async function createHub(options: HubOptions) {
       : sharedResolution(playback, entry, loaded.playbackId, output, tab, signal).media.then(
           (media) => repackaged(playback, loaded.playbackId, media, signal),
         ));
+    if (playback.session.pictureQualities(loaded.playbackId, media.videoQualities)) broadcast();
     const selected = entry.liveSourceId
       ? media
       : await prepareSource({ ...media, headers }, { picture: true, sound: false }, signal);
