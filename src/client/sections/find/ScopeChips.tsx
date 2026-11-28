@@ -90,6 +90,10 @@ export function ScopeChips({
       row.current?.querySelector<HTMLElement>(`[data-chip="${CSS.escape(revealed)}"]`)?.focus();
   }, [revealed]);
   // A row that scrolls keeps its chosen chip in view; only the row scrolls, never the page.
+  const checked = chips
+    .filter((chip) => chip.checked)
+    .map((chip) => chip.label)
+    .join("|");
   useLayoutEffect(() => {
     const line = row.current;
     const chosen = line?.querySelector<HTMLElement>('[aria-pressed="true"], [data-checked="true"]');
@@ -98,7 +102,7 @@ export function ScopeChips({
       option = chosen.getBoundingClientRect();
     line.scrollLeft +=
       Math.min(0, option.left - bounds.left) || Math.max(0, option.right - bounds.right);
-  }, [signature, wraps]);
+  }, [signature, checked, wraps]);
   const arrived = useArrivals(
     query,
     chips.map((chip) => chip.label),
