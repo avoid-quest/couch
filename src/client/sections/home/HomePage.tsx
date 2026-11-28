@@ -138,10 +138,12 @@ export function HomePage() {
   const changeFailed = (title: string) => (reason: unknown) =>
     failed(`Couldn't change ${title}.`, reason);
   const savedMenu = (item: ForLaterItem): MenuAction[] => {
+    // Play on looks for its Undo once the play is done.
     const start = (on?: PlayOn) =>
-      void play((on) => loadForLater(credentials, item.id, "play", on), on).catch((reason) =>
-        failed(`Couldn't play ${item.title}.`, reason),
-      );
+      play((on) => loadForLater(credentials, item.id, "play", on), on).catch((reason) => {
+        failed(`Couldn't play ${item.title}.`, reason);
+        return false;
+      });
     const remove = async () => {
       const result = await removeForLater(credentials, item.id);
       void later.refetch();
@@ -271,7 +273,7 @@ export function HomePage() {
         <ContinueSection
           items={continued}
           loading={loading(history)}
-          resume={(item, options) => resume.mutate({ item, ...options })}
+          resume={(item, options) => resume.mutateAsync({ item, ...options }).catch(() => false)}
           resumable={resumable}
           menu={(item) => historyMenu(item, { press: "Resume", continues: true })}
           playing={isPlaying}

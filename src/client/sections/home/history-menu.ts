@@ -76,10 +76,12 @@ export function useHistoryMenu() {
   ): MenuAction[] => {
     const playable = connected && available && !!(item.playable || item.queueEntryId);
     const resumes = item.position > 0 && !item.watched;
+    // Play on looks for its Undo once the play is done.
     const start = (fromStart: boolean, on?: PlayOn) =>
-      void play((on) => shell.playHistory(item, { fromStart, on }), on).catch((reason) =>
-        failed(`Couldn't play ${item.title}.`, reason),
-      );
+      play((on) => shell.playHistory(item, { fromStart, on }), on).catch((reason) => {
+        failed(`Couldn't play ${item.title}.`, reason);
+        return false;
+      });
     return [
       ...(press === "Details"
         ? [

@@ -20,7 +20,7 @@ import type { HistoryItem } from "../../../shared/viewing";
 import { BoardArt } from "./HomeBoard";
 import { SectionOptions } from "./SectionOptions";
 
-type Resume = (item: HistoryItem, options: { fromStart: boolean; on?: PlayOn }) => void;
+type Resume = (item: HistoryItem, options: { fromStart: boolean; on?: PlayOn }) => unknown;
 type Props = {
   /** What to continue, in the order Home opened with: the first leads, the next few are listed beside it. */
   items: HistoryItem[];
