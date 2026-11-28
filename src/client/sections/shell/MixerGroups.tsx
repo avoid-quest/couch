@@ -99,7 +99,7 @@ export function GroupChips({
   const undo = async (current: Outcome) => {
     setUndoing(true);
     try {
-      await current.undo();
+      await current.undo(rows);
       say(null);
       // Focus goes back where it came from rather than to the top of a TV's Sheet.
       const chip =
@@ -276,8 +276,11 @@ function GroupPreview({
       // While nothing of the group plays yet, what plays now stays, so the playback never goes silent.
       if (!step.gains && !plan.same.length && !applied.some((change) => change.on)) break;
       try {
-        for (const action of step.actions) await gate.command(action);
-        applied.push(...step.undone);
+        // Its output change counts once Core takes it, even if the unmute that follows fails.
+        for (const [index, action] of step.actions.entries()) {
+          await gate.command(action);
+          if (!index) applied.push(...step.undone);
+        }
       } catch (error) {
         reason = error;
         refused.push(...channelNames(step.changes).map((text) => `${text} (couldn't change)`));
@@ -295,13 +298,14 @@ function GroupPreview({
       ...refused,
     ];
     // Undo puts back this playback's devices; a device taken from another programme doesn't return to it.
-    const steps = undoSteps(applied, rows, playbackId);
     const moved = applied.some((change) => change.from);
     onApplied({
       group: group.id,
       text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.${moved ? " Undo changes only this playback." : ""}`,
-      undo: async () => {
-        for (const step of steps) for (const action of step.actions) await gate.command(action);
+      // Built from the rows as they are when Undo is pressed, after Apply changed them.
+      undo: async (now) => {
+        for (const step of undoSteps(applied, now, playbackId))
+          for (const action of step.actions) await gate.command(action);
       },
     });
   };

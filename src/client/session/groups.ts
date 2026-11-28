@@ -114,18 +114,29 @@ export function applySteps(plan: Plan, rows: Row[], playbackId: string) {
     });
 }
 
-/** The changes that put back what a group's applied changes undid, on the devices they reached. */
+/**
+ * What puts back a group's applied changes, from the rows as they are now: each channel it changed, turned back exactly
+ * (a hidden radio picture included), devices regaining a channel first. Unlike Apply, nothing here leaves whole.
+ */
 export function undoSteps(applied: Change[], rows: Row[], playbackId: string) {
-  return applySteps(
-    {
-      same: [],
-      left: [],
-      wanted: 0,
-      changes: applied.map((change) => ({ ...change, on: !change.on })),
-    },
-    rows,
-    playbackId,
-  );
+  const inverse = applied.map((change) => ({ ...change, on: !change.on }));
+  const gains = (id: string) => inverse.some((change) => change.deviceId === id && change.on);
+  return [...new Set(inverse.map((change) => change.deviceId))]
+    .sort((a, b) => Number(gains(b)) - Number(gains(a)))
+    .flatMap((id) => {
+      const row = rows.find((item) => item.device.id === id);
+      if (!row) return [];
+      const changes = inverse.filter((change) => change.deviceId === id);
+      const picture = changes.find((change) => change.channel === "picture"),
+        sound = changes.find((change) => change.channel === "sound");
+      const action: OutputAction = {
+        type: "output",
+        deviceId: id,
+        ...(picture ? { picture: picture.on } : {}),
+        ...(sound ? { level: sound.on ? row.device.volume || 50 : 0 } : {}),
+      };
+      return [{ changes, actions: soundActions(row, { ...action, playbackId }) }];
+    });
 }
 
 /** "Bedroom TV sound", "Speakers picture and sound": each device once, its channels together. */

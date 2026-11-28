@@ -8,6 +8,7 @@ import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
 import type { GroupMember } from "../../../shared/mixer-groups";
 import type { Action } from "../../../shared/protocol";
+import type { Row } from "@/session/where-it-plays";
 
 export const said = (reason: unknown) =>
   reason instanceof Error ? reason.message : String(reason);
@@ -18,7 +19,8 @@ export type GroupDraft = { id?: string; name: string; members: GroupMember[] };
  * What the last group action did, said beside the groups with its Undo: a toast would sit under a phone's or TV's Sheet.
  * `group` is the chip focus returns to after Undo.
  */
-export type Outcome = { text: string; undo: () => Promise<void>; group?: string };
+/** A change's line beside the chips; Undo gets the Mixer's rows as they are when it is pressed. */
+export type Outcome = { text: string; undo: (rows: Row[]) => Promise<void>; group?: string };
 
 /**
  * Saving a group, in the Mixer's place: its name, then every device with its Picture and Sound, offline ones too.

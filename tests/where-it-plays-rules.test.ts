@@ -555,6 +555,14 @@ describe("groups", () => {
     expect(plan(state, kitchen).changes).toEqual([]);
   });
 
+  test("Undo turns back only the sound it added beside a radio's hidden picture", () => {
+    const added = [{ deviceId: "tv", name: "TV", channel: "sound" as const, on: true }];
+    const after = session({ outputs: [both("tv")], film: { audioOnly: true } });
+    expect(undoSteps(added, rows(after), "p").flatMap((step) => step.actions)).toEqual([
+      { type: "output", deviceId: "tv", level: 0, playbackId: "p" },
+    ]);
+  });
+
   test("Undo turns back exactly the channels it changed", () => {
     const before = session({ outputs: [both(here)] });
     const applied = plan(before).changes;
