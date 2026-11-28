@@ -592,7 +592,7 @@ export async function browseAnimeUnity(
     throw new ProviderError("AnimeUnity does not have this episode page.", 404);
   const rows =
     start === 1 ? title.episodes : await episodeRange(title, start, cancellation, request);
-  return titlePage(
+  const listed = titlePage(
     title,
     rows,
     start === 1,
@@ -600,6 +600,12 @@ export async function browseAnimeUnity(
       ? String(start + 120)
       : undefined,
   );
+  if (title.item.kind !== "collection" || title.count <= 120) return listed;
+  return {
+    ...listed,
+    ...(start > 1 ? { previousCursor: String(start - 120) } : {}),
+    lastCursor: String(1 + 120 * Math.floor((title.count - 1) / 120)),
+  };
 }
 
 export async function loadAnimeUnityList(

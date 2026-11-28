@@ -41,6 +41,9 @@ export type ProviderPage = {
   item?: ProviderItem;
   items: ProviderItem[];
   nextCursor?: string;
+  /** A list in pages oldest first (a long anime's episodes): the page before this one, and the last, newest page. */
+  previousCursor?: string;
+  lastCursor?: string;
   title?: string;
   thumbnail?: string;
   description?: string;
@@ -193,6 +196,24 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       return `https://www.twitch.tv${path}`;
   } catch {
     /* Optional public metadata. */
+  }
+}
+
+/**
+ * The public page a link plays, less a YouTube share's or start time's extras (`si`, `t`): only YouTube's are known to be
+ * harmless, so any other provider's link stays as its own page or none (a SoundCloud `secret_token` is never dropped).
+ */
+export function providerMediaPage(value: string): string | undefined {
+  const page = publicProviderMediaUrl(value);
+  if (page || providerForUrl(value) !== "youtube") return page;
+  try {
+    const url = new URL(value);
+    for (const name of [...url.searchParams.keys()])
+      if (name !== "v") url.searchParams.delete(name);
+    url.hash = "";
+    return publicProviderMediaUrl(url.href);
+  } catch {
+    return;
   }
 }
 

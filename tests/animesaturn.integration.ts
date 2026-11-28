@@ -155,6 +155,8 @@ test("large titles browse bounded public chunks, while queue loading enforces 50
   const first = await browseAnimeSaturn({ url: titleUrl }, undefined, fixture(route, requests));
   assert.equal(first.items.length, 50);
   assert.equal(first.nextCursor, "1");
+  assert.equal(first.previousCursor, undefined);
+  assert.equal(first.lastCursor, "23");
   assert.equal(requests.length, 1);
   const last = await browseAnimeSaturn(
     { url: titleUrl, cursor: "23" },
@@ -165,6 +167,7 @@ test("large titles browse bounded public chunks, while queue loading enforces 50
   assert.equal(last.items[0]?.collection?.index, 1150);
   assert.equal(last.items.at(-1)?.collection?.index, 1179);
   assert.equal(last.nextCursor, undefined);
+  assert.equal(last.previousCursor, "22");
   const before = requests.length;
   await assert.rejects(
     () => loadAnimeSaturnList(titleUrl, undefined, fixture(route, requests)),

@@ -448,6 +448,8 @@ export async function browseAnimeSaturn(
       description: selected.description,
       items,
       ...(cursor + 1 < title.episodes.pages ? { nextCursor: String(cursor + 1) } : {}),
+      ...(cursor > 0 ? { previousCursor: String(cursor - 1) } : {}),
+      ...(title.episodes.pages > 1 ? { lastCursor: String(title.episodes.pages - 1) } : {}),
     };
   }
   if (input.cursor === "0") throw new ProviderError("Invalid AnimeSaturn page cursor.", 400);

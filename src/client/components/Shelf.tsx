@@ -13,12 +13,15 @@ export function Shelf({
   label = title,
   href,
   loading = false,
+  options,
   children,
 }: {
   title: string;
   label?: string;
   href?: string;
   loading?: boolean;
+  /** The section's own "…", beside its heading. */
+  options?: ReactNode;
   children: ReactNode;
 }) {
   const id = useId();
@@ -54,7 +57,10 @@ export function Shelf({
   return (
     <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 gap-2">
       <div className="flex items-center justify-between gap-4">
-        <ShelfHeading title={title} href={href} loading={loading} />
+        <div className="flex min-w-0 items-center gap-1">
+          <ShelfHeading title={title} href={href} loading={loading} />
+          {options}
+        </div>
         {(edges.previous || edges.next) && (
           <div className="flex gap-1 tv:hidden [@media(pointer:coarse)]:hidden">
             <Button

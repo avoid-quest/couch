@@ -277,12 +277,13 @@ const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean)
   failed ? "Try again" : button.ended ? "Replay" : button.paused ? "Play" : "Pause";
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar, Home's hero and the remote pad,
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar and the remote pad,
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones. The full player's quiet bar
- * (`quiet`) reads Play/Pause, Next, then Stop with its name, as YouTube's and Twitch's players lead with Play and Next.
+ * `moreClassName` styles Next, and Stop while it plays: the now-playing bar hides them on phones, and keeps Stop in reach
+ * while what it shows is paused, ended or failed. The full player's quiet bar (`quiet`) reads Play/Pause, Next, then Stop
+ * with its name, as YouTube's and Twitch's players lead with Play and Next.
  */
 export function PlaybackTransport({
   state,
@@ -320,6 +321,7 @@ export function PlaybackTransport({
       (player.status === "error" ||
         (player.status === "loading" && state.radioRetry?.retryAt != null)) &&
       !!current;
+  const resting = ended || failed || player.status === "paused";
   const enabled = [
     ended || failed ? available && programme : transportReady && pausable,
     stoppable,
@@ -333,7 +335,7 @@ export function PlaybackTransport({
       size={quiet ? "default" : "icon-lg"}
       className={cn(
         transportInk,
-        moreClassName,
+        !resting && moreClassName,
         // The narrowest phones trim its padding, so its name still fits the band's row.
         quiet && "h-(--player-target) max-[23rem]:gap-1 max-[23rem]:px-2",
       )}

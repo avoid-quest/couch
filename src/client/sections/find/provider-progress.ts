@@ -8,7 +8,8 @@ import { animeUnityPageUrl } from "../../../shared/animeunity";
 import type { HistoryItem } from "../../../shared/viewing";
 import { collectionLinks } from "../../collection-target";
 
-function identity(value: string) {
+/** Which provider media a public page plays, the same across its healed domains and slugs; undefined when that isn't known. */
+export function mediaIdentity(value: string) {
   const publicUrl = publicProviderMediaUrl(value);
   if (!publicUrl) return;
   const url = new URL(publicUrl);
@@ -20,9 +21,9 @@ function identity(value: string) {
 }
 
 export function progressFor(item: ProviderItem, history: HistoryItem[]) {
-  const key = item.kind === "media" && !item.live ? identity(item.url) : undefined;
+  const key = item.kind === "media" && !item.live ? mediaIdentity(item.url) : undefined;
   return key
-    ? history.find((progress) => progress.url && identity(progress.url) === key)
+    ? history.find((progress) => progress.url && mediaIdentity(progress.url) === key)
     : undefined;
 }
 
@@ -64,12 +65,12 @@ export function seriesResumeFor(series: ProviderItem, history: HistoryItem[]) {
       .sort((a, b) => (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0))[0];
   const key =
     series.provider === "streamingcommunity" && series.kind === "collection"
-      ? identity(series.url)
+      ? mediaIdentity(series.url)
       : undefined;
   const episodePrefix = key?.replace(/:film$/, ":");
   return key
     ? history.find((progress) => {
-        const episode = progress.url && identity(progress.url);
+        const episode = progress.url && mediaIdentity(progress.url);
         return (
           progress.playable &&
           !progress.watched &&
@@ -78,7 +79,7 @@ export function seriesResumeFor(series: ProviderItem, history: HistoryItem[]) {
           episode !== key &&
           episode.startsWith(episodePrefix!) &&
           collectionLinks(progress.collection).some(
-            (collection) => identity(collection.url) === key,
+            (collection) => mediaIdentity(collection.url) === key,
           )
         );
       })

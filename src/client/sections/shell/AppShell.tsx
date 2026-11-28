@@ -78,6 +78,7 @@ import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { UpdateCue } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
+import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
@@ -710,7 +711,6 @@ function ShellChrome({ children }: PropsWithChildren) {
   const remoteVisible = useMatches({
     select: (matches) => matches.some((match) => match.routeId === "/remote"),
   });
-  // Home's top item is what plays, with its own transport, whenever something does.
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
@@ -878,6 +878,7 @@ function ShellChrome({ children }: PropsWithChildren) {
           )}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
           <Toaster tvPresentation={tvPresentation} />
+          {paired && <AddToHomePanel />}
         </div>
       </main>
     </div>

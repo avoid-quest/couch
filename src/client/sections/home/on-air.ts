@@ -141,7 +141,7 @@ export function useStationMenu() {
 
 /**
  * A playing station's show: Core's programme for the playback, else the show its tile shows, so its title and artwork
- * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar, Home's hero and the player,
+ * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar and the player,
  * while it loads as while it plays. Null for anything but a station on air.
  */
 export function useStationShow(): RadioProgrammeDetails | null {
