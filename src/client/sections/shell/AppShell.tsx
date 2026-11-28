@@ -86,6 +86,7 @@ import { UpdateCue, useUpdatesReady } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
+import { useTrayStatus } from "./tray-status";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
 import { hear, onBlocked } from "@/session/renderer";
@@ -685,6 +686,7 @@ function ShellChrome({ children }: PropsWithChildren) {
   } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
+  useTrayStatus(statusLabel);
   const setupPending = useLocalSetupPending(credentials);
   useEffect(() => {
     if (!tvPresentation) return;

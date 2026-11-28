@@ -12,7 +12,6 @@ import {
   screen,
   session,
   shell,
-  Tray,
   utilityProcess,
   type IpcMainInvokeEvent,
   type Rectangle,
@@ -39,6 +38,8 @@ import { createLiveAudio } from "./live-audio";
 import { flushReports, setDesktopReporting } from "./sentry";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
+import { createTray, isTrayStatus } from "./tray";
+import type { TrayAction } from "../src/shared/app-bridge";
 
 // 128 frames cut MacBook Chrome's reported Sendspin output latency from 42 to 27 ms.
 // Linux is unmeasured; Windows' WASAPI warns that mismatched fixed sizes can glitch.
@@ -163,7 +164,7 @@ const liveAudio = createLiveAudio(
       )
     : undefined,
 );
-let tray: Tray | null = null;
+let tray: ReturnType<typeof createTray> | null = null;
 let quitting = false;
 let updating = false;
 let stopped = false;
@@ -695,6 +696,7 @@ function createWindow() {
       window?.setFullScreen(false);
     }
     capture.clear();
+    tray?.show(null);
     updatePlayback = "loading";
   });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
@@ -860,6 +862,10 @@ handle("install-update", (_event, version) =>
 handle("show-logs", () => shell.showItemInFolder(logPath));
 // The page's app shell mounted (renderer-status.json); handle() admits only the main frame.
 handle("shell-ready", () => renderer?.acknowledge() ?? false);
+handle("tray-status", (_event, status) => {
+  if (!isTrayStatus(status)) throw new Error("Invalid tray status.");
+  tray?.show(status);
+});
 handle("quit", () => {
   setImmediate(() => app.quit());
 });
@@ -944,26 +950,6 @@ else {
             { label: "View", submenu: [{ role: "togglefullscreen" }] },
             { role: "windowMenu" },
           ]);
-    if (!tv) {
-      const icon =
-        process.platform === "darwin"
-          ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), {
-              scaleFactor: 2,
-            })
-          : nativeImage
-              .createFromPath(join(app.getAppPath(), appIcon))
-              .resize({ width: 32, height: 32 });
-      icon.setTemplateImage(process.platform === "darwin");
-      tray = new Tray(icon);
-      tray.setToolTip("Couch");
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          { label: "Show Couch", click: show },
-          { label: "Quit Couch", click: () => app.quit() },
-        ]),
-      );
-      if (process.platform !== "darwin") tray.on("click", show);
-    }
     screen.on("display-added", () => {
       if (tv && !preview) present();
     });
@@ -1024,7 +1010,39 @@ else {
       playing: async () =>
         ["loading", "playing", "paused"].includes(updatePlayback) ||
         !!(await interruption())?.includes("playback"),
-      onState: (state) => window?.webContents.send("couch:updates", state),
+      onState: (state) => {
+        window?.webContents.send("couch:updates", state);
+        tray?.render();
+      },
     });
+    if (!tv) {
+      const icon =
+        process.platform === "darwin"
+          ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), {
+              scaleFactor: 2,
+            })
+          : nativeImage
+              .createFromPath(join(app.getAppPath(), appIcon))
+              .resize({ width: 32, height: 32 });
+      icon.setTemplateImage(process.platform === "darwin");
+      // Stop sharing needs no window; the rest open a page in it.
+      const act = (action: TrayAction) => {
+        if (action !== "stop-sharing") show();
+        window?.webContents.send("couch:tray", action);
+      };
+      tray = createTray({
+        icon,
+        open: show,
+        act,
+        updates: () => updates.state(),
+        checkForUpdates: () => void updates.check(),
+        // Updates page explains a refusal, such as playback it would stop.
+        restartToUpdate: () =>
+          void updates
+            .action({ op: "install", version: updates.state().available }, 250)
+            .catch(() => act("updates")),
+        quit: () => app.quit(),
+      });
+    }
   });
 }

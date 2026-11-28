@@ -1,6 +1,6 @@
 import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, devicesQuery } from "@/api/devices";
@@ -68,6 +68,8 @@ export function DevicesSettings({
   tvs = new Set(),
   hostTv = false,
   children,
+  pairing,
+  onPairingShown,
 }: {
   credentials: ApiCredentials;
   connected: boolean;
@@ -83,6 +85,9 @@ export function DevicesSettings({
   hostTv?: boolean;
   /** The Couch's network settings, between pairing and the devices. */
   children?: ReactNode;
+  /** Asked to show the pairing code, once. */
+  pairing: boolean;
+  onPairingShown: () => void;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.device?.id;
@@ -101,6 +106,11 @@ export function DevicesSettings({
   const [showOld, setShowOld] = useState(false);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
+  useEffect(() => {
+    if (!pairing) return;
+    setPairingOpen(true);
+    onPairingShown();
+  }, [pairing]);
   const refreshDevices = () =>
     queryClient.invalidateQueries({ queryKey: devicesQuery(credentials).queryKey });
   const claiming = useMutation({

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { CouchApp, UpdateAction, UpdateState } from "../src/shared/app-bridge";
+import type { CouchApp, TrayAction, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { LiveAudioError } from "../src/shared/capture";
 
 // The Couch window's bridge to Main (app/main.ts). The page may be this
@@ -215,6 +215,14 @@ if (captureId) {
     quit: () => call("quit"),
     reportPlayback: (status) => call("update-playback", status),
     shellReady: () => call("shell-ready"),
+    trayStatus: (status) => call("tray-status", status),
+    onTrayAction: (listener) => {
+      const handler = (_event: unknown, action: TrayAction) => listener(action);
+      ipcRenderer.on("couch:tray", handler);
+      return () => {
+        ipcRenderer.off("couch:tray", handler);
+      };
+    },
   } satisfies CouchApp);
 }
 

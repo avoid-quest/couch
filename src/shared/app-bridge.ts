@@ -22,6 +22,19 @@ export type AppMode = {
   targets: string[];
   localSetupComplete: boolean;
 };
+/** The longest label the desktop app's tray takes from a page. */
+export const trayLabelLength = 200;
+/** What the desktop app's tray says of the Couch its window shows (app/tray.ts). */
+export type TrayStatus = {
+  couch: string;
+  connection: string;
+  network: boolean;
+  /** What this window shares and where, in the app's words; null when it shares nothing. */
+  sharing: string | null;
+  /** This device may pair others. */
+  pair: boolean;
+};
+export type TrayAction = "pair" | "settings" | "updates" | "stop-sharing";
 export type CouchApp = {
   tvPresentation: boolean;
   /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
@@ -73,6 +86,9 @@ export type CouchApp = {
   quit?(): Promise<void>;
   // The TV's own renderer also plays in Client mode, without a local Core.
   reportPlayback?(status: PlayerState["status"]): Promise<void>;
+  /** The tray's status line, Pair a device and sharing. Older apps lack these. */
+  trayStatus?(status: TrayStatus): Promise<void>;
+  onTrayAction?(listener: (action: TrayAction) => void): () => void;
   /** Tells the app that this page's shell mounted; false when it was not this window's current page. Older apps lack it. */
   shellReady?(): Promise<boolean>;
 };
