@@ -10,5 +10,4 @@ past NTS show, while a Spotify album someone pasted plays from YouTube.
 
 ## Good to know
 
-- A Spotify song now and then plays the wrong recording; **Try again** finds
-  another.
+- A Spotify song now and then plays a different recording of it.
