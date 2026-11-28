@@ -123,6 +123,8 @@ export function createSession(
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
+  // A Play still loading its list holds a reservation that Stop, Next or another Play ends; Autoplay keeps it.
+  let reservation = 0;
   let expiry: MediaSource["expiry"];
   // Subtitle files added while this item plays; they move with it.
   let addedSubtitles: ExternalSubtitle[] = [];
@@ -677,7 +679,7 @@ export function createSession(
     return true;
   };
   const assertCurrentPlay = (intent: number) => {
-    if (intent !== playIntent) throw new Error(PLAY_CANCELED);
+    if (intent !== reservation) throw new Error(PLAY_CANCELED);
   };
   const play = (
     entryId: string,
@@ -733,6 +735,7 @@ export function createSession(
     if (!preserveContext) cancelContinuation();
     if (reason === "retry") state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
+    if (reason === "play" || reason === "undoStop") reservation++;
     activePlayIntent = ++playIntent;
     webRecovery = null;
     state.webRetry = null;
@@ -995,6 +998,7 @@ export function createSession(
     pendingPause = null;
     audioInterrupted = false;
     playIntent++;
+    reservation++;
     cancelRadioRetry();
     finishProgress(true);
     resolution?.abort();
@@ -1055,6 +1059,7 @@ export function createSession(
     return true;
   };
   const next = (authorize = () => {}, playedBy?: PlaybackActor) => {
+    reservation++;
     if (!advanceNext(authorize, playedBy)) {
       if (continuationResolution && state.preferences?.profile.autoplay !== false)
         awaitingContinuation = { authorize, playedBy };
@@ -1429,7 +1434,8 @@ export function createSession(
         broadcast();
       }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
-      return ++playIntent;
+      playIntent++;
+      return ++reservation;
     },
     playIfCurrent(
       intent: number,

@@ -187,3 +187,40 @@ test("Up next pages through the whole Autoplay list, and any of it plays", async
     store.close();
   }
 });
+
+test("a Play waiting for its list outlasts Autoplay moving on, and Stop or Next cancels it", async () => {
+  const store = openStore(":memory:");
+  const playback = store.playback("reserved");
+  let state = undefined as ReturnType<typeof createSession>["state"] | undefined;
+  const session = createSession(
+    { ...store, ...playback },
+    () => {},
+    (next) => (state = next),
+    {
+      resolveSource: (item) => ({ source: item.source.replace(/^web:/, "") }),
+      resolveContinuation: () => ({ title: "Collection", entries: [entry("following")] }),
+    },
+  );
+  const ended = () =>
+    session.observe({ ...state!.player, status: "ended", position: 100, duration: 100 });
+  try {
+    session.command({ type: "enqueue", entry: entry("playing"), playNow: true });
+    await flush();
+    const intent = session.reservePlay();
+    ended();
+    assert.equal(state!.currentEntryId, "following");
+    session.playNewEntries([entry("wishlist")], { intent });
+    assert.equal(state!.currentEntryId, "wishlist");
+
+    const stopped = session.reservePlay();
+    session.command({ type: "stop" });
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: stopped }), /canceled/);
+    session.command({ type: "enqueue", entry: entry("again"), playNow: true });
+    const skipped = session.reservePlay();
+    session.command({ type: "next", playbackId: state!.player.playbackId! });
+    assert.throws(() => session.playNewEntries([entry("late")], { intent: skipped }), /canceled/);
+  } finally {
+    session.close();
+    store.close();
+  }
+});
