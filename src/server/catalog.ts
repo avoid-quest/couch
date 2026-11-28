@@ -1,4 +1,4 @@
-import { providerForUrl, publicProviderMediaUrl } from "../shared/providers";
+import { providerForUrl, providerMediaPage } from "../shared/providers";
 import type { PlaybackActor, QueueEntry, SessionState } from "../shared/protocol";
 import type { HistoryItem, HistorySelection, WatchingProfile } from "../shared/viewing";
 import type { VideoQuality } from "../shared/providers";
@@ -162,7 +162,7 @@ export function createCatalog({ radio, viewing }: Services) {
       : "Online";
     const url =
       source?.source.startsWith("web:") && !source.endless && source.kind !== "radio"
-        ? publicProviderMediaUrl(source.source.slice(4))
+        ? providerMediaPage(source.source.slice(4))
         : undefined;
     return {
       ...item,

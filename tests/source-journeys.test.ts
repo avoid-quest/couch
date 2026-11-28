@@ -1,8 +1,9 @@
 import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { providerPageQuery } from "../src/client/api/providers";
-import type { ProviderPage } from "../src/shared/providers";
+import { providerMediaPage, type ProviderPage } from "../src/shared/providers";
 import {
+  mediaIdentity,
   nextEpisode,
   progressFor,
   seriesResumeFor,
@@ -96,6 +97,19 @@ test("domain healing, canonical SC title/watch links and changed slugs keep exac
   ).toBeUndefined();
   expect(progressFor(film, [{ ...progress, url: undefined }])).toBeUndefined();
   expect(progressFor({ ...film, live: true }, [progress])).toBeUndefined();
+});
+
+test("a link shared with extras plays the same media; another clip with the same title does not", () => {
+  const playing = (link: string) => mediaIdentity(providerMediaPage(link) ?? "");
+  const clip = playing("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  expect(clip).toBeDefined();
+  expect(playing("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42&si=share")).toBe(clip);
+  expect(playing("https://youtu.be/dQw4w9WgXcQ?si=share")).toBe(clip);
+  expect(playing("https://www.youtube.com/watch?v=9bZkp7q19f0")).not.toBe(clip);
+  expect(playing("https://streamingcommunityz.rip/it/watch/42?e=10&ref=x")).toBe(
+    playing("https://streamingcommunityz.rip/it/watch/42?e=10"),
+  );
+  expect(playing("https://example.com/trailer.mp4")).toBeUndefined();
 });
 
 test("series starts with its latest unfinished episode, otherwise the first unwatched one", () => {

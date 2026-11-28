@@ -27,6 +27,7 @@ import { failed } from "@/toasts";
 import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
+import { mediaIdentity } from "@/sections/find/provider-progress";
 import { useSessionGate } from "@/session/session-context";
 import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
 import { TRY_AGAIN } from "@/copy";
@@ -58,7 +59,7 @@ import { MediaRow } from "@/components/MediaRow";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { providerFavoritesQuery } from "@/api/providers";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
-import type { ProviderId } from "../../../shared/providers";
+import { providerMediaPage, type ProviderId } from "../../../shared/providers";
 
 export type HistoryPlayback = (
   item: HistoryItem,
@@ -206,10 +207,24 @@ export function HomePage() {
   const upcoming = playbackControls(state).queue ? queue.slice(cursor + 1) : [];
 
   const past = history.data?.items ?? [];
-  const unfinished = past.filter((item) => item.position > 0 && !item.watched);
+  // One programme can be in history twice, under each form of link it played from (a share's ?si=, a moved catalogue):
+  // the same known media is one programme, its latest; an item whose media isn't known stays itself.
+  const identityOf = (url?: string) => (url && mediaIdentity(url)) || undefined;
+  const unfinished = past.filter(
+    (item, index) =>
+      item.position > 0 &&
+      !item.watched &&
+      (!identityOf(item.url) ||
+        past.findIndex((other) => identityOf(other.url) === identityOf(item.url)) === index),
+  );
   const playingMedia = current && past.find((item) => item.queueEntryId === current.id)?.mediaId;
+  const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
+  const playingIdentity = identityOf(currentUrl && providerMediaPage(currentUrl));
+  const isPlaying = (item: HistoryItem) =>
+    item.mediaId === playingMedia ||
+    (!!playingIdentity && identityOf(item.url) === playingIdentity);
   // What plays is the now-playing bar's alone, so the Stage leads with something else.
-  const firstUnfinished = unfinished.find((item) => item.mediaId !== playingMedia);
+  const firstUnfinished = unfinished.find((item) => !isPlaying(item));
   const firstOnAir = allStations.find((station) => onAir(station.id) && !playingStation(station));
   // The hero waits for what decides it (undefined), so it never swaps under the focus; null when there is nothing to lead with.
   const hero: Hero | null | undefined = !state
@@ -229,26 +244,21 @@ export function HomePage() {
   // Shelves keep the order Home opened with, less the item that led it then, so nothing moves under the focus: a station that starts playing stays where it is, marked Playing.
   const historyReady = hero !== undefined && !history.isPending;
   const continued = useKeptOrder(
-    unfinished.filter((item) => item.mediaId !== playingMedia),
+    unfinished.filter((item) => !isPlaying(item)),
     (item) => item.mediaId,
     historyReady,
     hero?.kind === "continue" ? hero.item.mediaId : playingMedia,
   );
-  // One programme can be in history twice, under the source it played from each time (a catalogue that moved, a link
-  // pasted in another form): Played recently leaves out what Continue shows, by its page or by what its tile says.
-  const shownAs = (item: HistoryItem) => {
-    const caption = mediaCaption(item);
-    return `${caption.title}\n${caption.lead ?? ""}`;
-  };
-  const continuing = hasRow("continue") ? unfinished : [];
-  const continuingPages = new Set(continuing.map((item) => item.url).filter(Boolean));
-  const continuingTitles = new Set(continuing.map(shownAs));
+  // Played recently and For later leave out what Continue shows.
+  const continuing = new Set(
+    (hasRow("continue") ? unfinished : []).map((item) => identityOf(item.url)).filter(Boolean),
+  );
   const recent = useKeptOrder(
     past.filter(
       (item) =>
         !(item.position > 0 && !item.watched) &&
-        !(item.url && continuingPages.has(item.url)) &&
-        !continuingTitles.has(shownAs(item)),
+        !isPlaying(item) &&
+        !continuing.has(identityOf(item.url)),
     ),
     (item) => item.mediaId,
     historyReady,
@@ -262,15 +272,17 @@ export function HomePage() {
     hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id,
   ).slice(0, shelfLength);
   const onAirPending = favorites.isPending || builtIn.isPending;
-  const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
   const savedMedia = useKeptOrder(
-    later.data?.items.filter(
-      (item) =>
+    later.data?.items.filter((item) => {
+      const identity = identityOf(item.url);
+      return (
         item.kind !== "radio" &&
         !item.endless &&
-        !continuingPages.has(item.url) &&
-        (!currentUrl || item.url !== currentUrl),
-    ) ?? [],
+        !continuing.has(identity) &&
+        item.url !== currentUrl &&
+        (!identity || identity !== playingIdentity)
+      );
+    }) ?? [],
     (item) => item.id,
     hero !== undefined && !later.isPending,
   );
