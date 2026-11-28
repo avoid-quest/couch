@@ -290,7 +290,7 @@ export async function browseTwitch(
   }
   if (target.kind === "category") {
     const data = await query(
-      `query Category($slug:String!) { game(slug:$slug) { name streams(first:20) { ${streamEdges} } } }`,
+      `query Category($slug:String!) { game(slug:$slug) { name boxArtURL(width:285,height:380) viewersCount streams(first:20) { ${streamEdges} } } }`,
       { slug: target.slug },
       signal,
     );
@@ -300,7 +300,12 @@ export async function browseTwitch(
       "twitch",
       `https://www.twitch.tv/directory/category/${encodeURIComponent(target.slug)}`,
       "collection",
-      { title: text(data.game.name) || target.slug, items: items(data.game.streams, streamItem) },
+      {
+        title: text(data.game.name) || target.slug,
+        thumbnail: thumbnail(data.game.boxArtURL),
+        subtitle: viewers(data.game.viewersCount),
+        items: items(data.game.streams, streamItem),
+      },
     );
   }
   const data = await query(`{ streams(first:20) { ${streamEdges} } }`, {}, signal);

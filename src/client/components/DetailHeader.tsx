@@ -1,4 +1,4 @@
-import { Bookmark, Play } from "lucide-react";
+import { Bookmark, HousePlus, Play } from "lucide-react";
 import {
   useId,
   useLayoutEffect,
@@ -114,6 +114,7 @@ export function DetailHeader({
   queue,
   save,
   playOn,
+  addToHome,
   more = [],
   trail,
   children,
@@ -138,6 +139,8 @@ export function DetailHeader({
   queue?: Verb;
   save?: { saved: boolean; run: () => void; disabled?: boolean };
   playOn?: { run: (on: PlayOn) => void; disabled?: boolean; audioOnly?: boolean };
+  /** Follows the page's list on Home (AddToHome.tsx), opened from its own button. */
+  addToHome?: (from: HTMLElement) => void;
   /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
   more?: MenuAction[];
   /** The page's ancestors (ContentBreadcrumb), above the title. */
@@ -152,8 +155,9 @@ export function DetailHeader({
     !play?.disabled && play && "play",
     !queueDisabled && queue && "queue",
     !save?.disabled && save && "save",
+    addToHome && "home",
   ].find(Boolean);
-  const verbs = !!(play || fromStart || queue || save || playOn || more.length);
+  const verbs = !!(play || fromStart || queue || save || playOn || addToHome || more.length);
   const started = !!position && !!duration;
   const line = metaLine(meta, duration != null && !started && formatDuration(duration));
   return (
@@ -226,6 +230,17 @@ export function DetailHeader({
               disabled={save.disabled}
               onClick={save.run}
             />
+          )}
+          {addToHome && (
+            <Button
+              data-page-first={first === "home" || undefined}
+              variant="ghost"
+              size="lg"
+              onClick={(event) => addToHome(event.currentTarget)}
+            >
+              <HousePlus aria-hidden="true" />
+              Add to Home
+            </Button>
           )}
           {/* The page's own "…", always shown: the header is no item that reveals it. */}
           <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />

@@ -40,8 +40,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { usePlayOn } from "@/components/PlayOn";
-import type { Action } from "../../../shared/protocol";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import type { Action, PlayOn } from "../../../shared/protocol";
 import {
   linkTarget,
   type ProviderId,
@@ -141,7 +141,8 @@ function SearchRoom({ thumbnail }: { thumbnail?: string }) {
 
 /**
  * On the TV the page's first verb (the hero's Play, a list's Play all) takes the focus once it shows and can be pressed,
- * unless the person already pressed something since what it shows (`shows`: the search, the link) began.
+ * unless the person already pressed something since what it shows (`shows`: the search, the link) began, or came Back
+ * to it (the control they left from takes the focus again: useDetailNavigation).
  */
 export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean, shows: string) {
   const pressed = useRef(false);
@@ -161,7 +162,7 @@ export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean
     };
   }, []);
   useLayoutEffect(() => {
-    if (!ready || pressed.current || !isTvPresentation()) return;
+    if (!ready || pressed.current || !isTvPresentation() || history.state?.detailFocus) return;
     page.current?.querySelector<HTMLElement>("[data-page-first]")?.focus({ preventScroll: true });
   }, [ready]);
 }
@@ -1002,12 +1003,16 @@ function PastedList({
     setPending(false);
     return () => controller.abort();
   }, [props.origin, props.token, props.connected]);
-  async function send(verb: LinkVerb) {
+  async function send(verb: LinkVerb, playOn?: PlayOn) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
     try {
-      const ok = await listCommand(linkAction(url, target, verb, quality, list), list, title);
+      const ok = await listCommand(
+        linkAction(url, target, verb, quality, list, playOn),
+        list,
+        title,
+      );
       if (ok && !signal.aborted) onDone();
     } finally {
       if (!signal.aborted) setPending(false);
@@ -1045,6 +1050,12 @@ function PastedList({
           >
             {on(listLabel("Play all", list.count))}
           </Button>
+          <PlayOnMenu
+            size="lg"
+            title={title}
+            disabled={disabled || !props.canPlay}
+            onPlay={(playOn) => void send("play", playOn)}
+          />
           <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("queue")}>
             Queue all
           </Button>

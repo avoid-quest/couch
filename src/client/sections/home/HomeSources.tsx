@@ -237,7 +237,7 @@ const doors: Door[] = [
   { label: "Anime", meta: "AnimeSaturn, AnimeUnity", to: "/anime" },
   {
     label: "Music",
-    meta: "Spotify, Bandcamp, SoundCloud, Mixcloud, YouTube",
+    meta: "Spotify, Bandcamp, SoundCloud, Mixcloud",
     scope: { kind: "music", source: "All" },
   },
   {
@@ -247,23 +247,23 @@ const doors: Door[] = [
   },
 ];
 
-/** One quiet line of doors to the sources, each saying what is behind it; it scrolls sideways where it doesn't fit. */
-export function BrowseLine() {
+/**
+ * One quiet line of doors to the sources, each saying what is behind it, all as wide as each other, then the section's
+ * "…"; it scrolls sideways where they don't fit. Its doors are its name: "Browse" is for screen readers.
+ */
+export function BrowseLine({ options }: { options: ReactNode }) {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
   return (
     <section
       aria-labelledby="home-browse"
-      className="-mx-(--gutter) flex overflow-x-auto border-y px-(--gutter) [scrollbar-width:none]"
+      className="-mx-(--gutter) overflow-x-auto border-y px-(--gutter) [scrollbar-width:none]"
     >
-      <h2
-        id="home-browse"
-        className="flex shrink-0 items-center pr-6 font-display text-title font-semibold [font-stretch:118%] max-sm:pr-4"
-      >
+      <h2 id="home-browse" className="sr-only">
         Browse
       </h2>
-      <ul data-nav-row aria-labelledby="home-browse" className="flex flex-1">
+      <ul data-nav-row aria-labelledby="home-browse" className="flex">
         {doors.map((door) => {
           const href =
             "to" in door
@@ -275,7 +275,10 @@ export function BrowseLine() {
           const down = "provider" in door && failing(door.provider);
           const body = <DoorBody label={door.label} meta={down ? "Couldn't load" : door.meta} />;
           return (
-            <li key={door.label} className="flex min-w-36 flex-1 border-l first:border-l-0">
+            <li
+              key={door.label}
+              className="flex min-w-0 flex-[1_0_8.75rem] border-l first:border-l-0 sm:flex-[1_0_10.5rem]"
+            >
               {href ? (
                 <Button asChild variant="ghost" className={doorClass}>
                   <a
@@ -309,18 +312,20 @@ export function BrowseLine() {
             </li>
           );
         })}
+        {/* On the doors' title line. */}
+        <li className="flex shrink-0 items-start pt-1.5 pl-1">{options}</li>
       </ul>
     </section>
   );
 }
 
-// A door's words: its name, then what is behind it, muted and at most two lines.
+// A door's words: its name on one line, then what is behind it, muted and at most two lines.
 export const doorClass =
-  "h-auto min-h-16 w-full min-w-0 flex-col items-start justify-start gap-0.5 rounded-md px-4 py-3 text-left whitespace-normal";
+  "h-auto min-h-16 w-full min-w-0 flex-col items-stretch justify-start gap-0.5 rounded-md px-4 py-3 text-left whitespace-normal";
 export function DoorBody({ label, meta }: { label: string; meta: string }) {
   return (
     <>
-      <span className="font-display text-body font-semibold">{label}</span>
+      <span className="truncate font-display text-body font-semibold">{label}</span>
       <span className="line-clamp-2 text-meta font-normal text-subtle-foreground">{meta}</span>
     </>
   );

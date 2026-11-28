@@ -10,7 +10,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { ItemMenu, RowOptions, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf, ShelfHeading } from "@/components/Shelf";
 import { TRY_AGAIN } from "@/copy";
 import { StageTitle } from "@/components/Stage";
@@ -51,6 +51,23 @@ export function useRoomScope(scope: SearchScope | null) {
     setSearchScope(scope);
     return () => setSearchScope((current) => (JSON.stringify(current) === key ? null : current));
   }, [key]);
+}
+
+// The sources whose front page is a room: on any of their pages the header's field keeps their scope.
+const roomSources: ProviderId[] = [
+  "raiplay",
+  "twitch",
+  "streamingcommunity",
+  "movies123",
+  "animesaturn",
+  "animeunity",
+];
+export const sourceScope = (provider: ProviderId): SearchScope | null =>
+  roomSources.includes(provider) ? { source: providerNames[provider] } : null;
+/** The room of a search's source, where clearing a search narrowed to it goes back to. */
+export function scopeRoom(scope: SearchScope) {
+  const provider = roomSources.find((provider) => providerNames[provider] === scope.source);
+  return provider && collectionLocation({ provider, url: "" });
 }
 
 /** The room is lit by its lead's picture while nothing plays, as search's results are by the top one (RoomLight.tsx). */
@@ -326,7 +343,7 @@ export function ListShelf({
       ? [{ label: "Add to Home", run: () => addToHome({ provider, url, title }) }]
       : []),
   ];
-  const menu = options.length ? <RowOptions title={title} actions={options} /> : undefined;
+  const menu = useItemMenu(options);
   return (
     <>
       {reader}
@@ -349,7 +366,7 @@ export function ListShelf({
           </p>
         </section>
       ) : !loading && !shown.length ? null : (
-        <Shelf title={title} href={href} note={note} loading={loading} options={menu}>
+        <Shelf title={title} href={href} note={note} loading={loading} menu={menu}>
           {loading ? (
             <MediaTilesSkeleton shape={frame} />
           ) : (
@@ -424,7 +441,7 @@ export function RoomLead({
     <section
       aria-label={item.title}
       data-room-lead
-      className="grid items-center gap-x-10 gap-y-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]"
+      className="grid items-center gap-x-10 gap-y-4 md:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]"
     >
       <div className="grid min-w-0 content-center justify-items-start gap-3 max-md:order-2">
         {kicker && <p className="text-meta text-muted-foreground">{kicker}</p>}
@@ -491,7 +508,7 @@ export function RoomLead({
         <div
           aria-hidden="true"
           onClick={press}
-          className="aspect-video w-full max-w-[32rem] cursor-pointer justify-self-end overflow-hidden rounded-md shadow-(--object-shadow) max-md:order-1 max-md:justify-self-stretch max-md:max-w-none"
+          className="aspect-video w-full max-w-[20rem] cursor-pointer justify-self-end overflow-hidden rounded-md shadow-(--object-shadow) max-md:order-1 max-md:justify-self-stretch max-md:max-w-none"
         >
           <MediaArtwork
             thumbnail={item.thumbnail}

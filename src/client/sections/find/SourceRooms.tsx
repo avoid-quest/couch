@@ -5,7 +5,7 @@ import { majorityShape, providerItemShape } from "@/art-shape";
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaTile } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
-import { Shelf } from "@/components/Shelf";
+import { Shelf, ShelfProblem } from "@/components/Shelf";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { collectionLocation } from "@/detail-navigation";
@@ -69,52 +69,63 @@ function RoomSkeleton() {
  */
 export function RaiPlayRoom({
   page,
+  summary,
   title,
   url,
   context,
 }: {
   page?: ProviderPage;
+  summary?: SearchResultSummary;
   title: string;
   url: string;
   context?: MediaCollection;
 }) {
-  useRoomScope({ source: "RaiPlay" });
   const room = page?.room;
   useSeededPages("raiplay", [room?.lead, ...(room?.shelves ?? [])]);
   const shelves = room?.shelves.filter((shelf) => shelf.item) ?? [];
   const { shown, more } = useInstalments(shelves.length);
+  // Once RaiPlay has answered, a failure is the page's problem below and a page with no lists says so; neither waits.
+  const settled = !!summary && !summary.loading;
   // A section's doors (its genres) say where they were opened from.
   const here = url ? { title, url } : undefined;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <RoomLight thumbnail={room?.lead?.items[0]?.thumbnail ?? shelves[0]?.items[0]?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead
           title={title}
           provider="raiplay"
           context={context}
-          actions={url ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined}
+          actions={
+            url && page ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined
+          }
         />
         <DoorLine
           label={url ? `${title} genres` : "RaiPlay sections"}
           doors={room?.doors.map((door) => doorOf(door, here)) ?? []}
         />
       </div>
-      {!room ? (
+      {!settled && !room ? (
         <RoomSkeleton />
+      ) : settled && !summary.error && !room?.lead && !shelves.length ? (
+        <p role="status" className="text-body text-muted-foreground">
+          RaiPlay lists nothing {url ? `under ${title}` : "here"} today.
+        </p>
       ) : (
-        <>
-          {room.lead?.item && <ListLead provider="raiplay" url={room.lead.item.url} />}
-          {shelves.slice(0, shown).map((shelf) => (
-            <ListShelf
-              key={shelf.item!.url}
-              provider="raiplay"
-              url={shelf.item!.url}
-              title={shelf.title || shelf.item!.title}
-            />
-          ))}
-          {more}
-        </>
+        room && (
+          <>
+            {room.lead?.item && <ListLead provider="raiplay" url={room.lead.item.url} />}
+            {shelves.slice(0, shown).map((shelf) => (
+              <ListShelf
+                key={shelf.item!.url}
+                provider="raiplay"
+                url={shelf.item!.url}
+                title={shelf.title || shelf.item!.title}
+              />
+            ))}
+            {more}
+          </>
+        )
       )}
     </div>
   );
@@ -137,7 +148,6 @@ export function AToZRoom({
   url: string;
   context?: MediaCollection;
 }) {
-  useRoomScope({ source: "RaiPlay" });
   const letters = page?.letters ?? [];
   const items = page?.items ?? [];
   let start = 0;
@@ -168,20 +178,21 @@ export function AToZRoom({
         provider="raiplay"
         context={context}
         meta={page && `${items.length.toLocaleString()} ${noun}`}
-        actions={<AddRoomToHome provider="raiplay" url={url} title={title} />}
+        actions={page && <AddRoomToHome provider="raiplay" url={url} title={title} />}
       />
-      {!page && <RoomSkeleton />}
+      {!page && (!summary || summary.loading) && <RoomSkeleton />}
       <nav ref={rail} aria-label="Jump to a letter">
         <ul
           data-nav-row
           className="flex gap-1 max-sm:-mx-(--gutter) max-sm:overflow-x-auto max-sm:px-(--gutter) sm:flex-wrap"
         >
-          {letters.map(({ letter, count }, index) => (
+          {letters.map(({ letter, count }) => (
             <li key={letter} className="shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
-                data-page-first={index === 0 || undefined}
+                // The rail starts on its first letter that holds something.
+                data-page-first={letter === filled[0]?.letter || undefined}
                 className="min-w-9 px-2 text-body font-semibold"
                 disabled={!count}
                 aria-label={`${letter}, ${count}`}
@@ -263,7 +274,6 @@ const twitchLive = "https://www.twitch.tv/directory/all";
  * three most watched categories' channels.
  */
 export function TwitchRoom({ onNow }: { onNow?: ProviderItem[] }) {
-  useRoomScope({ source: "Twitch" });
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const categories = useQuery({
@@ -277,9 +287,9 @@ export function TwitchRoom({ onNow }: { onNow?: ProviderItem[] }) {
   const lead = saved.find((item) => item.live) ?? onNow?.find((item) => item.live);
   const top = categories.data?.items.slice(0, 3) ?? [];
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <RoomLight thumbnail={lead?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead title="Twitch" provider="twitch" />
         <DoorLine
           label="Twitch categories"
@@ -381,9 +391,8 @@ function SavedChannels({ items }: { items: ProviderItem[] }) {
  */
 export function CatalogueRoomHead({ provider, doors }: { provider: ProviderId; doors: Door[] }) {
   const name = providerNames[provider];
-  useRoomScope({ source: name });
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       <RoomLight />
       <RoomHead title={name} provider={provider} />
       <DoorLine label={`${name} lists`} doors={doors} />
@@ -440,6 +449,8 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
   const sections = room.sections.map((section, index) => ({
     ...section,
     page: pages[index]?.data,
+    failed: pages[index]?.error,
+    retry: () => void pages[index]?.refetch(),
   }));
   useSeededPages(
     "raiplay",
@@ -449,10 +460,10 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
     <section
       data-page="Kind"
       aria-label={room.title}
-      className="grid grid-cols-[minmax(0,1fr)] gap-8"
+      className="grid grid-cols-[minmax(0,1fr)] gap-6"
     >
       <RoomLight thumbnail={sections[0]?.page?.room?.shelves[0]?.items[0]?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead title={room.title} />
         <DoorLine
           label={`${room.title} sources`}
@@ -483,6 +494,15 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
             title={section.label}
             note={`RaiPlay, ${first.title}`}
             href={collectionLocation({ provider: "raiplay", url: section.url })}
+          />
+        ) : section.failed ? (
+          <ShelfProblem
+            key={section.url}
+            title={section.label}
+            href={collectionLocation({ provider: "raiplay", url: section.url })}
+            problem={`Couldn't load RaiPlay's ${section.label}.`}
+            detail={section.failed.message}
+            retry={section.retry}
           />
         ) : (
           connected && !section.page && <ShelfSkeleton key={section.url} title={section.label} />

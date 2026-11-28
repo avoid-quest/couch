@@ -35,6 +35,7 @@ import { useSessionGate } from "@/session/session-context";
 import { undoable } from "@/toasts";
 import type { QueueEntry } from "../../../shared/protocol";
 import {
+  pageSection,
   providerForUrl,
   providerNames,
   type ProviderId,
@@ -150,6 +151,14 @@ export function revealFollow(id: HomeFollow["id"]) {
  * a channel's broadcasts), and each list it holds (a programme's sets, a series' seasons, a channel's tabs).
  */
 function followable(target: AddTarget, page: ProviderPage) {
+  // A source's section offers its own lists, not its hero, promotions or genres; one of its lists, or an A to Z, is
+  // followed as it is.
+  if (page.room)
+    return page.room.shelves.flatMap((shelf) =>
+      shelf.item ? [{ url: shelf.item.url, list: shelf.title || shelf.item.title }] : [],
+    );
+  if (page.letters || pageSection(target))
+    return [{ url: target.url, list: page.title || target.title }];
   const media = page.items.filter((item) => item.kind === "media").length;
   const lists = page.items.filter((item) => item.kind === "collection");
   // A series' seasons come oldest first; its newest season leads, as what is new is there.
@@ -350,9 +359,9 @@ function AddToHomeForm({ target, done }: { target: AddTarget; done: () => void }
   const lists = page.data ? followable(target, page.data) : [];
   const [chosen, setChosen] = useState<string>();
   const choice = lists.find((list) => list.url === chosen) ?? lists[0];
-  // A season or a set is named for its series or programme.
+  // A season or a set is named for its series or programme; a section's list for itself.
   const [draft, setDraft] = useState<string>();
-  const name = draft ?? (page.data?.parent?.title || target.title);
+  const name = draft ?? ((!pageSection(target) && page.data?.parent?.title) || target.title);
   const followed = choice && follows.find((follow) => follow.url === choice.url);
   function submit(event: FormEvent) {
     event.preventDefault();

@@ -3,7 +3,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TryAgain } from "@/components/TryAgain";
+import { ItemMenu, type useItemMenu } from "@/components/RowMenu";
 import { detailHref, useDetailNavigation } from "@/detail-navigation";
+import { cn } from "@/lib/utils";
 
 /**
  * A shelf of MediaTiles under its heading: native overflow, with paging controls when a mouse needs them. Its padding keeps
@@ -17,6 +19,7 @@ export function Shelf({
   loading = false,
   note,
   options,
+  menu,
   children,
 }: {
   title: string;
@@ -27,6 +30,8 @@ export function Shelf({
   note?: ReactNode;
   /** The section's own "…", at the end of its heading's line. */
   options?: ReactNode;
+  /** The heading's own menu, as an item's (RowMenu.tsx): its "…", right-click, a long press, a held OK on the heading. */
+  menu?: ReturnType<typeof useItemMenu>;
   children: ReactNode;
 }) {
   const id = useId();
@@ -61,9 +66,9 @@ export function Shelf({
   };
   return (
     <section aria-label={title} aria-busy={loading || undefined} className="grid min-w-0 gap-2">
-      <div className="flex items-center gap-4">
+      <div {...menu?.item} className={cn("flex items-center gap-4", menu?.item.className)}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3">
-          <ShelfHeading title={title} href={href} loading={loading} />
+          <ShelfHeading title={title} href={href} loading={loading} target={menu?.target} />
           {typeof note === "string" ? (
             <span className="text-meta text-muted-foreground">{note}</span>
           ) : (
@@ -96,6 +101,7 @@ export function Shelf({
             </div>
           )}
           {options}
+          {menu && <ItemMenu menu={menu} title={title} runAfterClose />}
         </div>
       </div>
       {/* It scrolls by wheel, trackpad, scrollbar or focus, out to the window's edges, so a long shelf runs off the right
@@ -178,11 +184,14 @@ export function ShelfHeading({
   href,
   time,
   loading = false,
+  target,
 }: {
   title: string;
   href?: string;
   time?: string;
   loading?: boolean;
+  /** Marks the heading as its section's menu target (useItemMenu's `target`). */
+  target?: object;
 }) {
   const details = useDetailNavigation();
   return (
@@ -196,6 +205,7 @@ export function ShelfHeading({
           >
             {/* An id restores focus here when Back returns from what it opened. */}
             <a
+              {...target}
               id={`shelf-${title.toLowerCase().replace(/\W+/g, "-")}`}
               href={detailHref(href)}
               onClick={(event) => {
