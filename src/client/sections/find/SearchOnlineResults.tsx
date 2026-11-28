@@ -360,15 +360,19 @@ function OnlineResults(props: Props) {
         const existing = savedWeb(item);
         let collection = item.collection;
         if (!existing && collection?.index !== undefined) {
-          // AnimeUnity pages use displayed number ranges, which can combine several episodes.
-          const episodePage = provider === "animeunity";
+          // AnimeUnity pages use displayed number ranges, which can combine several episodes. The item's own provider
+          // refreshes it: Radio archives' Radio Alhara mixes are Mixcloud's.
+          const episodePage = item.provider === "animeunity";
           const fresh = await client.fetchQuery({
             ...providerPageQuery(
               props,
-              provider,
+              item.provider,
               episodePage
                 ? { url: item.url }
-                : { url: collection.url, cursor: providerCollectionCursor(provider, collection) },
+                : {
+                    url: collection.url,
+                    cursor: providerCollectionCursor(item.provider, collection),
+                  },
             ),
             staleTime: 0,
           });
