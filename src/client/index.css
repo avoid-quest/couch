@@ -241,7 +241,10 @@
     :where([data-keyboard] .tv-presentation) :focus
   ),
 [data-sonner-toast]
-  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus),
+  :is([data-button], [data-close-button]):is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ),
 :is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):is(
   :focus-visible,
   :where([data-keyboard] .tv-presentation) :focus
@@ -433,10 +436,46 @@
   max-width: min(35rem, 100%);
   margin-inline: auto;
 }
-/* On the ink pill a focused action inverts to ink, so its ring is the pill's dark ink. */
+/* On the ink pill a focused action or Dismiss inverts to ink, so its ring is the pill's dark ink. */
 [data-sonner-toast]:not([data-type="error"])
-  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  :is([data-button], [data-close-button]):is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
   outline-color: var(--primary-foreground);
+}
+/* Sonner's dark theme paints its close button; ours is the plain Dismiss × in the message's own ink (sonner.tsx).
+   Doubled to outrank sonner's, which it injects after us. */
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]
+  [data-close-button][data-close-button] {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]
+  [data-close-button][data-close-button]:hover {
+  background: color-mix(in oklab, currentColor 10%, transparent);
+}
+/* Focused, it inverts against its message as every control does: ink on the pill, the ring's white on a problem. */
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]:not([data-type="error"])
+  [data-close-button][data-close-button]:is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
+  background: var(--primary-foreground);
+  color: var(--primary);
+}
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast][data-type="error"]
+  [data-close-button][data-close-button]:is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
+  background: var(--ring);
+  color: var(--ring-foreground);
 }
 /* An Undo drains a thin bar over its time (toasts.ts sets --message-time), held while sonner holds its timer: under a
    pointer, except a TV's parked one. */

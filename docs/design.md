@@ -169,6 +169,18 @@ Every problem looks the same: an icon, one sentence in ink and one action
 icon. An Alert announces itself (`role="alert"`, or `status` for a note), and
 its action is a remote's next stop below the thing it belongs to.
 
+### Dismissing
+
+Every message and problem line puts away the same way: one **Dismiss** ×, the
+same icon and size, last on its line (`Dismiss` in `alert.tsx` on every Alert and
+`StatusLine`; sonner's own close button on every message, Undo and problems
+included). A focused one also goes with Escape or the remote's Back, and a
+message swipes away on touch. A dismissed problem stays mounted but hidden until
+what it says changes, or until it goes and comes back (Couch reconnects, then
+drops again). A line whose action is the one way on (Reload after an update, a
+page that can't show) has no ×, so dismissing never hides an action you need;
+plain progress ("Starting…") goes by itself.
+
 **A control's panel opens from it.** On desktops and the TV its Popover or menu
 hangs from the control and fits the screen; on phones a longer panel rises as a
 Sheet from the bottom, by the dock, while short menus stay Popovers.

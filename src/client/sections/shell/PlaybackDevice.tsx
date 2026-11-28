@@ -116,7 +116,9 @@ export function NativeModeGate({ children }: PropsWithChildren) {
               </AlertAction>
             </Alert>
           ) : (
-            <StatusLine busy>Loading…</StatusLine>
+            <StatusLine busy dismissible={false}>
+              Loading…
+            </StatusLine>
           )}
         </Onboarding>
       </main>

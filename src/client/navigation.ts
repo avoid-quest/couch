@@ -9,6 +9,7 @@ const portals =
   '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
 const localOnly = "[data-tv-local-only], .tv-local-only";
 const toaster = "[data-sonner-toaster]";
+const toastButtons = "[data-button], [data-close-button]";
 const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]';
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
@@ -73,9 +74,15 @@ function moveFocus(key: string) {
   const scope = navigationScope();
   const controls = controlsIn(scope);
   const active = document.activeElement;
-  // Any arrow leaves a toast's action; sonner returns focus to where it came from.
+  // Left and Right go between a toast's action and its Dismiss; Up and Down leave it, as sonner returns focus to where
+  // it came from.
   if (active instanceof HTMLElement && active.closest(toaster)) {
-    active.blur();
+    const buttons = [
+      ...(active.closest("[data-sonner-toast]")?.querySelectorAll<HTMLElement>(toastButtons) ?? []),
+    ].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+    const next = buttons[buttons.indexOf(active) + (key === "ArrowRight" ? 1 : -1)];
+    if ((key === "ArrowLeft" || key === "ArrowRight") && next) next.focus();
+    else if (key === "ArrowUp" || key === "ArrowDown") active.blur();
     return;
   }
   if (
@@ -240,15 +247,24 @@ function moveFocus(key: string) {
         )
       : undefined;
   // Up or Down with nothing further (the header's tabs, the top of the player's band, the page's foot) reaches the newest
-  // toast's action, at the top or the bottom. Sonner keeps the toasts past the two it shows, and each one leaving,
-  // mounted but unseen.
+  // toast's action, or its Dismiss when it has none, at the top or the bottom. Sonner keeps the toasts past the two it
+  // shows, and each one leaving, mounted but unseen.
   const toast =
     (key === "ArrowUp" || key === "ArrowDown") && !best
       ? [
           ...scope.querySelectorAll<HTMLElement>(
-            `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`,
+            `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"])`,
           ),
-        ].find((element) => visible(element) && (!remoteNavigation || !element.closest(localOnly)))
+        ]
+          .map(
+            (message) =>
+              message.querySelector<HTMLElement>("[data-button]") ??
+              message.querySelector<HTMLElement>("[data-close-button]"),
+          )
+          .find(
+            (element): element is HTMLElement =>
+              !!element && visible(element) && (!remoteNavigation || !element.closest(localOnly)),
+          )
       : undefined;
   focus(rail ?? tab ?? best?.element ?? across ?? toast);
 }
@@ -502,9 +518,12 @@ export function useNavigation(onBack: () => void) {
       if (event.key === "Escape" || (isTvPresentation() && event.key === "BrowserBack")) {
         if (lastVisible(portals)) return;
         event.preventDefault();
-        // Back on a toast's action leaves it, as sonner returns focus to where it came from.
-        if (target?.closest(toaster)) {
-          target.blur();
+        // Back on a focused toast dismisses it with its own close button, after leaving it, as sonner returns focus to
+        // where it came from.
+        const message = target?.closest(toaster) && target.closest("[data-sonner-toast]");
+        if (message) {
+          target!.blur();
+          message.querySelector<HTMLElement>("[data-close-button]")?.click();
           return;
         }
         const localBack = [

@@ -11,7 +11,7 @@ export function PageProblem({ error, children }: { error?: unknown; children: Re
   const said = coreSentence(error);
   return (
     <main id="main" className="px-(--gutter) py-8">
-      <Alert variant="destructive" className="max-w-prose">
+      <Alert variant="destructive" dismissible={false} className="max-w-prose">
         <AlertTitle className="text-body">{PAGE_PROBLEM}</AlertTitle>
         {said && <AlertDescription>{said}</AlertDescription>}
         <AlertAction>{children}</AlertAction>
