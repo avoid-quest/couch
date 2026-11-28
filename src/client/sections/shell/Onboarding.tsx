@@ -6,10 +6,10 @@ import { CouchMark } from "@/components/CouchMark";
 import { StageTitle } from "@/components/Stage";
 
 /**
- * First-run, pairing and setup screens, staged as a Details page without artwork: the graphite room fills the window,
+ * First-run, pairing and setup screens, staged as a Details page without artwork: the unlit room fills the window,
  * the question is set in display type at the left, and Couch's mark stands at the right where a picture would (a
  * step's own `object`, such as a QR, takes its place). `wide` gives settings rows the whole width, the mark small above.
- * `embedded` sets it inside a page instead: no room, a small mark.
+ * `embedded` sets it inside a page instead, with a small mark.
  */
 export function Onboarding({
   title,
@@ -43,7 +43,6 @@ export function Onboarding({
       )}
       {...props}
     >
-      {!embedded && <div aria-hidden="true" className="room" />}
       <div
         className={cn(
           "mx-auto grid w-full items-center gap-x-[8vw] gap-y-10",

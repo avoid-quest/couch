@@ -261,7 +261,7 @@ export function BrowseLine() {
     >
       <h2
         id="home-browse"
-        className="flex shrink-0 items-center pr-6 text-title font-semibold max-sm:pr-4"
+        className="flex shrink-0 items-center pr-6 font-display text-title font-semibold [font-stretch:118%] max-sm:pr-4"
       >
         Browse
       </h2>
@@ -347,8 +347,8 @@ const doorClass =
 function DoorBody({ label, meta }: { label: string; meta: string }) {
   return (
     <>
-      <span className="text-body font-medium">{label}</span>
-      <span className="line-clamp-2 text-meta font-normal text-muted-foreground">{meta}</span>
+      <span className="font-display text-body font-semibold">{label}</span>
+      <span className="line-clamp-2 text-meta font-normal text-subtle-foreground">{meta}</span>
     </>
   );
 }

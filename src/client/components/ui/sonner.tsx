@@ -3,6 +3,7 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
 import { phoneQuery, visibleToasts } from "@/toasts";
 import { OctagonXIcon } from "lucide-react";
 import { buttonVariants } from "./button";
+import { cn } from "@/lib/utils";
 
 // Couch: top right at the page gutter, below the header's row (min-h-14), or in the player below its top band
 // (PlayerPage publishes --player-top). Phones (sonner's own breakpoint) keep the top for the artwork: their toasts sit
@@ -55,14 +56,17 @@ const Toaster = ({
         toastOptions={{
           unstyled: true,
           classNames: {
-            // Floats like the bar: its solid surface and shadow, no backdrop filter (docs/design.md, Glass). It hugs its
-            // message (index.css), which wraps, with the verb beside it as a small capsule; an error leads with its icon.
+            // Ink on the room (docs/design.md, Surfaces), floating with its shadow. It hugs its message (index.css),
+            // which wraps, with the verb beside it as a small dark capsule; an error leads with its icon.
             toast:
-              "flex items-center gap-3 rounded-xl bg-bar py-3 pr-4 pl-4 text-sm text-foreground shadow-(--float-shadow) has-[[data-button]]:py-2 has-[[data-button]]:pr-2 has-[[data-icon]]:pl-3",
+              "flex items-center gap-3 rounded-xl bg-foreground py-3 pr-4 pl-4 text-sm font-medium text-primary-foreground shadow-(--float-shadow) has-[[data-button]]:py-2 has-[[data-button]]:pr-2 has-[[data-icon]]:pl-3",
             icon: "flex shrink-0",
             content: "min-w-0",
             title: "font-medium leading-snug wrap-anywhere",
-            actionButton: buttonVariants({ size: "sm" }),
+            actionButton: cn(
+              buttonVariants({ size: "sm" }),
+              "bg-primary-foreground text-foreground hover:bg-primary-foreground/85",
+            ),
           },
         }}
         {...props}

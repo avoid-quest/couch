@@ -32,7 +32,7 @@ import {
   sharesLive,
 } from "@/components/PlaybackTransport";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
+import { useArtworkPicture } from "@/components/AmbientLight";
 import { isAudioOnly } from "@/sections/now/player-presentation";
 import { useStationShow } from "@/sections/home/on-air";
 import { AddToHomeButton } from "@/sections/home/AddToHome";
@@ -182,8 +182,10 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
   );
   const programme = useStationShow();
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
-  // The light behind the player is the playing artwork's (index.css, .now-playing).
-  const light = useArtworkLight(programme?.artworkUrl || current?.thumbnail);
+  // The side player throws its picture, blurred, on the wall behind it (index.css, .lit-panel).
+  const wall = useArtworkPicture(
+    size === "side" ? programme?.artworkUrl || current?.thumbnail : undefined,
+  );
   if (!current) return null;
   const title = programme?.title || current.title;
   // The player's words, less the title shown beside them and the plain states the transport already shows.
@@ -208,7 +210,6 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
     onBlurCapture: () => {
       focusWithin.current = false;
     },
-    style: roomStyle(light),
   };
   const picture = (className: string, small = false) => (
     <Picture
@@ -238,10 +239,9 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
     return (
       <aside
         {...shell}
-        className="now-playing side-player fixed top-3 bottom-3 left-3 z-30 flex w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]"
+        className="now-playing lit-panel side-player fixed top-3 bottom-3 left-3 z-30 flex w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]"
       >
-        {/* The playing artwork's light, behind everything the panel holds. */}
-        <div aria-hidden="true" className="now-playing-light" />
+        {wall && <img src={wall} alt="" aria-hidden="true" className="room-picture" />}
         <div className="relative flex min-h-0 flex-1 flex-col px-3 pt-3">
           <div className="drag-region window-controls-inset -mx-0.5 mb-2 flex h-(--player-target) shrink-0 items-center gap-0.5">
             <PlayingCount state={state} />
@@ -355,9 +355,8 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
     return (
       <aside
         {...shell}
-        className="now-playing now-capsule relative mb-3 ml-3 flex w-[min(37.5rem,calc(100vw-1.5rem))] items-center gap-1.5 overflow-hidden rounded-[2.125rem] py-2.5 pr-2.5 pl-3"
+        className="now-playing lit-panel now-capsule relative mb-3 ml-3 flex w-[min(37.5rem,calc(100vw-1.5rem))] items-center gap-1.5 overflow-hidden rounded-[2.125rem] py-2.5 pr-2.5 pl-3"
       >
-        <div aria-hidden="true" className="now-playing-light" />
         <PlaybackTransport
           state={state}
           connected={connected}
@@ -403,9 +402,8 @@ export function NowPlaying({ state, connected, run, size, onOpen, onSize }: Prop
   return (
     <aside
       {...shell}
-      className="now-playing now-dock relative mx-2 mb-1 grid gap-2 overflow-hidden rounded-3xl pt-2.5 pr-2 pb-2 pl-3"
+      className="now-playing lit-panel now-dock relative mx-2 mb-1 grid gap-2 overflow-hidden rounded-3xl pt-2.5 pr-2 pb-2 pl-3"
     >
-      <div aria-hidden="true" className="now-playing-light" />
       <div className="relative flex min-w-0 items-center gap-1">
         <button
           type="button"

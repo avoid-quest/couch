@@ -52,7 +52,7 @@ export function CouchSwitch({
             <Button
               ref={trigger}
               variant="ghost"
-              className="-ml-2.5 min-w-0 shrink gap-2 text-lg font-semibold tracking-tight touch:min-w-11"
+              className="-ml-2.5 min-w-0 shrink gap-2 font-display text-lg font-semibold tracking-tight [font-stretch:118%] touch:min-w-11"
               aria-label={`${name}: ${status}`}
             >
               <CouchMark connected={connected} />

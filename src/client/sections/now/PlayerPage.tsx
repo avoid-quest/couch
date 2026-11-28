@@ -66,7 +66,6 @@ import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { titleFit, titleLength } from "@/components/Stage";
 import { Link, useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
@@ -465,10 +464,8 @@ export function PlayerPage({
     window.addEventListener("couch-info", toggleInfo);
     return () => window.removeEventListener("couch-info", toggleInfo);
   });
-  // Beside the artwork the room takes its colours, and the artwork stands at its own shape (docs/design.md, Room).
-  const roomArt = currentProgramme?.artworkUrl || current?.thumbnail;
-  const roomLight = useArtworkLight(artworkStage ? roomArt : undefined);
-  const [artFrame, artRatio] = useArtRatio(roomArt, 1);
+  // The artwork stands at its own shape in the room its picture lights (docs/design.md, Room).
+  const [artFrame, artRatio] = useArtRatio(currentProgramme?.artworkUrl || current?.thumbnail, 1);
   const radio = isRadio(current);
   const osd = !!current && !artworkStage;
   // iPhone Safari fills the window with the Player but has no document fullscreen.
@@ -762,13 +759,9 @@ export function PlayerPage({
   return (
     <section
       ref={root}
-      style={
-        artworkStage
-          ? ({ ...roomStyle(roomLight), "--art-ratio": artRatio } as CSSProperties)
-          : undefined
-      }
+      style={artworkStage ? ({ "--art-ratio": artRatio } as CSSProperties) : undefined}
       className={cn(
-        "player-page fixed inset-0 isolate overflow-hidden bg-background",
+        "player-page fixed inset-0 isolate overflow-hidden bg-black data-artwork-stage:bg-transparent",
         !shown && "cursor-none [&_*]:cursor-none",
       )}
       data-page="Now"
@@ -782,8 +775,7 @@ export function PlayerPage({
       onFocus={wake}
       onBlur={wake}
     >
-      {/* Video keeps black letterbox bars in every view. Artwork stands in its room. */}
-      {current && artworkStage && <div aria-hidden="true" className="room" />}
+      {/* Video keeps black letterbox bars in every view. Artwork stands in the shell's room (RoomLight.tsx). */}
       <Container
         ref={showPicture}
         data-player-surface
