@@ -99,6 +99,8 @@ export function PlayedSection({
                   {
                     label: "Play on",
                     disabled: !playable || !item.playable,
+                    thumbnail: item.thumbnail,
+                    verb: item.position > 0 && !item.watched ? "Resume" : undefined,
                     playOn: (on) => void play(start, on),
                   },
                   { label: "Queue", disabled: !connected || !session, run: () => queue(item) },

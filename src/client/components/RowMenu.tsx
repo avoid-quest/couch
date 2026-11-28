@@ -26,7 +26,8 @@ import { ChooseWherePlays } from "./ChooseWherePlays";
 import { PlayOnGroup, usePlayOn } from "./PlayOn";
 
 /**
- * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture);
+ * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture;
+ * thumbnail: the item's picture there; verb: its Play's word, "Resume" for an item partly played);
  * a shared source's (sharingDeviceId, liveAudio) is instead a group of the online Devices. node is its own item, such as a link.
  */
 export type MenuAction = {
@@ -37,6 +38,8 @@ export type MenuAction = {
   node?: ReactNode;
   playOn?: (on: PlayOn) => void;
   audioOnly?: boolean;
+  thumbnail?: string;
+  verb?: string;
   sharingDeviceId?: string;
   liveAudio?: boolean;
 };
@@ -326,6 +329,8 @@ export function ItemMenu({
       {choosing?.playOn && (
         <ChooseWherePlays
           title={title}
+          thumbnail={choosing.thumbnail}
+          verb={choosing.verb}
           audioOnly={choosing.audioOnly}
           onPlay={choosing.playOn}
           open

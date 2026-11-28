@@ -194,6 +194,7 @@ export function ForLaterSection({
                     {
                       label: "Play on",
                       disabled: !connected || !canPlay || pending,
+                      thumbnail: item.thumbnail,
                       playOn: (on) => act(item, "play", index, on),
                     },
                     {

@@ -38,6 +38,8 @@ type Props = {
   /** The item it plays, under the panel's title, with its picture. */
   title: string;
   thumbnail?: string;
+  /** Play's word, "Resume" for an item partly played. */
+  verb?: string;
   audioOnly?: boolean;
   onPlay: (on: PlayOn) => void;
   open: boolean;
@@ -55,6 +57,7 @@ type Props = {
 export function ChooseWherePlays({
   title,
   thumbnail,
+  verb,
   audioOnly,
   onPlay,
   open,
@@ -83,6 +86,7 @@ export function ChooseWherePlays({
     <Choose
       title={title}
       thumbnail={thumbnail}
+      verb={verb}
       audioOnly={audioOnly}
       tv={tv}
       onPlay={(on) => {
@@ -135,6 +139,7 @@ export function ChooseWherePlays({
 function Choose({
   title,
   thumbnail,
+  verb = "Play",
   audioOnly,
   tv,
   onPlay,
@@ -143,6 +148,7 @@ function Choose({
   tv: boolean;
   title: string;
   thumbnail?: string;
+  verb?: string;
   audioOnly?: boolean;
   onPlay: (on: PlayOn) => void;
   onClose: () => void;
@@ -275,7 +281,7 @@ function Choose({
             className="max-sm:flex-1"
           >
             <Play aria-hidden="true" className="fill-current" />
-            Play
+            {verb}
           </Button>
           <p
             id="choose-where-it-plays-summary"
