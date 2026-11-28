@@ -39,7 +39,7 @@ import { pageSection, type ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 import { addToHome } from "@/sections/home/AddToHome";
 import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
-import { sourceScope, useRoomScope } from "./Room";
+import { ListShelf, RoomTile, sourceScope, useRoomScope } from "./Room";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
@@ -255,9 +255,20 @@ function CollectionPage({
   const twitchRoom = provider === "twitch" && !url;
   const lettered =
     !!page?.letters || (provider === "raiplay" && path.startsWith("/genere/") && !page);
+  // A Twitch category is who is on now in it, as a grid; a RaiPlay programme's first lists are shelves of their episodes.
+  const category = provider === "twitch" && path.startsWith("/directory/category/");
+  const sets =
+    provider === "raiplay" && /^\/programmi\/[^/]+$/.test(path) && paging.page === 1
+      ? (page?.items ?? []).filter((item) => item.kind === "collection")
+      : [];
   const catalogueRoom = posterCatalogue && !url;
   // A section's name waits for its page, so the source's name doesn't stand in for it first, unless the page failed.
   const roomTitle = page || !url || summary?.error ? collection.title : "";
+  // A genre's A to Z is named by RaiPlay with its section first ("Programmi - Inchieste e Reportage"); the trail has it.
+  const lettersTitle =
+    search.context && roomTitle.startsWith(`${search.context.title} - `)
+      ? roomTitle.slice(search.context.title.length + 3)
+      : roomTitle;
   if (raiplayRoom || twitchRoom || lettered)
     return (
       <section data-page="Collection" className="min-w-0">
@@ -276,7 +287,7 @@ function CollectionPage({
           <AToZRoom
             page={page}
             summary={summary}
-            title={roomTitle}
+            title={lettersTitle}
             url={url}
             context={search.context}
           />
@@ -325,7 +336,7 @@ function CollectionPage({
           shape={shape}
           addToHome={
             url && !collection.single
-              ? () => addToHome({ provider, url, title: collection.title })
+              ? (from) => addToHome({ provider, url, title: collection.title }, from)
               : undefined
           }
           trail={
@@ -344,8 +355,14 @@ function CollectionPage({
         </p>
       )}
       {emptyRoot && <EmptyRoot provider={provider} />}
+      {sets.slice(0, 2).map((set) => (
+        <ListShelf key={set.url} provider="raiplay" url={set.url} title={set.title} />
+      ))}
       {!collection.single && !emptyRoot && (
         <>
+          {sets.length > 0 && (
+            <h2 className="text-heading font-semibold">All of {collection.title}'s lists</h2>
+          )}
           {/* Filter waits for more than a glance holds: one season or eight tracks need none. */}
           {/* A room has no second search field: the header's, narrowed to the source, searches it. */}
           {!catalogueRoom && (filterable || (provider === "movies123" && posterCatalogue)) && (
@@ -410,7 +427,32 @@ function CollectionPage({
               shape={artShape(providerNames[provider]) === "square" ? "square" : "video"}
             />
           )}
-          {posterCatalogue ? (
+          {category ? (
+            <section aria-labelledby="on-now" className="grid gap-3">
+              <div className="flex items-baseline gap-3">
+                <h2 id="on-now" className="text-heading font-semibold">
+                  On now
+                </h2>
+                {!cold && (
+                  <span className="text-meta text-muted-foreground">
+                    {hits.length} {hits.length === 1 ? "channel" : "channels"}
+                  </span>
+                )}
+              </div>
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(14rem,40vw),1fr))] gap-x-4 gap-y-6">
+                {hits.slice(paging.start, paging.end).map((hit) => {
+                  const item = page?.items.find((item) => item.url === hit.url);
+                  return (
+                    item && (
+                      <li key={hit.id} className="@container min-w-0">
+                        <RoomTile hit={hit} item={item} shape="video" fluid />
+                      </li>
+                    )
+                  );
+                })}
+              </ul>
+            </section>
+          ) : posterCatalogue ? (
             <ul
               aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`}
               className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0"
@@ -514,7 +556,7 @@ function CollectionHeader({
   canPlay: boolean;
   shape: ArtShape;
   trail: ReactNode;
-  addToHome?: () => void;
+  addToHome?: (from: HTMLElement) => void;
 }) {
   const disabled = !canPlay || c.disabled;
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
@@ -552,10 +594,10 @@ function CollectionHeader({
       }
       save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
       playOn={c.playOn && { run: c.playOn, disabled }}
+      addToHome={addToHome}
       more={[
         ...browserActions(c.url),
         ...(c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []),
-        ...(addToHome ? [{ label: "Add to Home", run: addToHome }] : []),
       ]}
     />
   );

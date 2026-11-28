@@ -441,7 +441,7 @@ export function RoomLead({
     <section
       aria-label={item.title}
       data-room-lead
-      className="grid items-center gap-x-10 gap-y-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]"
+      className="grid items-center gap-x-10 gap-y-4 md:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]"
     >
       <div className="grid min-w-0 content-center justify-items-start gap-3 max-md:order-2">
         {kicker && <p className="text-meta text-muted-foreground">{kicker}</p>}
@@ -508,7 +508,7 @@ export function RoomLead({
         <div
           aria-hidden="true"
           onClick={press}
-          className="aspect-video w-full max-w-[32rem] cursor-pointer justify-self-end overflow-hidden rounded-md shadow-(--object-shadow) max-md:order-1 max-md:justify-self-stretch max-md:max-w-none"
+          className="aspect-video w-full max-w-[20rem] cursor-pointer justify-self-end overflow-hidden rounded-md shadow-(--object-shadow) max-md:order-1 max-md:justify-self-stretch max-md:max-w-none"
         >
           <MediaArtwork
             thumbnail={item.thumbnail}

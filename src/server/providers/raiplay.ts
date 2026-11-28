@@ -407,8 +407,9 @@ async function readRaiPlay(
     const groups = object(data.contents);
     const seen = new Set<string>();
     const items: ProviderItem[] = [];
+    // Letters in order, then what starts with a digit ("0-9"), as RaiPlay's own rail ends.
     const letters = Object.keys(groups)
-      .sort()
+      .sort((a, b) => Number(!/^[a-z]/i.test(a)) - Number(!/^[a-z]/i.test(b)) || a.localeCompare(b))
       .slice(0, 40)
       .map((letter) => {
         const fresh = cards(array(groups[letter])).filter(

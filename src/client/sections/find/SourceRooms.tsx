@@ -89,9 +89,9 @@ export function RaiPlayRoom({
   // A section's doors (its genres) say where they were opened from.
   const here = url ? { title, url } : undefined;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <RoomLight thumbnail={room?.lead?.items[0]?.thumbnail ?? shelves[0]?.items[0]?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead
           title={title}
           provider="raiplay"
@@ -287,9 +287,9 @@ export function TwitchRoom({ onNow }: { onNow?: ProviderItem[] }) {
   const lead = saved.find((item) => item.live) ?? onNow?.find((item) => item.live);
   const top = categories.data?.items.slice(0, 3) ?? [];
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <RoomLight thumbnail={lead?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead title="Twitch" provider="twitch" />
         <DoorLine
           label="Twitch categories"
@@ -392,7 +392,7 @@ function SavedChannels({ items }: { items: ProviderItem[] }) {
 export function CatalogueRoomHead({ provider, doors }: { provider: ProviderId; doors: Door[] }) {
   const name = providerNames[provider];
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       <RoomLight />
       <RoomHead title={name} provider={provider} />
       <DoorLine label={`${name} lists`} doors={doors} />
@@ -460,10 +460,10 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
     <section
       data-page="Kind"
       aria-label={room.title}
-      className="grid grid-cols-[minmax(0,1fr)] gap-8"
+      className="grid grid-cols-[minmax(0,1fr)] gap-6"
     >
       <RoomLight thumbnail={sections[0]?.page?.room?.shelves[0]?.items[0]?.thumbnail} />
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <RoomHead title={room.title} />
         <DoorLine
           label={`${room.title} sources`}
