@@ -1,180 +1,106 @@
-import { useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import {
-  busyWith,
-  DeviceCell,
-  KeyFace,
-  MixerColumns,
-  MixerHeader,
-  MixerKey,
-  useProgrammeColours,
-  whyLocked,
-  WhyLine,
-  type Channel,
-} from "@/components/MixerKeys";
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { DeviceCell, MixerKey, ProgrammeArt, busyWith, type Channel } from "@/components/MixerKeys";
+import { closeChoose, useChooseRequest, type ChooseRequest } from "@/components/choose-view";
+import { usePlayChoice } from "@/components/PlayOnPlaces";
 import { cn } from "@/lib/utils";
-import { ChoiceGroups, GroupsScope } from "@/sections/shell/MixerGroups";
-import { channelItem, Options } from "@/sections/shell/MixerRows";
-import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
+import { ChoiceGroups } from "@/sections/shell/MixerGroups";
+import { Folds } from "@/sections/shell/DeskRows";
+import type { PlayerSide } from "@/sections/shell/player-side";
 import { deviceId } from "@/session/device-id";
-import { isTvPresentation } from "@/session/presentation";
 import { useOptionalSessionGate } from "@/session/session-context";
 import {
   choiceRows,
   choiceSummary,
   firstChoice,
   offlineNames,
-  playOnOf,
   type Choice,
   type ChoiceRow,
 } from "@/session/where-it-plays";
-import type { PlayOn } from "../../shared/protocol";
-
-type Props = {
-  /** The item it plays, under the panel's title, with its picture. */
-  title: string;
-  thumbnail?: string;
-  /** Play's word, "Resume" for an item partly played. */
-  verb?: string;
-  audioOnly?: boolean;
-  onPlay: (on: PlayOn) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** The control that opens it, or, when a menu opened it, the element it opens from. */
-  trigger?: ReactNode;
-  anchor?: RefObject<HTMLElement | null>;
-};
 
 /**
- * Choose where it plays: Play on's panel, the Mixer's groups and rows for something that hasn't started. Nothing plays
- * until Play, and the line beside it says what that changes.
- * It opens from its control: a Popover on desktop and the TV, a Sheet rising from below on phones.
+ * Choose where it plays, in the player's column with the page dimmed (the desk's sheet on a phone), from Play on's last
+ * line: the item on one line, the groups, every device with the same keys, the sentence of what makes way, then Play
+ * or Resume, and Cancel. Nothing plays until Play.
  */
-export function ChooseWherePlays({
-  title,
-  thumbnail,
-  verb,
-  audioOnly,
-  onPlay,
-  open,
-  onOpenChange,
-  trigger,
-  anchor,
-}: Props) {
-  const tv = isTvPresentation();
-  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
-  // A menu's panel goes back to what opened the menu; a trigger's, Radix returns to it.
-  const back = (event: Event) => {
-    if (trigger || !anchor?.current?.isConnected) return;
-    event.preventDefault();
-    anchor.current.focus();
-  };
-  // It opens on the first key a press can change (a TV's first row), never on Close or on Play.
-  const focusFirst = (event: Event) => {
-    const target = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
-      tv ? "[data-device-row]" : "[data-mixer-key]:not([aria-disabled])",
-    );
-    if (!target) return;
-    event.preventDefault();
-    target.focus({ preventScroll: true });
-  };
-  const body = open && (
-    <Choose
-      title={title}
-      thumbnail={thumbnail}
-      verb={verb}
-      audioOnly={audioOnly}
-      tv={tv}
-      onPlay={(on) => {
-        onOpenChange(false);
-        onPlay(on);
-      }}
-      onClose={() => onOpenChange(false)}
-    />
-  );
-  if (tv || desktop)
+export function ChooseLayer({ side, phone }: { side: PlayerSide; phone: boolean }) {
+  const request = useChooseRequest();
+  // Escape (a remote's Back) cancels it from anywhere while it is open, as the page under it is dimmed.
+  useEffect(() => {
+    if (!request || phone) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      closeChoose();
+    };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, [request, phone]);
+  if (!request) return null;
+  if (phone)
     return (
-      <Popover open={open} onOpenChange={onOpenChange}>
-        {trigger ? (
-          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        ) : (
-          <PopoverAnchor virtualRef={anchor as RefObject<HTMLElement>} />
-        )}
-        {open && (
-          <PopoverContent
-            align="start"
-            collisionPadding={16}
-            aria-label="Choose where it plays"
-            onOpenAutoFocus={focusFirst}
-            onCloseAutoFocus={back}
-            className="max-h-[min(48rem,var(--radix-popover-content-available-height))] w-[min(36rem,calc(100vw-2rem))] gap-0 overflow-hidden px-4 pt-4 pb-3"
-          >
-            {body}
-          </PopoverContent>
-        )}
-      </Popover>
+      <Sheet open onOpenChange={(open) => !open && closeChoose()}>
+        <SheetContent
+          side="bottom"
+          aria-describedby={undefined}
+          showCloseButton={false}
+          className="now-playing max-h-[calc(100dvh-2.75rem)] gap-0 overflow-hidden rounded-t-[1.75rem] px-4 pt-4 pb-3"
+        >
+          <SheetTitle className="sr-only">Choose where it plays</SheetTitle>
+          <Choose key={request.title} request={request} phone />
+        </SheetContent>
+      </Sheet>
     );
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      {trigger && <SheetTrigger asChild>{trigger}</SheetTrigger>}
-      <SheetContent
-        side="bottom"
-        aria-describedby={undefined}
-        showCloseButton={false}
-        onOpenAutoFocus={focusFirst}
-        onCloseAutoFocus={back}
-        className="max-h-[92dvh] items-center gap-0 overflow-hidden px-(--gutter) pt-4 pb-4"
+    <>
+      <div
+        aria-hidden="true"
+        onClick={closeChoose}
+        className="fixed inset-0 z-40 bg-[rgb(8_6_10/55%)]"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose where it plays"
+        className={cn(
+          "now-playing fixed top-3 bottom-3 z-40 flex w-(--side-player-width) flex-col justify-end",
+          side === "left" ? "left-3" : "right-3",
+        )}
       >
-        <SheetTitle className="sr-only">Choose where it plays</SheetTitle>
-        <div className="flex min-h-0 w-full max-w-3xl flex-1 flex-col">{body}</div>
-      </SheetContent>
-    </Sheet>
+        <Choose key={request.title} request={request} />
+      </div>
+    </>
   );
 }
 
-function Choose({
-  title,
-  thumbnail,
-  verb = "Play",
-  audioOnly,
-  tv,
-  onPlay,
-  onClose,
-}: {
-  tv: boolean;
-  title: string;
-  thumbnail?: string;
-  verb?: string;
-  audioOnly?: boolean;
-  onPlay: (on: PlayOn) => void;
-  onClose: () => void;
-}) {
+function Choose({ request, phone = false }: { request: ChooseRequest; phone?: boolean }) {
   const session = useOptionalSessionGate();
   const state = session?.state;
-  const rows = state ? choiceRows(state, { here: deviceId(), audioOnly }) : [];
-  const colours = useProgrammeColours(state?.playbacks);
-  // Taken as it opens: what this device can play, as Play would; those rows lead, and keep their places while you choose.
+  const rows = state ? choiceRows(state, { here: deviceId(), audioOnly: request.audioOnly }) : [];
+  // What this device can play, as Play would; those rows lead, and keep their places while you choose.
   const [choice, setChoice] = useState<Choice>(() => firstChoice(rows));
-  const [first] = useState(() => Object.keys(choice));
   // What the last group asked that can't play now, said beside Play until the choice changes by hand.
   const [left, setLeft] = useState<string[]>([]);
-  const [why, setWhy] = useState<{ id: string; channel: Channel } | null>(null);
-  if (!state) return null;
+  const play = usePlayChoice(request);
+  const box = useRef<HTMLDivElement>(null);
+  // It opens on the first key a press can change, never on Close or on Play.
+  useEffect(() => {
+    box.current
+      ?.querySelector<HTMLElement>("button[data-mixer-key]")
+      ?.focus({ preventScroll: true });
+  }, []);
+  if (!state || !session) return null;
   const connected = session.connected;
   const summary = choiceSummary(state, rows, choice);
-  // Offline devices fold into one line, as in the Mixer.
-  const online = rows.filter((row) => row.device.online),
-    offline = rows.filter((row) => !row.device.online);
-  const leading = online.filter((row) => first.includes(row.device.id)),
-    others = online.filter((row) => !first.includes(row.device.id));
-  const play = () => {
-    const on = playOnOf(rows, choice);
-    if (on) onPlay(on);
-  };
+  const usable = rows.filter(
+    (row) => row.device.online && (row.picture.enabled || row.sound.enabled),
+  );
+  const privately = rows.filter(
+    (row) => row.device.online && !row.picture.enabled && !row.sound.enabled,
+  );
+  const offline = rows.filter((row) => !row.device.online);
   const turn = (id: string, channel: Channel) => {
     setLeft([]);
     setChoice(({ [id]: was = { picture: false, sound: false }, ...others }) => {
@@ -182,63 +108,87 @@ function Choose({
       return now.picture || now.sound ? { ...others, [id]: now } : others;
     });
   };
-  const close = (
-    <Button
-      variant="ghost"
-      size="icon-lg"
-      className="-mr-2.5 size-11 shrink-0"
-      aria-label="Close"
-      title="Close"
-      onClick={onClose}
-    >
-      <X aria-hidden="true" />
-    </Button>
-  );
-  const device = (row: ChoiceRow) => {
-    const reason = why?.id === row.device.id ? row[why.channel].reason : undefined;
-    const busy = busyWith(state.playbacks, row.device.id);
-    return (
-      <ChoiceDevice
-        key={row.device.id}
-        row={row}
-        chosen={choice[row.device.id]}
-        connected={connected}
-        tv={tv}
-        dot={busy && row.status.includes("Playing") ? colours(busy.id) : undefined}
-        why={
-          reason && {
-            text: whyLocked(row.device, why!.channel, reason),
-            offline: reason === "Offline",
-          }
-        }
-        onTurn={(channel) => turn(row.device.id, channel)}
-        onWhy={(channel) =>
-          setWhy((was) =>
-            was?.id === row.device.id && was.channel === channel
-              ? null
-              : { id: row.device.id, channel },
-          )
-        }
-      />
-    );
-  };
+  const verb = request.verb ?? "Play";
   // Where first, then what it changes for what plays now.
   const [lead, detail] = summary.ready
     ? [
-        summary.lines.at(-1),
-        summary.lines.length > 1 ? summary.lines[0] : "Everything else keeps playing.",
+        summary.lines.at(-1)?.replace(/^Plays/, verb === "Resume" ? "Resumes" : "Plays"),
+        summary.lines.length > 1 ? summary.lines[0] : "",
       ]
-    : summary.lines;
+    : [summary.lines[0], `Nothing plays until ${verb}.`];
+  const device = (row: ChoiceRow) => {
+    const chosen = choice[row.device.id];
+    const on = (channel: Channel) => !!chosen?.[channel] && row[channel].enabled;
+    const busy = busyWith(state.playbacks, row.device.id);
+    const key = (channel: Channel) => (
+      <MixerKey
+        device={row.device}
+        channel={channel}
+        on={on(channel)}
+        control={row[channel]}
+        disabled={!connected}
+        onPress={() => turn(row.device.id, channel)}
+      />
+    );
+    return (
+      <li
+        key={row.device.id}
+        data-nav-row
+        className="flex min-h-(--desk-row) min-w-0 items-center gap-1"
+      >
+        <span className="min-w-0 flex-1 py-1">
+          <DeviceCell
+            device={row.device}
+            status={row.status}
+            busy={busy && row.status.includes("Playing") ? busy : undefined}
+            active={!!chosen}
+          />
+        </span>
+        {key("sound")}
+        {!request.audioOnly && key("picture")}
+      </li>
+    );
+  };
   return (
-    <GroupsScope state={state} connected={connected} close={close}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <MixerHeader
-          heading="Choose where it plays"
-          title={title}
-          thumbnail={thumbnail}
-          close={close}
+    <div ref={box} className="flex min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-3.5 py-1 pr-3.5 pl-1">
+        <ProgrammeArt
+          thumbnail={request.thumbnail}
+          title={request.title}
+          className={cn(
+            "shrink-0 rounded-lg object-cover shadow-[0_0.75rem_1.5rem_-0.75rem_rgb(0_0_0/80%)]",
+            request.audioOnly ? "aspect-square w-22" : "aspect-video w-26",
+          )}
         />
-        <div className="-mx-4 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3">
+        <span className="grid min-w-0 gap-0.5">
+          <b className="line-clamp-2 font-heading text-[1.0625rem] leading-[1.375rem] font-semibold">
+            {request.title}
+          </b>
+          {request.detail && (
+            <span className="truncate text-meta text-muted-foreground">{request.detail}</span>
+          )}
+        </span>
+      </div>
+      <section
+        aria-label="Choose where it plays"
+        className={cn(
+          "flex min-h-0 flex-col",
+          phone ? "mt-2" : "desk lit-panel mt-3 px-3.5 pt-1.5 pb-2",
+        )}
+      >
+        <div className="flex h-10 shrink-0 items-center justify-between pl-0.5">
+          <b className="font-heading text-[1.0625rem] font-semibold">Choose where it plays</b>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close"
+            title="Close"
+            onClick={closeChoose}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="-mx-2 min-h-0 shrink overflow-y-auto overscroll-contain px-2 [scrollbar-width:none]">
           <ChoiceGroups
             state={state}
             connected={connected}
@@ -249,153 +199,48 @@ function Choose({
               setLeft(out);
             }}
           />
-          <MixerColumns first="Plays on" />
-          {leading.length > 0 && (
-            <ul aria-label="Devices" className="grid">
-              {leading.map(device)}
-            </ul>
-          )}
-          {others.length > 0 && (
-            <ul
-              aria-label={leading.length ? "Other devices" : "Devices"}
-              className={cn("grid", leading.length > 0 && "mt-1.5 border-t pt-1.5")}
-            >
-              {others.map(device)}
-            </ul>
-          )}
-          {offline.length > 0 && (
-            <p className="mt-1.5 border-t pt-2.5 text-meta text-muted-foreground [overflow-wrap:anywhere]">
-              Offline: {offlineNames(offline)}
-            </p>
-          )}
+          <ul aria-label="Devices" className="grid">
+            {usable.map(device)}
+          </ul>
+          <Folds
+            folds={[
+              { label: "Private now", names: offlineNames(privately) },
+              { label: "Offline", names: offlineNames(offline) },
+            ]}
+          />
         </div>
-        <div
-          data-nav-row
-          className="-mx-4 flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-2 border-t px-4 pt-3"
-        >
-          <Button
-            size="lg"
-            disabled={!connected || !summary.ready}
-            onClick={play}
-            aria-describedby="choose-where-it-plays-summary"
-            className="max-sm:flex-1"
-          >
-            <Play aria-hidden="true" className="fill-current" />
-            {verb}
-          </Button>
+        <div className="shrink-0 border-t pt-1">
           <p
             id="choose-where-it-plays-summary"
             role="status"
-            className="grid min-w-0 flex-1 basis-48 text-meta [overflow-wrap:anywhere] max-sm:order-first max-sm:basis-full"
+            className="grid gap-1 pt-2.5 pb-1 text-meta text-muted-foreground [overflow-wrap:anywhere]"
           >
-            <span className="font-semibold">{lead}</span>
-            <span className="text-muted-foreground">
+            <span className="empty:hidden">
               {[detail, left.length > 0 && `Left out: ${left.join(", ")}.`]
                 .filter(Boolean)
                 .join(" ")}
             </span>
+            <b className="font-semibold text-foreground">{lead}</b>
           </p>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
-      </div>
-    </GroupsScope>
-  );
-}
-
-/**
- * A device's row: its name and status, and its Picture and Sound keys, white while chosen; a locked key says why. On a
- * TV the row is one focus stop, as in the Mixer: OK opens its Picture and Sound, where a locked one says why.
- */
-function ChoiceDevice({
-  row,
-  chosen,
-  connected,
-  tv,
-  dot,
-  why,
-  onTurn,
-  onWhy,
-}: {
-  row: ChoiceRow;
-  chosen?: { picture: boolean; sound: boolean };
-  connected: boolean;
-  tv: boolean;
-  dot?: string;
-  why?: { text: string; offline: boolean } | "";
-  onTurn: (channel: Channel) => void;
-  onWhy: (channel: Channel) => void;
-}) {
-  const on = (channel: Channel) => !!chosen?.[channel] && row[channel].enabled;
-  const press = (channel: Channel) => (row[channel].enabled ? onTurn(channel) : onWhy(channel));
-  const cell = (
-    <DeviceCell
-      device={row.device}
-      status={row.status}
-      dot={dot}
-      active={!!chosen && (row.picture.enabled || row.sound.enabled)}
-    />
-  );
-  const key = (channel: Channel) => (
-    <MixerKey
-      device={row.device}
-      channel={channel}
-      on={on(channel)}
-      control={row[channel]}
-      draft
-      disabled={!connected}
-      onPress={() => onTurn(channel)}
-      onWhy={() => onWhy(channel)}
-    />
-  );
-  const face = (channel: Channel) => (
-    <KeyFace channel={channel} on={on(channel)} control={row[channel]} draft />
-  );
-  return (
-    <li
-      data-nav-row
-      data-device={row.device.id}
-      className={cn(
-        "grid",
-        !tv && "min-h-13 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-x-2 py-0.5",
-      )}
-    >
-      {tv ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!connected}>
-            <button
-              type="button"
-              data-device-row
-              aria-label={row.device.name}
-              className="-mx-2.5 grid min-h-12 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-x-2 rounded-lg px-2.5 py-0.5 text-left outline-none disabled:opacity-50 [&:focus_[data-device-cell]_*]:text-inherit"
+          <div data-nav-row className="flex items-center gap-2 py-1.5">
+            <Button
+              disabled={!connected || !summary.ready}
+              aria-describedby="choose-where-it-plays-summary"
+              onClick={() => {
+                closeChoose();
+                play(choice);
+              }}
             >
-              {cell}
-              {face("picture")}
-              {face("sound")}
-            </button>
-          </DropdownMenuTrigger>
-          <Options id={row.device.id}>
-            {(["picture", "sound"] as const).map((channel) =>
-              channelItem({
-                device: row.device,
-                channel,
-                on: on(channel),
-                control: row[channel],
-                connected,
-                onPick: () => press(channel),
-              }),
-            )}
-          </Options>
-        </DropdownMenu>
-      ) : (
-        <>
-          {cell}
-          {key("picture")}
-          {key("sound")}
-        </>
-      )}
-      {why && <WhyLine text={why.text} offline={why.offline} />}
-    </li>
+              <Play aria-hidden="true" className="fill-current" />
+              {verb}
+            </Button>
+            <span className="flex-1" />
+            <Button variant="ghost" onClick={closeChoose}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

@@ -24,7 +24,7 @@ function destination(at: Destination) {
 }
 
 /** The Playbacks this device may control, to choose the one it controls: from "on {device}" or the side player's chip. */
-export function PlaybackPicker({
+function PlaybackPicker({
   playbacks,
   children,
   className,
@@ -125,7 +125,7 @@ export function PlaybackPicker({
 
 /** Where it comes from, then where it plays; in the bar the context gives way first. */
 /** The running Playbacks this device may choose to control. */
-export const playbackChoices = (state: ReturnType<typeof useSessionGate>["state"]) =>
+const playbackChoices = (state: ReturnType<typeof useSessionGate>["state"]) =>
   state?.playbacks?.filter((playback) => playback.running && !playback.private) ?? [];
 
 export function PlaysOnLine({

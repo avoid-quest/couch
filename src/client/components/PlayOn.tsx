@@ -1,14 +1,18 @@
-import { useState, type ComponentProps, type RefObject } from "react";
+import { useRef, useState, useSyncExternalStore, type ComponentProps, type RefObject } from "react";
 import { ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenuItem,
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { ChooseWherePlays } from "./ChooseWherePlays";
 import { MenuPanel } from "./MenuPanel";
+import { PlaceRows, type PlaceItem } from "./PlayOnPlaces";
+import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
@@ -36,10 +40,13 @@ export function usePlayOn(sharingDeviceId?: string, liveAudio = false) {
     queueAllowed: playbackControls(state).queue,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
     on: (label: string) => (target ? `${label} on ${target.name}` : label),
-    /** Plays, with Play on's choice passed to `work` for its request, then says where it plays. */
+    /**
+     * Plays, with Play on's choice passed to `work` for its request, then says where it plays; a place from Play on's
+     * list (which names its channels) says it itself, with its Undo.
+     */
     play: async <T,>(work: (on?: PlayOn) => Promise<T>, on?: PlayOn) => {
       const result = await work(on);
-      if (result !== false) announcePlay(state, on?.deviceId);
+      if (result !== false && !on?.outputs) announcePlay(state, on?.deviceId);
       return result;
     },
   };
@@ -221,11 +228,13 @@ export function ChooseDevice({
 
 /**
  * A Stage's main verb with where it plays (docs/design.md "Stage"): Play or Resume beside its destination ("on this
- * device"), which opens Choose where it plays. Without another device that can play it, the verb stands alone.
+ * device"), which opens Play on's list of places from it. Without another device that can play it, the verb stands
+ * alone.
  */
 export function PlayPill({
   label,
   title,
+  detail,
   thumbnail,
   verb,
   audioOnly,
@@ -237,8 +246,9 @@ export function PlayPill({
   ...props
 }: {
   label: string;
-  /** What plays, for Choose where it plays. */
+  /** What plays, for Play on's list and Choose where it plays. */
   title: string;
+  detail?: string;
   thumbnail?: string;
   verb?: string;
   audioOnly?: boolean;
@@ -248,39 +258,122 @@ export function PlayPill({
   playOnDisabled?: boolean;
   size?: "default" | "lg";
 } & Omit<ComponentProps<typeof Button>, "onClick" | "size">) {
-  const [choosing, setChoosing] = useState(false);
+  const [open, setOpen] = useState(false);
   const { devices } = usePlayOn();
   const destination = usePlayDestination();
+  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // Choose where it plays takes the focus as the list hands off to it, so the list doesn't return it to its control.
+  const handedOff = useRef(false);
+  const button = (
+    <Button
+      ref={trigger}
+      variant="ghost"
+      size={size}
+      disabled={disabled || playOnDisabled}
+      aria-haspopup="menu"
+      aria-label={`${verb === "Resume" ? "Resume on" : "Play on"}. Now: ${destination.label}`}
+      title={verb === "Resume" ? "Resume on" : "Play on"}
+      className="min-w-0 pr-3 pl-3"
+    >
+      <span className="truncate">{destination.label}</span>
+      <ChevronDown aria-hidden="true" className="text-muted-foreground" />
+    </Button>
+  );
+  const list = playOn && (
+    <PlaceMenu
+      item={{ title, detail, thumbnail, verb, audioOnly, onPlay: playOn }}
+      from={() => trigger.current}
+      onDone={(handOff) => {
+        handedOff.current = !!handOff;
+        setOpen(false);
+      }}
+    />
+  );
   return (
     <span className="inline-flex max-w-full min-w-0 rounded-full bg-secondary">
       <Button size={size} disabled={disabled} onClick={onClick} {...props}>
         <Play aria-hidden="true" className="fill-current" />
         {label}
       </Button>
-      {playOn && devices.length > 0 && (
-        <ChooseWherePlays
-          title={title}
-          thumbnail={thumbnail}
-          verb={verb}
-          audioOnly={audioOnly}
-          open={choosing}
-          onOpenChange={setChoosing}
-          onPlay={playOn}
-          trigger={
-            <Button
-              variant="ghost"
-              size={size}
-              disabled={disabled || playOnDisabled}
-              aria-label={`Choose where it plays. Now: ${destination.label}`}
-              title="Choose where it plays"
-              className="min-w-0 pr-3 pl-3"
+      {playOn &&
+        devices.length > 0 &&
+        (desktop || isTvPresentation() ? (
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>{button}</PopoverTrigger>
+            {open && (
+              <PopoverContent
+                align="start"
+                side="bottom"
+                collisionPadding={12}
+                aria-label={verb === "Resume" ? "Resume on" : "Play on"}
+                onCloseAutoFocus={(event) => {
+                  if (handedOff.current) event.preventDefault();
+                  handedOff.current = false;
+                }}
+                className="max-h-[min(34rem,var(--radix-popover-content-available-height))] w-[19rem] gap-0 overflow-y-auto p-1.5"
+              >
+                {list}
+              </PopoverContent>
+            )}
+          </Popover>
+        ) : (
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>{button}</SheetTrigger>
+            <SheetContent
+              side="bottom"
+              aria-describedby={undefined}
+              onCloseAutoFocus={(event) => {
+                if (handedOff.current) event.preventDefault();
+                handedOff.current = false;
+              }}
+              className="max-h-[calc(100dvh-4rem)] gap-0 overflow-y-auto rounded-t-[1.75rem] px-2.5 pt-4.5 pb-4"
             >
-              <span className="truncate">{destination.label}</span>
-              <ChevronDown aria-hidden="true" className="text-muted-foreground" />
-            </Button>
-          }
-        />
-      )}
+              <SheetTitle className="sr-only">
+                {verb === "Resume" ? "Resume on" : "Play on"}
+              </SheetTitle>
+              {list}
+            </SheetContent>
+          </Sheet>
+        ))}
     </span>
+  );
+}
+
+/** Play on's list as buttons, in a Popover or a Sheet. */
+function PlaceMenu({
+  item,
+  from,
+  onDone,
+}: {
+  item: PlaceItem;
+  from: () => HTMLElement | null;
+  onDone: (handOff?: boolean) => void;
+}) {
+  return (
+    <div role="menu" className="grid">
+      <PlaceRows
+        item={item}
+        from={from}
+        onDone={onDone}
+        heading={(text) => (
+          <p key="heading" className="flex h-9 items-center px-3 text-meta text-subtle-foreground">
+            {text}
+          </p>
+        )}
+        separator={(key) => <Separator key={`separator:${key}`} className="my-1.5" />}
+        row={(key, onSelect, children) => (
+          <Button
+            key={key}
+            role="menuitem"
+            variant="ghost"
+            onClick={onSelect}
+            className="h-auto min-h-9 w-full min-w-0 justify-start overflow-hidden rounded-[0.7rem] px-3 py-1 text-left font-normal text-foreground hover:bg-accent touch:min-h-12"
+          >
+            {children}
+          </Button>
+        )}
+      />
+    </div>
   );
 }

@@ -1,21 +1,21 @@
-import { useRef, useState } from "react";
-import { Monitor, SlidersVertical, Volume2 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Lock } from "lucide-react";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import type { ClientSessionState } from "@/session/session";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { ItemMenu, useItemMenu } from "@/components/RowMenu";
+import { ProgrammeArt } from "@/components/MixerKeys";
 import { playbackCapabilities, toolPanel } from "@/components/PlaybackTransport";
 import { hasUpNext, QueuePanel } from "@/sections/now/QueuePanel";
+import { useUpNextMenu } from "@/sections/now/UpNextMenu";
 import { deviceId } from "@/session/device-id";
 import { useSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
 import { cn } from "@/lib/utils";
 import { useShell } from "./shell-context";
-import { PlaybackPicker, playbackChoices } from "./PlaysOnLine";
-import { WhereItPlays } from "./Outputs";
-import { useUncut } from "./uncut";
-import type { Action } from "../../../shared/protocol";
+import type { Action, PlaybackSummary } from "../../../shared/protocol";
 import { upcomingQueue } from "../../../shared/queue";
 
 type Props = {
@@ -24,115 +24,119 @@ type Props = {
   run: (action: Action) => Promise<boolean>;
 };
 
-/** Where it plays, said as what each device gives: its picture, its sound, its name. */
-export function WhereTokens({ state, compact }: { state: ClientSessionState; compact: boolean }) {
-  const icon = compact ? "size-3" : "size-3.5";
-  if (livePlayback(state)) {
-    const joined = playbackControls(state).leave;
-    return (
-      <span className={cn("inline-flex items-center gap-1.5", !compact && "text-sm font-medium")}>
-        {joined && <Volume2 aria-hidden="true" className={cn(icon, "text-muted-foreground")} />}
-        {joined ? "Your sound, on this device" : "Not joined"}
-      </span>
-    );
-  }
-  const outputs = state.outputs ?? [];
-  const ids = [...new Set(outputs.map((output) => output.deviceId))];
-  if (!ids.length) return <span className="text-muted-foreground">Not on any device</span>;
-  const shown = compact ? ids.slice(0, 2) : ids;
-  return (
-    <>
-      {shown.map((id) => {
-        const device = state.devices?.find((item) => item.id === id);
-        const name = id === deviceId() ? "This device" : (device?.name ?? "Another device");
-        const picture = outputs.some((output) => output.deviceId === id && output.picture),
-          sound = outputs.some((output) => output.deviceId === id && output.sound);
-        return (
-          <span
-            key={id}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap",
-              !compact && "text-sm font-medium",
-              device && !device.online && "text-muted-foreground line-through",
-            )}
-          >
-            {picture && (
-              <Monitor aria-label="Picture" className={cn(icon, "text-muted-foreground")} />
-            )}
-            {sound && <Volume2 aria-label="Sound" className={cn(icon, "text-muted-foreground")} />}
-            {name}
-          </span>
-        );
-      })}
-      {shown.length < ids.length && <span>+{ids.length - shown.length}</span>}
-    </>
+/** Where a Playback plays, in a few words: "This device", "Living room TV and Kitchen", "Living room TV +4". */
+export function whereWords(state: ClientSessionState, playback?: PlaybackSummary) {
+  if (!playback && livePlayback(state))
+    return playbackControls(state).leave ? "Your sound, on this device" : "Not joined";
+  const outputs = playback?.outputs ?? state.outputs ?? [];
+  const names = [...new Set(outputs.map((output) => output.deviceId))].map((id) =>
+    id === deviceId()
+      ? "This device"
+      : (state.devices?.find((device) => device.id === id)?.name ?? "Another device"),
   );
+  if (!names.length) return "Not on any device";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]} +${names.length - 1}`;
 }
 
-/** Where it plays as a box that opens the Mixer: the side player's, and the phone's full player's. */
-export function WhereBox({ state, connected, run }: Props) {
-  const where = (
-    <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
-      <WhereTokens state={state} compact={false} />
-    </span>
-  );
-  if (livePlayback(state))
-    return (
-      <div className="side-where mt-3.5 -mx-1 grid gap-1.5 rounded-2xl px-3 pt-2 pb-2.5">
-        <span className="text-xs text-muted-foreground">Where it plays</span>
-        {where}
-      </div>
-    );
-  return (
-    <WhereItPlays
-      state={state}
-      connected={connected}
-      run={run}
-      className="side-where mt-3.5 -mx-1 grid h-auto min-h-0 w-[calc(100%+0.5rem)] justify-stretch gap-1.5 rounded-2xl px-3 pt-2 pb-2.5 text-left font-normal whitespace-normal"
-    >
-      <span className="flex items-center justify-between text-xs text-muted-foreground">
-        Where it plays
-        <SlidersVertical aria-hidden="true" className="size-4 text-foreground" />
-      </span>
-      {where}
-    </WhereItPlays>
-  );
-}
+/** The Playbacks the strip shows: every one running, a private one too, as a plate nobody here can open. */
+export const stripPlaybacks = (state: ClientSessionState) =>
+  state.playbacks?.filter(
+    (playback) => playback.id === state.playback || playback.running || playback.private,
+  ) ?? [];
 
 /**
- * "2 playing" whenever another Playback this device may control runs: it lists them, to choose the one this device
- * controls. The side player's head has it; the capsule's and the dock's line end with a smaller one.
+ * Every Playback as its picture, at the left of the player's top line while more than one plays: the one in view is
+ * ringed, the others half ink; pressing one makes it the one the player shows and changes. A private one is a plate with
+ * a lock that can't be pressed. Up to three (two beside Identify song), "N playing" follows them.
  */
-export function PlayingChip({
+export function PlaybackStrip({
   state,
-  compact = false,
+  crowded = false,
 }: {
   state: ClientSessionState;
-  compact?: boolean;
+  /** Its line holds one more tool (Identify song), so the count gives way a picture sooner. */
+  crowded?: boolean;
 }) {
-  const choices = playbackChoices(state);
-  if (!choices.some((playback) => playback.id !== state.playback)) return null;
-  // The one controlled here counts too while it runs, private or not.
-  const selected = state.playbacks?.find((playback) => playback.id === state.playback);
-  const count =
-    choices.length + (selected?.running && !choices.some(({ id }) => id === selected.id) ? 1 : 0);
+  const { connected } = useSessionGate();
+  const { selectPlayback } = useShell();
+  const strip = useRef<HTMLDivElement>(null);
+  const [cut, setCut] = useState(false);
+  const playbacks = stripPlaybacks(state);
+  useLayoutEffect(() => {
+    const element = strip.current;
+    if (!element) return;
+    const measure = () =>
+      setCut(element.scrollWidth - element.scrollLeft > element.clientWidth + 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    element.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      observer.disconnect();
+      element.removeEventListener("scroll", measure);
+    };
+  }, [playbacks.length]);
+  if (playbacks.length < 2) return null;
   return (
-    <PlaybackPicker
-      playbacks={choices}
-      label={`${count} playing. Choose which one you control`}
-      className={cn(
-        "inline-flex shrink-0 items-center rounded-full font-medium text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] outline-none hover:text-foreground focus-visible:bg-foreground focus-visible:text-background disabled:opacity-50",
-        compact ? "relative h-6 px-2 text-xs" : "ml-0.5 h-8 px-3 text-xs",
-      )}
+    <div
+      ref={strip}
+      data-nav-row
+      role="tablist"
+      aria-label={`${playbacks.length} playing`}
+      data-cut={cut ? "right" : undefined}
+      className="mr-1 flex min-w-0 shrink items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      {count} playing
-    </PlaybackPicker>
+      {playbacks.map((playback) => {
+        const selected = playback.id === state.playback;
+        const label = playback.private
+          ? `Something private, ${whereWords(state, playback)}`
+          : `${playback.title ?? "Playing"}, ${playback.status === "paused" ? "paused, " : ""}${whereWords(state, playback)}`;
+        return (
+          <button
+            key={playback.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-disabled={playback.private || undefined}
+            aria-label={label}
+            title={label}
+            disabled={!connected}
+            onClick={() => {
+              if (!playback.private && !selected) void selectPlayback(playback.id);
+            }}
+            className={cn(
+              "shrink-0 rounded-lg p-[0.1875rem] opacity-50 outline-none hover:opacity-85 aria-disabled:cursor-default aria-selected:opacity-100 aria-selected:shadow-[inset_0_0_0_0.125rem_var(--foreground)]",
+            )}
+          >
+            {playback.private ? (
+              <span className="grid aspect-square h-[1.625rem] place-items-center rounded-[0.3125rem] bg-(--fill-2) text-muted-foreground">
+                <Lock aria-hidden="true" className="size-3" />
+              </span>
+            ) : (
+              <ProgrammeArt
+                thumbnail={playback.thumbnail}
+                title={playback.title ?? ""}
+                className="block aspect-video h-[1.625rem] w-auto rounded-[0.3125rem] object-cover"
+              />
+            )}
+          </button>
+        );
+      })}
+      {playbacks.length < (crowded ? 3 : 4) && (
+        <span className="ml-1.5 shrink-0 text-meta whitespace-nowrap text-subtle-foreground max-sm:hidden">
+          {playbacks.length} playing
+        </span>
+      )}
+    </div>
   );
 }
 
 /**
- * Up next, as many of its first items as the panel has room for; each plays at once. Its heading opens the whole list,
- * with its own verbs, beside it (or, with `onOpen`, in the full player's own place for it).
+ * Up next, on the room: at least two of its first items when it has them, cut softly where the desk begins; each plays
+ * at once. Its heading opens the whole list beside the player (or, with `onOpen`, in the full player's own place for
+ * it), and its "…" holds the list's own verbs.
  */
 export function UpNext({
   state,
@@ -141,58 +145,79 @@ export function UpNext({
   onOpen,
   className,
 }: Props & { onOpen?: () => void; className?: string }) {
-  const list = useRef<HTMLDivElement>(null);
+  const { credentials } = useShell();
+  const box = useRef<HTMLElement>(null);
+  const [cut, setCut] = useState(false);
   const entries = playbackControls(state).queue
     ? [...upcomingQueue(state), ...(state.autoplay?.enabled ? state.autoplay.upcoming : [])].slice(
         0,
-        4,
+        6,
       )
     : [];
-  const ids = entries.map((entry) => entry.id).join(" ");
-  // Rows that would be cut by the panel's foot wait unseen, as the prototype's do; none at all hides the list.
-  useUncut(list, "[data-up-next-row]", ids);
   const { available } = playbackCapabilities(state, connected);
+  const list = useUpNextMenu({
+    state,
+    credentials,
+    connected,
+    run,
+    upcoming: upcomingQueue(state).length,
+    options: () => box.current?.querySelector<HTMLElement>("[data-row-options]"),
+  });
+  const menu = useItemMenu(list.actions);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setCut(element.scrollHeight > element.clientHeight + 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [entries.length]);
   // Offered as the full player's Up next button is: while there is anything to show, played rows included.
   if (!hasUpNext(state)) return null;
-  const heading =
-    "-mx-2 h-auto min-h-0 justify-start self-start px-2 py-1 font-heading text-sm font-semibold";
   return (
-    <div
-      ref={list}
-      className={cn(
-        "mt-3.5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border pt-2",
-        className,
-      )}
+    <section
+      ref={box}
+      aria-label="Up next"
+      data-cut={cut ? "end" : undefined}
+      style={{ minHeight: entries.length > 1 ? "8.5rem" : entries.length ? "5.25rem" : "2rem" }}
+      className={cn("mt-4 flex shrink-[100] flex-col overflow-hidden px-3.5", className)}
     >
-      {onOpen ? (
-        <Button variant="ghost" className={heading} onClick={onOpen}>
-          Up next
-        </Button>
-      ) : (
-        <UpNextPanel state={state} connected={connected} run={run} className={heading} />
-      )}
-      <ul aria-label="Up next" className="m-0 mt-1 grid list-none gap-0 p-0">
+      <div className="-mr-1.5 flex h-8 shrink-0 items-center justify-between">
+        {onOpen ? (
+          <Button
+            variant="ghost"
+            className="-ml-2 h-7 px-2 text-meta font-semibold text-muted-foreground"
+            onClick={onOpen}
+          >
+            Up next
+          </Button>
+        ) : (
+          <UpNextPanel state={state} connected={connected} run={run} />
+        )}
+        <ItemMenu menu={menu} title="Up next" className="size-7" />
+        {list.dialog}
+      </div>
+      <ul className="m-0 grid list-none p-0">
         {entries.map((entry) => (
-          <li key={entry.id} data-up-next-row>
+          <li key={entry.id}>
             <button
               type="button"
               disabled={!available}
               onClick={() => void run({ type: "play", entryId: entry.id })}
-              className="grid w-full grid-cols-[4.625rem_minmax(0,1fr)] items-center gap-2.5 rounded-lg py-1.5 text-left outline-none disabled:opacity-50 [&:is(:hover,:focus-visible)_.up-next-art]:outline-3 [&:is(:hover,:focus-visible)_.up-next-art]:outline-offset-2 [&:is(:hover,:focus-visible)_.up-next-art]:outline-foreground"
+              className="flex h-13 w-full min-w-0 items-center gap-3 rounded-lg text-left outline-none disabled:opacity-50 [&:is(:hover,:focus-visible)_.up-next-art]:outline-3 [&:is(:hover,:focus-visible)_.up-next-art]:outline-offset-2 [&:is(:hover,:focus-visible)_.up-next-art]:outline-foreground"
             >
-              <span className="up-next-art block aspect-video overflow-hidden rounded-md bg-black">
+              <span className="up-next-art block aspect-video w-18 shrink-0 overflow-hidden rounded-md bg-black">
                 <MediaArtwork
                   thumbnail={entry.thumbnail}
                   title={entry.title}
                   className="size-full"
                 />
               </span>
-              <span className="grid min-w-0 gap-0.5">
-                <span className="line-clamp-2 text-[0.8125rem] leading-tight font-medium">
-                  {entry.title}
-                </span>
+              <span className="grid min-w-0">
+                <span className="truncate text-sm font-medium">{entry.title}</span>
                 {entry.duration != null && !entry.endless && (
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="text-caption text-subtle-foreground tabular-nums">
                     {formatDuration(Math.round(entry.duration))}
                   </span>
                 )}
@@ -201,12 +226,12 @@ export function UpNext({
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
 /** The whole of Up next, opening from its heading beside the side player; closing returns focus to the heading. */
-function UpNextPanel({ state, connected, run, className }: Props & { className: string }) {
+function UpNextPanel({ state, connected, run }: Props) {
   const { credentials } = useShell();
   const { nativeHost, videoQualityPreference } = useSessionGate();
   const [open, setOpen] = useState(false);
@@ -214,7 +239,12 @@ function UpNextPanel({ state, connected, run, className }: Props & { className: 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button ref={trigger} data-panel="queue" variant="ghost" className={className}>
+        <Button
+          ref={trigger}
+          data-panel="queue"
+          variant="ghost"
+          className="-ml-2 h-7 px-2 text-meta font-semibold text-muted-foreground"
+        >
           Up next
         </Button>
       </PopoverTrigger>

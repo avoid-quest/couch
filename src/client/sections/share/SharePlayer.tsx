@@ -1,23 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import { AudioLines, ChevronDown, Headphones, Monitor, Pencil, Volume2 } from "lucide-react";
-import { Level } from "@/components/Level";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AudioLines, ChevronDown, Headphones, SlidersVertical, Volume2 } from "lucide-react";
 import { LiveClock } from "@/components/LiveClock";
+import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LiveSharing } from "@/session/live";
 import type { ClientSessionState } from "@/session/session";
-import { deviceId } from "@/session/device-id";
 import { useSessionGate } from "@/session/session-context";
-import { PlayingChip, WhereBox } from "@/sections/shell/NowPlayingParts";
-import { WhereItPlays } from "@/sections/shell/Outputs";
+import { DeckClock, DeskPanel } from "@/sections/shell/Deck";
+import { WhereList } from "@/sections/shell/Desk";
+import { PlaybackStrip, whereWords } from "@/sections/shell/NowPlayingParts";
 import type { PlayerSize } from "@/sections/shell/NowPlaying";
 import type { PlayerSide } from "@/sections/shell/player-side";
 import { formatClock } from "@/time-format";
 import { liveTitle } from "../../../shared/live-input";
-import type { Action } from "../../../shared/protocol";
 import { LiveMetadataEditor } from "./LiveMetadata";
 import { SharingPill } from "./ShareControl";
-import { AddSpeakers, Audience, ChooseWhere, useRoutes } from "./ShareAudience";
+import { LiveListeners, ShareTargets, useRoutes } from "./ShareDesk";
 import { MuteInput, ShareGear, ShareLevel } from "./ShareSettings";
 import { openShareFull, useShareView } from "./share-view";
 import { shareKindOf, viewersOf, type Viewer } from "./share";
@@ -30,17 +29,19 @@ type Props = {
 };
 
 /**
- * The player as the share's place, on the device that shares (docs/live-inputs.md): where a programme has its picture,
- * what goes out, silent here; where Up next stands, who watches or listens and how each gets it; where Play starts,
- * Mute audio input for an input. No Play, timeline or Volume: this device never plays its own share. Stop sharing is
- * the header's pill's alone, one press from every screen, this one's full view included. The side player, its capsule,
- * the phone's dock and the full view (Live audio's console) show the same parts.
+ * The player as the share's place, on the device that shares (docs/live-inputs.md): what goes out, silent here, then its
+ * title and format, then the desk, whose rows are who watches or listens and how. No Play, timeline or Volume: this
+ * device never plays its own share. Live audio's input level stands where Volume would and Mute audio input where Play
+ * would. Stop sharing is the header's pill's alone, one press from every screen, this one's full view included. The
+ * side player, its capsule, the phone's dock and the full view (Live audio's console) show the same parts.
  */
 export function SharePlayer({ state, size, side, onSize }: Props) {
   const { liveSharing, localLiveSourceId, run, connected } = useSessionGate();
   // Read again on each render: mute, quality and the capture's format change the capture, not the session's state.
   const [, refresh] = useState(0);
   const changed = () => refresh((count) => count + 1);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const sharing = liveSharing.current();
   const source = state.liveSources?.find((item) => item.id === localLiveSourceId);
   const playback = state.playbacks?.find((item) => item.liveSourceId === source?.id);
@@ -64,33 +65,66 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
           element.focus({ preventScroll: true });
       });
   }, []);
+  const details = useItemMenu([{ label: "Edit details…", run: () => setEditing(true) }]);
   if (!sharing || !source) return null;
-  const parts = shareParts(
-    state,
-    sharing,
-    connected,
-    run,
-    changed,
-    playback?.id === state.playback,
-    size === "full" || !full,
-  );
+  const parts = shareParts(state, sharing, changed, size === "full" || !full);
+  const selected = playback?.id === state.playback;
   const shell = { "data-now-playing": "", "data-share-player": "", "data-tv-local-only": "" };
-  const audience = (
-    <Audience
-      sharing={sharing}
-      viewers={parts.viewers}
-      routes={routes}
-      live={parts.live}
-      className={size === "full" ? undefined : "min-h-0 flex-1"}
-    />
+  // Nobody receives it yet: the desk opens whole, on the devices that could.
+  const desk = (
+    <DeskPanel className={size === "full" ? "max-h-[70dvh]" : undefined}>
+      {parts.live ? (
+        <LiveListeners state={state} sharing={sharing} viewers={parts.viewers} routes={routes} />
+      ) : selected && playback ? (
+        <WhereList
+          state={state}
+          connected={connected}
+          run={run}
+          open={open || !parts.viewers.length}
+          onOpen={setOpen}
+        />
+      ) : (
+        <ShareTargets state={state} sharing={sharing} />
+      )}
+      <div className="shrink-0 border-t pt-1">
+        {parts.meter}
+        <div data-nav-row className="-mx-2.5 flex h-11 min-w-0 items-center gap-0.5">
+          {parts.mute}
+          <span className="flex-1" />
+          {parts.since}
+        </div>
+      </div>
+    </DeskPanel>
   );
-  // The line that says how it goes (or that the input is muted), with Mute audio input before it for an input.
-  const foot = (
-    <div className="flex min-h-(--player-target) min-w-0 items-center gap-2.5">
-      {parts.mute}
-      <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-        {parts.since}
-      </span>
+  const heading = editing ? (
+    <LiveMetadataEditor key={source.id} source={source} onDone={() => setEditing(false)} />
+  ) : (
+    parts.heading
+  );
+  const tools = (minimise?: () => void) => (
+    <div
+      data-nav-row
+      className={cn(
+        "drag-region mb-2 flex h-10 shrink-0 items-center gap-0.5",
+        side === "left" && "window-controls-inset",
+      )}
+    >
+      <PlaybackStrip state={state} />
+      <span className="flex-1" />
+      {parts.live && <ItemMenu menu={details} title={parts.title} size="icon-lg" />}
+      {parts.gear}
+      {minimise && (
+        <Button
+          data-player-size
+          variant="ghost"
+          size="icon-lg"
+          aria-label="Minimise player"
+          title="Minimise player"
+          onClick={minimise}
+        >
+          <ChevronDown aria-hidden="true" />
+        </Button>
+      )}
     </div>
   );
 
@@ -121,21 +155,16 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
             Home
           </Button>
           <span className="flex-1" />
+          {parts.live && <ItemMenu menu={details} title={parts.title} size="icon-lg" />}
+          {parts.gear}
           <SharingPill />
         </div>
         <div className="grid flex-1 content-center items-center gap-8 py-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,1fr)] lg:gap-12">
           <What sharing={sharing} live={parts.live} large className="w-full" />
-          <div className="grid min-w-0 content-start gap-3">
-            {parts.heading}
-            {parts.where}
-            {audience}
+          <div className="grid min-w-0 content-start gap-4">
+            {heading}
+            {desk}
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {foot}
-          <span className="flex-1" />
-          {parts.tool}
-          {parts.gear}
         </div>
       </div>
     );
@@ -147,48 +176,25 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
         data-size="side"
         aria-label="Sharing"
         className={cn(
-          // As tall as what it holds, up to the window, as the side player is.
-          "now-playing lit-panel side-player fixed top-3 z-30 flex max-h-[calc(100dvh-1.5rem)] w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]",
+          "now-playing fixed top-3 bottom-3 z-30 flex w-(--side-player-width) flex-col",
           side === "left" ? "left-3" : "right-3",
         )}
       >
-        <div className="relative flex min-h-0 flex-1 flex-col px-3 pt-3">
-          <div
-            className={cn(
-              "drag-region -mx-0.5 mb-2 flex h-(--player-target) shrink-0 items-center gap-0.5",
-              side === "left" && "window-controls-inset",
-            )}
-          >
-            <PlayingChip state={state} />
-            <span className="flex-1" />
-            {parts.gear}
-            <Button
-              data-player-size
-              variant="ghost"
-              size="icon-lg"
-              aria-label="Minimise player"
-              title="Minimise player"
-              onClick={() => onSize("mini")}
-            >
-              <ChevronDown aria-hidden="true" />
-            </Button>
-          </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {tools(() => onSize("mini"))}
           <button
             type="button"
             data-player-last
             aria-label={`Open player: ${parts.title}`}
             onClick={() => openShareFull(true)}
-            className="group/open block rounded-[0.875rem] text-left outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+            className="group/open block shrink-0 rounded-[0.875rem] text-left outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground"
           >
             <What sharing={sharing} live={parts.live} />
           </button>
-          <div className="flex min-h-0 flex-1 flex-col px-1 pt-3">
-            {parts.heading}
-            {parts.where}
-            {audience}
-          </div>
+          <div className="shrink-0 px-3.5 pt-4">{heading}</div>
+          <span className="min-h-4 flex-1" />
+          {desk}
         </div>
-        <div className="relative shrink-0 px-3.5 pb-3.5">{foot}</div>
       </aside>
     );
 
@@ -200,57 +206,50 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       data-player-last={size === "dock" ? "" : undefined}
       aria-label={`${size === "mini" ? "Show player" : "Open player"}: ${parts.title}`}
       onClick={() => (size === "mini" ? onSize("side") : openShareFull(true))}
-      className="flex h-11 min-w-0 flex-1 items-center gap-3 rounded-full pr-2.5 text-left outline-none hover:bg-accent focus-visible:bg-foreground focus-visible:text-background"
+      className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-full pr-2.5 pl-1 text-left outline-none hover:bg-(--fill)"
     >
-      <What sharing={sharing} live={parts.live} small className="h-11 shrink-0" />
-      <span className="grid min-w-0 gap-0.5">
+      <What sharing={sharing} live={parts.live} small className="h-9 shrink-0" />
+      <span className="grid min-w-0">
         <span className="truncate text-sm font-semibold">{parts.title}</span>
-        <span className="flex min-w-0 items-center gap-2 overflow-hidden text-xs text-muted-foreground">
-          {parts.summary}
-        </span>
+        <span className="truncate text-caption text-subtle-foreground">{parts.summary}</span>
       </span>
     </button>
   );
-  if (size === "mini")
-    return (
-      <aside
-        {...shell}
-        data-size="mini"
-        aria-label="Sharing"
-        className={cn(
-          "now-playing lit-panel now-capsule relative mb-3 flex w-[min(37.5rem,calc(100vw-1.5rem))] items-center gap-1.5 overflow-hidden rounded-[2.125rem] py-2.5 pr-2.5 pl-3",
-          side === "left" ? "ml-3" : "mr-3 ml-auto",
-        )}
-      >
-        {parts.mute}
-        {identity}
-        {parts.tool}
-      </aside>
-    );
+  const where = (
+    <Button
+      variant="ghost"
+      size="icon-lg"
+      aria-label={parts.live ? "Who listens" : "Where it plays"}
+      title={parts.live ? "Who listens" : "Where it plays"}
+      onClick={() => (size === "mini" ? onSize("side") : openShareFull(true))}
+    >
+      <SlidersVertical aria-hidden="true" />
+    </Button>
+  );
   return (
     <aside
       {...shell}
-      data-size="dock"
+      data-size={size}
       aria-label="Sharing"
-      className="now-playing lit-panel now-dock relative mx-2 mb-1 grid gap-2 overflow-hidden rounded-3xl pt-2.5 pr-2 pb-2 pl-3"
+      className={cn(
+        "now-playing desk lit-panel relative flex h-14 items-center gap-0.5 rounded-[1.75rem] px-2",
+        size === "mini"
+          ? cn("mb-3 w-[min(30rem,calc(100vw-1.5rem))]", side === "left" ? "ml-3" : "mr-3 ml-auto")
+          : "mx-2 mb-2 h-15 rounded-[1.25rem]",
+      )}
     >
-      <div className="relative flex min-w-0 items-center gap-1">
-        {parts.mute}
-        {identity}
-        {parts.tool}
-      </div>
+      {parts.mute}
+      {identity}
+      {where}
     </aside>
   );
 }
 
-/** Each part the sizes arrange: the title and what goes out, where it plays, the gear, Mute, the line above Stop. */
+/** Each part the sizes arrange: the title and what goes out, the gear, Mute and the input's level, the line at the foot. */
 function shareParts(
   state: ClientSessionState,
   sharing: LiveSharing,
-  connected: boolean,
-  run: (action: Action) => Promise<boolean>,
   changed: () => void,
-  selected: boolean,
   meter: boolean,
 ) {
   const source = sharing.source;
@@ -279,54 +278,45 @@ function shareParts(
         ? `, device buffer ${format.native.reportedFrames} frames`
         : ""
     }`;
-  const muted = source.kind === "microphone" && sharing.muted;
+  const input = source.kind === "microphone";
+  const muted = input && sharing.muted;
   const sounding = viewers.some((viewer) => viewer.playing && viewer.sound && !viewer.error);
   return {
     live,
     viewers,
     title,
     heading: (
-      <ShareHeading
-        sharing={sharing}
-        title={title}
-        what={what}
-        capture={live ? capture : undefined}
-        live={live}
-        meter={meter && source.kind === "microphone"}
-      />
+      <div className="grid min-w-0 gap-1">
+        <h2 className="line-clamp-2 font-heading text-[1.25rem] leading-6 font-semibold tracking-[-0.015em] [overflow-wrap:anywhere]">
+          {title}
+        </h2>
+        <p className="flex flex-wrap gap-x-2.5 text-meta text-muted-foreground">
+          <span>{what}</span>
+          {live && capture && <span className="text-subtle-foreground">{capture}</span>}
+        </p>
+      </div>
     ),
-    where: (
-      <ShareWhere
-        state={state}
-        sharing={sharing}
-        viewers={viewers}
-        live={live}
-        selected={selected}
-      />
-    ),
-    summary: <Summary viewers={viewers} live={live} picture={!!source.video} />,
-    tool: live ? (
-      <AddSpeakers sharing={sharing} viewers={viewers} icon />
-    ) : selected ? (
-      <WhereItPlays state={state} connected={connected} run={run} className="relative" />
-    ) : (
-      <ChooseWhere sharing={sharing} icon />
-    ),
+    summary: <Summary viewers={viewers} live={live} state={state} />,
     gear: <ShareGear sharing={sharing} picture={picture} live={live} onChange={changed} />,
-    mute: source.kind === "microphone" && (
-      <MuteInput sharing={sharing} muted={muted} onChange={changed} />
+    mute: input && <MuteInput sharing={sharing} muted={muted} onChange={changed} />,
+    meter: input && meter && (
+      <div className="flex h-11 items-center gap-3 text-meta text-subtle-foreground">
+        <span className="shrink-0">Input</span>
+        <span className="min-w-0 flex-1">
+          <ShareLevel sharing={sharing} />
+        </span>
+      </div>
     ),
-    since: muted ? (
-      <span role="status">Input muted. Nobody hears it until you unmute.</span>
-    ) : (
-      <span className="flex min-w-0 items-center gap-2">
-        <Level moving={sounding} className="shrink-0" />
-        {live ? (
+    since: (
+      <DeckClock moving={muted ? undefined : sounding}>
+        {muted ? (
+          <span role="status">Input muted. Nobody hears it until you unmute.</span>
+        ) : live ? (
           <LiveClock startedAt={source.startedAt} />
         ) : (
-          <span className="truncate">Sharing since {formatClock(sharing.since)}</span>
+          `Sharing since ${formatClock(sharing.since)}`
         )}
-      </span>
+      </DeckClock>
     ),
   };
 }
@@ -418,117 +408,24 @@ function What({
   );
 }
 
-/** The title, what goes out, and for Live audio its details with Edit details, which opens them in place. */
-function ShareHeading({
-  sharing,
-  title,
-  what,
-  capture,
-  live,
-  meter,
-}: {
-  sharing: LiveSharing;
-  title: string;
-  what: string;
-  capture?: string;
-  live: boolean;
-  meter: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const source = sharing.source;
-  if (editing)
-    return <LiveMetadataEditor key={source.id} source={source} onDone={() => setEditing(false)} />;
-  return (
-    <div className="grid min-w-0 gap-1">
-      <h2 className="font-heading text-xl leading-tight font-semibold tracking-[-0.02em] text-balance [overflow-wrap:anywhere]">
-        {title}
-      </h2>
-      <p className="flex flex-wrap gap-x-2.5 text-sm text-muted-foreground">
-        <span className={cn(live && "text-foreground")}>{what}</span>
-        {capture && <span>{capture}</span>}
-      </p>
-      {meter && <ShareLevel sharing={sharing} />}
-      {live && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2.5 h-7 justify-self-start rounded-full px-2.5 text-xs shadow-[inset_0_0_0_1px_var(--border)]"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil aria-hidden="true" />
-          Edit details
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/** Where it plays: the Mixer of the share's Playback once anyone plays it; Live audio's count of listeners. */
-function ShareWhere({
-  state,
-  sharing,
-  viewers,
-  live,
-  selected,
-}: {
-  state: ClientSessionState;
-  sharing: LiveSharing;
-  viewers: Viewer[];
-  live: boolean;
-  selected: boolean;
-}) {
-  const { connected, run } = useSessionGate();
-  if (!live && selected) return <WhereBox state={state} connected={connected} run={run} />;
-  return (
-    <div className="side-where mt-3.5 -mx-1 flex items-start gap-2 rounded-2xl px-3 pt-2 pb-2.5">
-      <span className="grid min-w-0 flex-1 gap-1.5">
-        <span className="text-xs text-muted-foreground">Where it plays</span>
-        <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-sm font-medium">
-          <Summary viewers={viewers} live={live} picture={!!sharing.source.video} />
-        </span>
-      </span>
-      {live ? (
-        <AddSpeakers sharing={sharing} viewers={viewers} icon />
-      ) : (
-        <ChooseWhere sharing={sharing} icon />
-      )}
-    </div>
-  );
-}
-
-/** Who gets it, in a few words: "10 listening", each device with what it gives, or that nobody does yet. */
+/** Who gets it, in a few words: "8 listening", where it plays, or that nobody does yet. */
 function Summary({
   viewers,
   live,
-  picture,
+  state,
 }: {
   viewers: Viewer[];
   live: boolean;
-  picture: boolean;
-}) {
+  state: ClientSessionState;
+}): ReactNode {
   if (live)
     return (
       <span className="inline-flex items-center gap-1.5">
-        {viewers.length > 0 && <Headphones aria-hidden="true" className="size-3.5" />}
+        {viewers.length > 0 && <Headphones aria-hidden="true" className="size-3" />}
         {viewers.length ? `${viewers.length} listening` : "No listeners yet"}
       </span>
     );
-  if (!viewers.length)
-    return (
-      <span className="text-muted-foreground">
-        {picture ? "Not playing anywhere yet" : "Not playing on any speaker yet"}
-      </span>
-    );
-  return viewers.map((viewer) => (
-    <span
-      key={viewer.device.id}
-      className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap"
-    >
-      {viewer.picture && (
-        <Monitor aria-label="Picture" className="size-3.5 text-muted-foreground" />
-      )}
-      {viewer.sound && <Volume2 aria-label="Sound" className="size-3.5 text-muted-foreground" />}
-      {viewer.device.id === deviceId() ? "This device" : viewer.device.name}
-    </span>
-  ));
+  if (!viewers.length) return "On no screens yet";
+  const playback = state.playbacks?.find((item) => item.id === viewers[0]!.playbackId);
+  return whereWords(state, playback);
 }

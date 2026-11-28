@@ -12,7 +12,7 @@ import {
   type ReactNode,
   type TouchEvent,
 } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,12 +28,13 @@ import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { isTvPresentation } from "@/session/presentation";
 import { deviceId } from "@/session/device-id";
 import type { PlayOn } from "../../shared/protocol";
-import { ChooseWherePlays } from "./ChooseWherePlays";
 import { ChooseDevice, PlayOnGroup, usePlayOn } from "./PlayOn";
+import { PlaceRows } from "./PlayOnPlaces";
 
 /**
- * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture;
- * thumbnail: the item's picture there; verb: its Play's word, "Resume" for an item partly played);
+ * One verb in a menu. playOn makes it "Play on…", which swaps the menu's rows for Play on's places (audioOnly: it has
+ * no picture; thumbnail: the item's picture in Choose where it plays; verb: its Play's word, "Resume" for an item
+ * partly played);
  * a shared source's (sharingDeviceId, liveAudio) is instead a group of the online Devices. node is its own item, such as a link.
  * group sets it apart from the verbs of another group (docs/design.md "Menus"); now runs it in the press itself, for
  * what the browser allows only there (the clipboard, the share sheet).
@@ -130,15 +131,22 @@ function Items({
             onClick={() => (action.playOn ? choose(action) : select(action))}
           >
             {action.node ?? label}
+            {action.playOn && <ChevronRight aria-hidden="true" className="ml-auto" />}
           </Button>
         ) : action.node ? (
           <DropdownMenuItem asChild>{action.node}</DropdownMenuItem>
         ) : (
           <DropdownMenuItem
             disabled={action.disabled}
-            onSelect={() => (action.playOn ? choose(action) : select(action))}
+            onSelect={(event) => {
+              if (!action.playOn) return select(action);
+              // Play on… keeps the menu open, its rows swapped for the places.
+              event.preventDefault();
+              choose(action);
+            }}
           >
             {label}
+            {action.playOn && <ChevronRight aria-hidden="true" className="ml-auto" />}
           </DropdownMenuItem>
         )}
       </Fragment>
@@ -352,10 +360,15 @@ export function ItemMenu({
   const outside = useRef(false);
   const acted = useRef(false);
   const deferred = useRef<(() => void) | undefined>(undefined);
-  // Play on… opens Choose where it plays once the menu has closed, from what opened the menu.
+  // Choose where it plays takes the focus as Play on's places hand off to it.
+  const handedOff = useRef(false);
+  // A shared source's Play on… opens its devices once the menu has closed, from what opened the menu; any other's
+  // swaps the menu's rows for Play on's places, with Back.
   const [choosing, setChoosing] = useState<MenuAction | null>(null);
+  const [places, setPlaces] = useState<MenuAction | null>(null);
   const from = useRef<HTMLElement | null>(null);
   const choose = (action: MenuAction) => {
+    if (!sharedPlayOn(action)) return setPlaces(action);
     acted.current = true;
     deferred.current = () => {
       from.current = menu.opener.current ?? trigger.current;
@@ -401,8 +414,9 @@ export function ItemMenu({
     event.preventDefault();
     // Back to the item or its "…", unless a press went elsewhere or Remove took the row away (its list moves focus on).
     const to = menu.opener.current ?? trigger.current;
-    if (!outside.current && to?.isConnected) to.focus();
+    if (!outside.current && !handedOff.current && to?.isConnected) to.focus();
     outside.current = false;
+    handedOff.current = false;
     // A settings confirmation opens after the menu releases its focus scope, so Cancel returns to the row.
     const run = deferred.current;
     deferred.current = undefined;
@@ -427,7 +441,55 @@ export function ItemMenu({
       <MoreHorizontal aria-hidden="true" />
     </Button>
   );
-  const items = (
+  const placeItem = places?.playOn && {
+    title,
+    thumbnail: places.thumbnail,
+    verb: places.verb,
+    audioOnly: places.audioOnly,
+    onPlay: places.playOn,
+  };
+  const back = (event?: Event) => {
+    event?.preventDefault();
+    setPlaces(null);
+  };
+  const items = placeItem ? (
+    <PlaceRows
+      item={placeItem}
+      from={() => menu.opener.current ?? trigger.current}
+      onDone={(handOff) => {
+        acted.current = true;
+        handedOff.current = !!handOff;
+        if (sheet) menu.setOpen(false);
+      }}
+      heading={(text) =>
+        sheet ? (
+          <Button key="back" variant="ghost" className={sheetRow} onClick={() => back()}>
+            <ChevronLeft aria-hidden="true" />
+            {text}
+          </Button>
+        ) : (
+          <DropdownMenuItem key="back" onSelect={back} className="text-subtle-foreground">
+            <ChevronLeft aria-hidden="true" />
+            {text}
+          </DropdownMenuItem>
+        )
+      }
+      separator={(key) =>
+        sheet ? <SheetSeparator key={key} /> : <DropdownMenuSeparator key={key} />
+      }
+      row={(key, onSelect, children) =>
+        sheet ? (
+          <Button key={key} variant="ghost" className={sheetRow} onClick={onSelect}>
+            {children}
+          </Button>
+        ) : (
+          <DropdownMenuItem key={key} onSelect={onSelect}>
+            {children}
+          </DropdownMenuItem>
+        )
+      }
+    />
+  ) : (
     <Items
       actions={menu.shown}
       on={menu.on}
@@ -437,33 +499,20 @@ export function ItemMenu({
       listed={menu.listed}
     />
   );
-  // Not part of the menu: the panel opens from what opened the menu once it has closed.
-  const panel =
-    choosing?.playOn && sharedPlayOn(choosing) ? (
-      <ChooseDevice
-        title={title}
-        sharingDeviceId={choosing.sharingDeviceId}
-        liveAudio={choosing.liveAudio}
-        onPlay={(deviceId) => choosing.playOn?.({ deviceId })}
-        onClose={() => setChoosing(null)}
-        anchor={from}
-      />
-    ) : (
-      choosing?.playOn && (
-        <ChooseWherePlays
-          title={title}
-          thumbnail={choosing.thumbnail}
-          verb={choosing.verb}
-          audioOnly={choosing.audioOnly}
-          onPlay={choosing.playOn}
-          open
-          onOpenChange={(open) => !open && setChoosing(null)}
-          anchor={from}
-        />
-      )
-    );
+  // Not part of the menu: a shared source's devices open from what opened the menu once it has closed.
+  const panel = choosing?.playOn && (
+    <ChooseDevice
+      title={title}
+      sharingDeviceId={choosing.sharingDeviceId}
+      liveAudio={choosing.liveAudio}
+      onPlay={(deviceId) => choosing.playOn?.({ deviceId })}
+      onClose={() => setChoosing(null)}
+      anchor={from}
+    />
+  );
   const change = (open: boolean) => {
     if (open) menu.opener.current = null;
+    setPlaces(null);
     menu.setOpen(open);
   };
   if (sheet)
@@ -490,6 +539,7 @@ export function ItemMenu({
       {/* Radix lands a keyboard or a remote (whose keys it hears) on the first verb, and leaves a pointer on the menu itself. */}
       <DropdownMenuContent
         align="end"
+        className={placeItem ? "w-[19rem]" : undefined}
         data-tv-local-only={
           trigger.current?.closest("[data-tv-local-only], .tv-local-only") ? "" : undefined
         }

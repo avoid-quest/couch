@@ -18,7 +18,15 @@ import {
   type CSSProperties,
 } from "react";
 import { flushSync } from "react-dom";
-import { ChevronDown, Info, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  Info,
+  Maximize,
+  Minimize,
+  Music2,
+  Settings,
+  SlidersVertical,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
@@ -42,7 +50,7 @@ import { PlaybackMenu } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { PlayingChip, UpNext, WhereBox, WhereTokens } from "@/sections/shell/NowPlayingParts";
+import { PlaybackStrip, UpNext, whereWords } from "@/sections/shell/NowPlayingParts";
 import { useBottomBar } from "@/sections/shell/bottom-bar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
 import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
@@ -1044,10 +1052,23 @@ export function PlayerPage({
                 {statusView}
                 {stacked && (
                   <>
-                    <span className="empty:hidden">
-                      <PlayingChip state={state} />
+                    <span className="flex empty:hidden">
+                      <PlaybackStrip state={state} />
                     </span>
-                    <WhereBox state={state} connected={connected} run={run} />
+                    {!livePlayback(state) && (
+                      <WhereItPlays
+                        state={state}
+                        connected={connected}
+                        run={run}
+                        className="h-auto min-h-11 w-full justify-between gap-3 rounded-2xl bg-white/8 px-3.5 py-2 text-left font-normal whitespace-normal hover:bg-white/15"
+                      >
+                        <span className="grid min-w-0">
+                          <span className="text-meta text-subtle-foreground">Where it plays</span>
+                          <span className="truncate text-sm font-medium">{whereWords(state)}</span>
+                        </span>
+                        <SlidersVertical aria-hidden="true" className="size-4" />
+                      </WhereItPlays>
+                    )}
                     <UpNext
                       state={state}
                       connected={connected}
@@ -1218,9 +1239,7 @@ export function PlayerPage({
                       }
                     >
                       {!narrow && (
-                        <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
-                          <WhereTokens state={state} compact />
-                        </span>
+                        <span className="min-w-0 truncate text-sm">{whereWords(state)}</span>
                       )}
                     </WhereItPlays>
                   )}

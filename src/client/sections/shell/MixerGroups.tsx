@@ -1,13 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-  type Ref,
-  type RefObject,
-} from "react";
-import { Check, Lock, Minus, Pencil, Plus, WifiOff } from "lucide-react";
+import { createContext, useContext, useRef, useState, type ReactNode, type Ref } from "react";
+import { Check, Lock, Minus, Plus, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SessionGateContext } from "@/session/gate-context";
@@ -19,54 +11,41 @@ import {
   groupChoice,
   groupStatus,
   listed,
-  membersOf,
   planChoice,
   planGroup,
-  undoSteps,
   type Change,
   type Plan,
 } from "@/session/groups";
 import type { MixerGroup } from "../../../shared/mixer-groups";
-import { GroupEditor, said, type GroupDraft, type Outcome } from "./GroupEditor";
+import { GroupEditor, said, type GroupDraft } from "./GroupEditor";
 
-const Groups = createContext<{
-  edit: (draft: GroupDraft) => void;
-  outcome: Outcome | null;
-  say: (outcome: Outcome | null) => void;
-} | null>(null);
+const Groups = createContext<{ edit: (draft: GroupDraft) => void } | null>(null);
 
-/**
- * The open Mixer's groups: saving one takes the Mixer's place until it saves or cancels, and the last outcome stays
- * until the next. Both go when the panel closes.
- */
+/** Editing a group: the host and administrators save one, which takes the list's place until it saves or cancels. */
+export const useGroupEdit = () => useContext(Groups)?.edit;
+
+/** The open desk's groups: saving one takes the list's place until it saves or cancels. */
 export function GroupsScope({
   state,
   connected,
-  close,
   children,
 }: {
   state: ClientSessionState;
   connected: boolean;
-  close?: ReactNode;
   children: ReactNode;
 }) {
+  const gate = useContext(SessionGateContext);
   const [editing, setEditing] = useState<GroupDraft | null>(null);
-  const [outcome, say] = useState<Outcome | null>(null);
-  const edit = (draft: GroupDraft) => {
-    say(null);
-    setEditing(draft);
-  };
   return (
-    <Groups value={{ edit, outcome, say }}>
+    <Groups value={{ edit: setEditing }}>
       {editing ? (
         <GroupEditor
           state={state}
           connected={connected}
           draft={editing}
-          close={close}
-          onDone={(next) => {
+          onDone={(outcome) => {
             setEditing(null);
-            say(next ?? null);
+            if (outcome) gate?.offerUndo(outcome.text, outcome.undo);
           }}
         />
       ) : (
@@ -77,23 +56,15 @@ export function GroupsScope({
 }
 
 /** Who may save groups: the host and admins, as Core checks (settings-scope.ts reads it the same way). */
-function useCanSave() {
+export function useCanSave() {
   const gate = useContext(SessionGateContext);
   const host = gate?.identity ? gate.identity.authority === "host" : !!gate?.localHost;
   return host || gate?.identity?.authority === "administrator";
 }
 
-/**
- * The Groups line: "Groups", a chip per group (✓ while it plays as saved, "5 of 6" while only part of it can, the open
- * one inverted), then, for the host and admins, Save as group; the last group action's outcome and Undo under it.
- */
+/** The groups as chips: ✓ while one plays as saved, "3 of 4" while only part of it can, the open one inverted. */
 function GroupLine({
   chips,
-  connected,
-  onSave,
-  outcome,
-  undoing,
-  onUndo,
   lineRef,
 }: {
   chips: {
@@ -103,100 +74,38 @@ function GroupLine({
     open?: boolean;
     onClick: () => void;
   }[];
-  connected: boolean;
-  onSave?: () => void;
-  outcome: Outcome | null;
-  undoing: boolean;
-  onUndo: (outcome: Outcome) => void;
   lineRef?: Ref<HTMLDivElement>;
 }) {
   return (
-    <>
-      <div
-        ref={lineRef}
-        data-nav-row
-        role="group"
-        aria-label="Groups"
-        className="flex flex-wrap items-center gap-1.5 pb-2.5"
-      >
-        <span aria-hidden="true" className="mr-1 text-meta text-muted-foreground">
-          Groups
-        </span>
-        {chips.map(({ group, on, part, open, onClick }) => (
-          <Button
-            key={group.id}
-            data-group={group.id}
-            variant="secondary"
-            size="sm"
-            aria-expanded={open}
-            onClick={onClick}
-            className="font-semibold aria-expanded:bg-foreground aria-expanded:text-background aria-expanded:[&_.text-muted-foreground]:text-background/70"
-          >
-            {on && <Check aria-hidden="true" />}
-            {group.name}
-            {part && <span className="font-normal text-muted-foreground tabular-nums">{part}</span>}
-          </Button>
-        ))}
-        {onSave && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!connected}
-            onClick={onSave}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <Plus aria-hidden="true" />
-            Save as group
-          </Button>
-        )}
-      </div>
-      {outcome && (
-        <div data-nav-row className="flex min-h-10 items-center gap-3 pb-2">
-          <p role="status" className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
-            {outcome.text}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            autoFocus
-            disabled={!connected || undoing}
-            onClick={() => onUndo(outcome)}
-          >
-            Undo
-          </Button>
-        </div>
-      )}
-    </>
+    <div
+      ref={lineRef}
+      data-nav-row
+      role="group"
+      aria-label="Groups"
+      className="flex flex-wrap gap-1.5 pt-0.5 pb-2.5"
+    >
+      {chips.map(({ group, on, part, open, onClick }) => (
+        <Button
+          key={group.id}
+          data-group={group.id}
+          variant="secondary"
+          size="xs"
+          aria-expanded={open}
+          onClick={onClick}
+          className="h-7.5 gap-1.5 px-3 text-meta font-semibold aria-expanded:bg-foreground aria-expanded:text-background aria-expanded:[&_.text-subtle-foreground]:text-background/60"
+        >
+          {on && <Check aria-hidden="true" />}
+          {group.name}
+          {part && <span className="font-normal text-subtle-foreground tabular-nums">{part}</span>}
+        </Button>
+      ))}
+    </div>
   );
 }
 
-/** The scope's outcome with its Undo, which puts back what changed and returns focus to the chip it came from. */
-function useUndo(chips: RefObject<HTMLDivElement | null>, rows: Row[]) {
-  const scope = useContext(Groups);
-  const gate = useContext(SessionGateContext);
-  const [undoing, setUndoing] = useState(false);
-  const undo = async (current: Outcome) => {
-    setUndoing(true);
-    try {
-      await current.undo(rows);
-      scope?.say(null);
-      // Focus goes back where it came from rather than to the top of a TV's Sheet.
-      const chip =
-        chips.current?.querySelector<HTMLElement>(`[data-group="${current.group}"]`) ??
-        chips.current?.querySelector<HTMLElement>("button");
-      chip?.focus();
-    } catch (error) {
-      gate?.setError(said(error));
-    } finally {
-      setUndoing(false);
-    }
-  };
-  return { undoing, undo: (current: Outcome) => void undo(current) };
-}
-
 /**
- * The Mixer's Groups line. Opening a chip shows what applying it to this playback (`title`) would change, before
- * anything does.
+ * The desk's groups. Opening a chip shows, in place, what applying it to this playback (`title`) would change, before
+ * anything does; Apply says what it did with an Undo that puts every device back.
  */
 export function GroupChips({
   state,
@@ -209,37 +118,22 @@ export function GroupChips({
   rows: Row[];
   title?: string | null;
 }) {
-  const scope = useContext(Groups);
+  const edit = useGroupEdit();
   const canSave = useCanSave();
   const [opened, setOpened] = useState<string | null>(null);
   const chips = useRef<HTMLDivElement>(null);
-  const { undoing, undo } = useUndo(chips, rows);
   const groups = state.groups ?? [];
-  if (!scope || (!groups.length && !canSave)) return null;
-  const { edit, say } = scope;
-  // Another playback's outcome isn't this one's to undo (Core would refuse it): it shows again on its own tab.
-  const outcome =
-    scope.outcome?.playbackId && scope.outcome.playbackId !== state.player.playbackId
-      ? null
-      : scope.outcome;
+  if (!groups.length) return null;
   const open = groups.find((group) => group.id === opened);
   return (
     <div className="grid">
       <GroupLine
         lineRef={chips}
-        connected={connected}
-        outcome={outcome}
-        undoing={undoing}
-        onUndo={undo}
-        onSave={canSave ? () => edit({ name: "", members: membersOf(rows) }) : undefined}
         chips={groups.map((group) => ({
           group,
           ...groupStatus(planGroup(group, rows, state)),
           open: group.id === opened,
-          onClick: () => {
-            say(null);
-            setOpened(group.id === opened ? null : group.id);
-          },
+          onClick: () => setOpened(group.id === opened ? null : group.id),
         }))}
       />
       {open && (
@@ -251,10 +145,11 @@ export function GroupChips({
           title={title}
           playbackId={state.player.playbackId}
           connected={connected}
-          onEdit={canSave ? () => edit(open) : undefined}
-          onApplied={(next) => {
+          onEdit={canSave && edit ? () => edit(open) : undefined}
+          onApplied={() => {
+            // Focus goes back to its chip before the preview closes under it.
+            chips.current?.querySelector<HTMLElement>(`[data-group="${open.id}"]`)?.focus();
             setOpened(null);
-            say(next);
           }}
         />
       )}
@@ -263,9 +158,9 @@ export function GroupChips({
 }
 
 /**
- * Choose where it plays' Groups line. Opening a chip shows what the group would change in the choice, as the Mixer's
- * preview does; Use this group fills the choice with what each device can play now and says what it left out. Nothing
- * plays until Play. Save as group saves the choice as it stands.
+ * Choose where it plays' groups. Opening a chip shows what the group would change in the choice, as the desk's preview
+ * does; Use this group fills the choice with what each device can play now and says what it left out. Nothing plays
+ * until Play.
  */
 export function ChoiceGroups({
   state,
@@ -280,42 +175,20 @@ export function ChoiceGroups({
   choice: Choice;
   onChoose: (choice: Choice, left: string[]) => void;
 }) {
-  const scope = useContext(Groups);
-  const canSave = useCanSave();
   const [opened, setOpened] = useState<string | null>(null);
   const chips = useRef<HTMLDivElement>(null);
-  const { undoing, undo } = useUndo(chips, []);
   const groups = state.groups ?? [];
-  if (!scope || (!groups.length && !canSave)) return null;
+  if (!groups.length) return null;
   const open = groups.find((group) => group.id === opened);
   return (
     <div className="grid">
       <GroupLine
         lineRef={chips}
-        connected={connected}
-        outcome={scope.outcome}
-        undoing={undoing}
-        onUndo={undo}
-        onSave={
-          canSave
-            ? () =>
-                scope.edit({
-                  name: "",
-                  members: Object.entries(choice).map(([deviceId, chosen]) => ({
-                    deviceId,
-                    ...chosen,
-                  })),
-                })
-            : undefined
-        }
         chips={groups.map((group) => ({
           group,
           ...groupStatus(planChoice(group, rows, choice, state)),
           open: group.id === opened,
-          onClick: () => {
-            scope.say(null);
-            setOpened(group.id === opened ? null : group.id);
-          },
+          onClick: () => setOpened(group.id === opened ? null : group.id),
         }))}
       />
       {open && (
@@ -324,10 +197,8 @@ export function ChoiceGroups({
           group={open}
           plan={planChoice(open, rows, choice, state)}
           connected={connected}
-          onEdit={canSave ? () => scope.edit(open) : undefined}
           onUse={() => {
             const filled = groupChoice(open, rows);
-            // Focus goes back to its chip before the preview closes under it.
             chips.current?.querySelector<HTMLElement>(`[data-group="${open.id}"]`)?.focus();
             setOpened(null);
             onChoose(filled.choice, filled.left);
@@ -343,18 +214,18 @@ const line = (key: string, icon: ReactNode, text: ReactNode, quiet = false) => (
   <li
     key={key}
     className={cn(
-      "flex items-baseline gap-2 text-sm [overflow-wrap:anywhere]",
-      quiet ? "text-muted-foreground" : "text-foreground/80",
+      "flex items-baseline gap-2 [overflow-wrap:anywhere]",
+      quiet ? "text-subtle-foreground" : "text-muted-foreground",
     )}
   >
-    <span className="translate-y-0.5 text-muted-foreground [&_svg]:size-3.5">{icon}</span>
+    <span className="translate-y-0.5 text-subtle-foreground [&_svg]:size-3.5">{icon}</span>
     <span>{text}</span>
   </li>
 );
 
 /**
- * What applying a group to this playback would do, line by line, with Apply under it; for a choice not yet played
- * (`onUse`), what it would change in the choice, with Use this group.
+ * What applying a group to this playback would do, line by line, with Apply and Edit under it; for a choice not yet
+ * played (`onUse`), what it would change in the choice, with Use this group.
  */
 function GroupPreview({
   group,
@@ -374,22 +245,13 @@ function GroupPreview({
   playbackId?: string | null;
   connected: boolean;
   onEdit?: () => void;
-  onApplied?: (outcome: Outcome) => void;
+  onApplied?: () => void;
   onUse?: () => void;
 }) {
   const gate = useContext(SessionGateContext);
   const [busy, setBusy] = useState(false);
   const name = (text: string) => <span className="text-foreground">{text}</span>;
   const lines = [
-    ...plan.same.map((item) =>
-      line(
-        `same:${item.deviceId}:${item.channel}`,
-        <Check />,
-        <>
-          {name(item.name)} {item.channel}
-        </>,
-      ),
-    ),
     ...plan.changes.map((item) =>
       line(
         `change:${item.deviceId}:${item.channel}`,
@@ -398,6 +260,16 @@ function GroupPreview({
           {name(item.name)} {item.channel}
           {item.on ? (item.from ? `, taking it from ${item.from}` : "") : " stops"}
         </>,
+      ),
+    ),
+    ...plan.same.map((item) =>
+      line(
+        `same:${item.deviceId}:${item.channel}`,
+        <Check />,
+        <>
+          {name(item.name)} {item.channel}
+        </>,
+        true,
       ),
     ),
     ...plan.left.map((item) =>
@@ -414,14 +286,12 @@ function GroupPreview({
   ];
   const count = plan.changes.length;
   const outcome = count
-    ? `${count} ${count === 1 ? "change" : "changes"}${plan.left.length ? `, ${plan.left.length} left as ${plan.left.length === 1 ? "it is" : "they are"}` : ""}`
+    ? ""
     : !plan.same.length
       ? "None of it can play here now."
-      : plan.left.length
-        ? "Everything it may change is already on."
-        : onUse
-          ? "Already set like this."
-          : "It already plays like this.";
+      : onUse
+        ? "Already set like this."
+        : "It already plays like this.";
   const apply = async () => {
     if (!gate || !playbackId) return;
     setBusy(true);
@@ -429,62 +299,52 @@ function GroupPreview({
     const applied: Change[] = [],
       refused: string[] = [];
     let reason: unknown;
-    for (const step of applySteps(plan, rows, playbackId)) {
-      // While nothing of the group plays yet, what plays now stays, so the playback never goes silent.
-      if (!step.gains && !plan.same.length && !applied.some((change) => change.on)) break;
-      try {
-        // Its output change counts once Core takes it, even if the unmute that follows fails.
-        for (const [index, action] of step.actions.entries()) {
-          await gate.command(action);
-          if (!index) applied.push(...step.undone);
+    const steps = async () => {
+      for (const step of applySteps(plan, rows, playbackId)) {
+        // While nothing of the group plays yet, what plays now stays, so the playback never goes silent.
+        if (!step.gains && !plan.same.length && !applied.some((change) => change.on)) break;
+        try {
+          // Its output change counts once Core takes it, even if the unmute that follows fails.
+          for (const [index, action] of step.actions.entries()) {
+            await gate.command(action);
+            if (!index) applied.push(...step.undone);
+          }
+        } catch (error) {
+          reason = error;
+          refused.push(...channelNames(step.changes).map((text) => `${text} (couldn't change)`));
         }
-      } catch (error) {
-        reason = error;
-        refused.push(...channelNames(step.changes).map((text) => `${text} (couldn't change)`));
       }
-    }
-    setBusy(false);
-    if (!applied.length) {
-      gate.setError(said(reason));
-      return;
-    }
-    const except = [
+      return applied.length > 0;
+    };
+    const except = () => [
       ...plan.left.map(
         (item) => `${channelNames([item])[0]} (${item.reason}${item.stays ? ", still on" : ""})`,
       ),
       ...refused,
     ];
-    // Undo puts back this playback's devices; a device taken from another programme doesn't return to it.
-    const moved = applied.some((change) => change.from);
-    onApplied?.({
-      group: group.id,
-      playbackId,
-      text: `${group.name} applied${except.length ? `, except ${listed(except)}` : ""}.${moved ? " Undo changes only this playback." : ""}`,
-      // Built from the rows as they are when Undo is pressed, after Apply changed them.
-      undo: async (now) => {
-        for (const step of undoSteps(applied, now, playbackId))
-          for (const action of step.actions) await gate.command(action);
-      },
-    });
+    const done = await gate.takeWithUndo(
+      steps,
+      () => `${group.name} applied${except().length ? `, except ${listed(except())}` : ""}.`,
+    );
+    setBusy(false);
+    if (!done) {
+      gate.setError(said(reason));
+      return;
+    }
+    onApplied?.();
   };
   return (
     <section
       aria-label={group.name}
-      className="mb-3 grid gap-2 rounded-lg bg-secondary px-3.5 pt-2.5 pb-3.5"
+      className="mb-3 -mt-1 grid gap-2.5 rounded-[0.7rem] bg-(--fill) px-3.5 py-3 text-meta"
     >
-      <div data-nav-row className="flex min-h-10 items-center gap-2">
-        <h3 className="min-w-0 flex-1 font-heading text-body font-semibold [overflow-wrap:anywhere]">
-          {group.name}
-        </h3>
-        {onEdit && (
-          <Button variant="ghost" size="sm" disabled={!connected} onClick={onEdit}>
-            <Pencil aria-hidden="true" />
-            Edit
-          </Button>
-        )}
-      </div>
       <ul className="grid gap-1">{lines}</ul>
-      <div data-nav-row className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+      {outcome && (
+        <p role="status" className="text-subtle-foreground">
+          {outcome}
+        </p>
+      )}
+      <div data-nav-row className="flex flex-wrap items-center gap-2">
         {onUse ? (
           <Button size="sm" disabled={!connected || !count} onClick={onUse}>
             Use this group
@@ -492,16 +352,18 @@ function GroupPreview({
         ) : (
           <Button
             size="sm"
+            aria-label={title ? `Apply ${group.name} to ${title}` : undefined}
             disabled={!connected || !count || busy || !playbackId}
             onClick={() => void apply()}
-            className="max-w-full"
           >
-            <span className="truncate">{title ? `Apply to ${title}` : "Apply"}</span>
+            Apply
           </Button>
         )}
-        <span role="status" className="text-sm text-muted-foreground">
-          {outcome}
-        </span>
+        {onEdit && (
+          <Button variant="ghost" size="sm" disabled={!connected} onClick={onEdit}>
+            Edit
+          </Button>
+        )}
       </div>
     </section>
   );

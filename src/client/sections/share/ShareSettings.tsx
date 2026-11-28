@@ -107,7 +107,7 @@ export function ShareGear({
   );
 }
 
-/** Mute audio input, where Play stands: it silences the input for everyone, keeping the share and its listeners. */
+/** Mute audio input, an icon where Play stands: it silences the input for everyone, keeping the share and its listeners. */
 export function MuteInput({
   sharing,
   muted,
@@ -121,9 +121,9 @@ export function MuteInput({
   const label = muted ? "Unmute audio input" : "Mute audio input";
   return (
     <Button
-      variant={muted ? "secondary" : "default"}
+      variant="ghost"
       size="icon-lg"
-      className="size-11.5 rounded-full"
+      className="aria-pressed:bg-(--fill-2)"
       aria-pressed={muted}
       aria-label={label}
       title={label}

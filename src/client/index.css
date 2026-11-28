@@ -252,11 +252,6 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-/* A Mixer key keeps its lit, white or locked face under focus, which its ring marks instead (MixerKeys.tsx). */
-[data-mixer-key]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
-  background: revert-layer;
-  color: revert-layer;
-}
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] {
   scale: 1.75;
@@ -880,10 +875,7 @@ html:has(body.tv-presentation),
 /* Now playing (NowPlaying.tsx): the side player, its capsule and the phone's dock are one lit panel standing in the
    room (.lit-panel). --fill is the quiet ground of its boxes and pills. */
 :root {
-  --side-player-width: 21.25rem;
-}
-.tv-presentation {
-  --side-player-width: 19.75rem;
+  --side-player-width: 23rem;
 }
 /* Content steps aside for the side player, at the left or the right (Player side, player-side.ts).
    --content-inset-left and --content-inset-right are the room it takes at each edge, 0 with no side player, minimised
@@ -911,11 +903,109 @@ html:has(body.tv-presentation),
   --fill-2: rgb(255 255 255 / 15%);
   isolation: isolate;
 }
-.side-where {
-  background: var(--fill);
+/* The desk (Desk.tsx): the one glass object of Now playing, holding where it plays, Volume, the timeline and the
+   transport. Everything above it stands on the room. */
+.desk {
+  border-radius: 1.75rem;
+  -webkit-backdrop-filter: blur(1.75rem);
+  backdrop-filter: blur(1.75rem);
 }
-.side-where:hover {
-  background: var(--fill-2);
+/* A device's row in the desk (DeskRows.tsx): Move here shows under a pointer, the chevron once its name is reached. */
+.now-playing {
+  --desk-row: 2.75rem;
+}
+@media (pointer: coarse) {
+  .now-playing {
+    --desk-row: 3rem;
+  }
+}
+.desk-row-move {
+  display: none;
+}
+.desk-row-chevron {
+  visibility: hidden;
+}
+@media (hover: hover) {
+  .desk-row:is(:hover, :focus-within) .desk-row-move {
+    display: inline-flex;
+  }
+  .desk-row > button:hover .desk-row-chevron {
+    visibility: visible;
+  }
+}
+.desk-row > button:is(:focus-visible, [aria-expanded="true"]) .desk-row-chevron {
+  visibility: visible;
+}
+/* A device's Sound and Picture keys (MixerKeys.tsx): a flat disc in a target, two fixed columns at the row's edge. */
+.mixer-key {
+  --key: 2rem;
+  --key-disc: 2rem;
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--key);
+  height: var(--key);
+  border-radius: 9999px;
+  color: var(--subtle-foreground);
+}
+.mixer-key::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--key) - var(--key-disc)) / 2);
+  border-radius: 9999px;
+}
+.mixer-key > svg {
+  position: relative;
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+@media (hover: hover) {
+  button.mixer-key:not([aria-disabled="true"], [aria-pressed="true"]):hover {
+    color: var(--foreground);
+  }
+  button.mixer-key:not([aria-disabled="true"], [aria-pressed="true"]):hover::before {
+    background: var(--fill-2);
+  }
+}
+.mixer-key[aria-pressed="true"] {
+  color: var(--background);
+}
+.mixer-key[aria-pressed="true"]::before {
+  background: var(--foreground);
+}
+.mixer-key[aria-disabled="true"],
+.mixer-key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Focus inverts: the key's disc turns white with black ink. */
+.mixer-key:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  background: none;
+  color: var(--ring-foreground);
+}
+.mixer-key:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)::before {
+  background: var(--ring);
+  box-shadow: 0 0 0 0.1875rem var(--ring);
+}
+@media (pointer: coarse) {
+  .mixer-key {
+    --key: 2.75rem;
+    --key-disc: 2.25rem;
+  }
+  .mixer-key > svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+/* What scrolls in the desk and the side column fades where it is cut, rather than ending on a hard edge. */
+[data-cut="end"] {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+}
+[data-cut="right"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 1.25rem), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 1.25rem), transparent);
 }
 .player-timeline [data-slot="slider-thumb"] {
   @apply motion-safe:transition-[scale];

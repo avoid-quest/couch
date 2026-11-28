@@ -462,7 +462,10 @@ const leadOf = (rows: ChoiceRow[], choice: Choice) => {
 
 const names = (ids: string[], rows: ChoiceRow[]) =>
   new Intl.ListFormat("en", { type: "conjunction" }).format(
-    ids.map((id) => rows.find((row) => row.device.id === id)?.device.name ?? "a device"),
+    ids.map((id) => {
+      const row = rows.find((item) => item.device.id === id);
+      return row?.mine ? "this device" : (row?.device.name ?? "a device");
+    }),
   );
 
 /**
@@ -498,7 +501,9 @@ export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], chos
     const replaced =
       playback.outputs.length === 1 && !playback.held && !live && taken[0] === leadOf(rows, choice);
     return rest.length
-      ? [`${title} keeps playing on ${names(rest, rows)}.`]
+      ? [
+          `${title} keeps playing on ${rest.length > 2 ? `${rest.length} other devices` : names(rest, rows)}.`,
+        ]
       : replaced
         ? [`${title} stops on ${names(taken, rows)}.`]
         : [

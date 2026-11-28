@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { radioProgrammesQuery, radioStationQuery } from "@/api/radio";
-import { Level } from "@/components/Level";
 import { RadioProgress, RadioSlot } from "@/components/RadioSchedule";
 import { RadioRecognition } from "@/components/RadioRecognition";
 import { SearchNames } from "@/components/SearchNames";
@@ -14,9 +13,9 @@ import type { QueueEntry } from "../../../shared/protocol";
 import { radioNext, radioShowNames, type RadioProgrammeDetails } from "../../../shared/radio";
 
 /**
- * A station's notes, where the side player keeps Up next for everything else: its name, that it's on air, then the
- * show's time left, labels, host and synopsis (else the station's tags), the song, what Identify song found, and the
- * next show in its guide. A station that says nothing more still has its name and On air now.
+ * A station's notes, where the side player keeps Up next for everything else: the show's time left, labels, host and
+ * synopsis (else the station's tags), the song, what Identify song found, and the next show in its guide. Its name is
+ * under the title and "On air now" at the transport's end.
  */
 export function StationNotes({
   state,
@@ -59,19 +58,16 @@ export function StationNotes({
     <section
       ref={box}
       aria-label={station.title}
-      className="mt-3.5 grid min-h-0 content-start gap-2 overflow-hidden border-t border-border pt-3 text-[0.8125rem] leading-snug text-muted-foreground"
+      className="mt-4 grid min-h-[6.5rem] shrink-[100] content-start gap-1.5 overflow-hidden px-3.5 text-meta text-muted-foreground"
     >
-      <h3 data-note className="font-heading text-sm font-semibold text-foreground">
-        {station.title}
-      </h3>
-      <p data-note className="flex items-center gap-2.5">
-        <Level moving={player.status === "playing"} />
-        On air now
-      </p>
       <div data-note className="empty:hidden">
         <RadioProgress show={show} />
       </div>
-      {about && <p data-note>{about}</p>}
+      {about && (
+        <p data-note className="text-foreground">
+          {about}
+        </p>
+      )}
       {show?.description && (
         <p data-note className="line-clamp-4 text-pretty">
           {show.description}
@@ -97,7 +93,7 @@ export function StationNotes({
         />
       )}
       {next && (
-        <p data-note>
+        <p data-note className="text-subtle-foreground">
           Next <RadioSlot show={next} className="text-foreground" />
         </p>
       )}

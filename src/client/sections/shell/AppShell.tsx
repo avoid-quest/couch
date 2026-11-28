@@ -86,6 +86,7 @@ import { StatusLine } from "./StatusLine";
 import { UpdateCue, useUpdatesReady } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { SharePlayer } from "@/sections/share/SharePlayer";
+import { ChooseLayer } from "@/components/ChooseWherePlays";
 import { showShare, useShareView } from "@/sections/share/share-view";
 import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
@@ -926,6 +927,7 @@ function ShellChrome({ children }: PropsWithChildren) {
                 onSize={(size) => setMinimised(size === "mini")}
               />
             )}
+            {paired && <ChooseLayer side={playerSide} phone={phone} />}
             {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
             <Toaster tvPresentation={tvPresentation} />
             {paired && <AddToHomePanel />}

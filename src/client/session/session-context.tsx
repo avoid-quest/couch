@@ -30,6 +30,7 @@ import { playingOnDevice, useScreenWakeLock } from "../screen-wake-lock";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { choosesHere } from "./where-it-plays";
 import { applyUndo, undoPlan } from "./undo";
+import { madeWay, undoMadeWay } from "./made-way";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
 import {
@@ -100,6 +101,15 @@ export type SessionGateValue = SessionBag & {
   run: (action: Action, targetDeviceId?: string) => Promise<boolean>;
   queue: <T>(title: string, work: () => Promise<T>) => Promise<T>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
+  /**
+   * Runs a change that takes devices (Play on, Move here, a device taken from another Playback), then says `text`
+   * with an Undo that puts back everything that made way (made-way.ts). `played`: it starts an item.
+   */
+  takeWithUndo: <T>(
+    work: () => Promise<T>,
+    text: string | (() => string),
+    played?: boolean,
+  ) => Promise<T>;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
   pairingOrigin: string;
   linkedPairingCode: string;
@@ -347,6 +357,34 @@ export function SessionGate({
     );
   }, []);
 
+  const takeWithUndo = useCallback(
+    async <T,>(work: () => Promise<T>, text: string | (() => string), played = false) => {
+      const before = readObservation();
+      const owner = currentCredentials.current;
+      const result = await work();
+      if (result === false || !before) return result;
+      // Core's state follows the command's answer within moments; until it shows the change, nothing to undo shows.
+      for (let tries = 0; tries < 40 && owner === currentCredentials.current; tries++) {
+        const after = readObservation();
+        // A play shows once this window controls what it started.
+        const shown =
+          !played ||
+          (!!after &&
+            (after.playback !== before.playback || after.currentEntryId !== before.currentEntryId));
+        const plan = shown && after && madeWay(before, after, played);
+        if (plan && (plan.started || plan.replaced || plan.restore.length)) {
+          offerUndo(typeof text === "string" ? text : text(), () =>
+            undoMadeWay(plan, command, readObservation),
+          );
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      return result;
+    },
+    [command, offerUndo, readObservation],
+  );
+
   // Confirm the requesting action, including REST callers, under its original connection and target.
   const queue = useCallback(
     async <T,>(
@@ -430,13 +468,15 @@ export function SessionGate({
             stoppedId ? { type: "stop", playbackId: stoppedId } : action,
             targetDeviceId,
           );
+          // A place from Play on's list (which names its channels) says where it plays itself, with its Undo.
           if (
             current() &&
             (((action.type === "enqueue" ||
               action.type === "enqueueProvider" ||
               action.type === "enqueueRadio" ||
               action.type === "enqueueWeb") &&
-              action.playNow) ||
+              action.playNow &&
+              !action.outputs) ||
               (action.type === "playLive" && action.playNow !== false))
           )
             announcePlay(readObservation(), action.deviceId);
@@ -532,6 +572,7 @@ export function SessionGate({
       run,
       queue,
       offerUndo,
+      takeWithUndo,
       reconnect,
       startLive,
       endLive,
@@ -570,6 +611,7 @@ export function SessionGate({
       run,
       queue,
       offerUndo,
+      takeWithUndo,
       reconnect,
       startLive,
       endLive,

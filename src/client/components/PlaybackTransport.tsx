@@ -344,12 +344,15 @@ export function PlaybackTransport({
   className,
   participation = true,
   quiet = false,
+  next: skip = true,
   onLeft,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
   participation?: boolean;
   quiet?: boolean;
+  /** Next, left out where the place is short (a phone's dock keeps it for its sheet and the full player). */
+  next?: boolean;
   /** Leaving Live audio closes the player that showed it. */
   onLeft?: () => void;
 }) {
@@ -446,8 +449,8 @@ export function PlaybackTransport({
         />
       </TapToHear>
       {/* A share follows its source: nothing to skip. */}
-      {quiet ? !current?.liveSourceId && next : stop}
-      {quiet ? stop : !current?.liveSourceId && next}
+      {quiet ? skip && !current?.liveSourceId && next : stop}
+      {quiet ? stop : skip && !current?.liveSourceId && next}
     </div>
   );
 }
