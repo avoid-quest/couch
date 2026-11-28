@@ -23,7 +23,7 @@ import {
   type ProviderPage,
 } from "../../../shared/providers";
 import {
-  AddRoomToHome,
+  RoomOptions,
   DoorLine,
   ListLead,
   ListShelf,
@@ -97,7 +97,7 @@ export function RaiPlayRoom({
           provider="raiplay"
           context={context}
           actions={
-            url && page ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined
+            url && page ? <RoomOptions provider="raiplay" url={url} title={title} /> : undefined
           }
         />
         <DoorLine
@@ -178,7 +178,7 @@ export function AToZRoom({
         provider="raiplay"
         context={context}
         meta={page && `${items.length.toLocaleString()} ${noun}`}
-        actions={page && <AddRoomToHome provider="raiplay" url={url} title={title} />}
+        actions={page && <RoomOptions provider="raiplay" url={url} title={title} />}
       />
       {!page && (!summary || summary.loading) && <RoomSkeleton />}
       <nav ref={rail} aria-label="Jump to a letter">

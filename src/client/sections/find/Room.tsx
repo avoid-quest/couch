@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Bookmark, ChevronLeft, HousePlus } from "lucide-react";
+import { Bookmark, ChevronLeft } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { providerPageQuery } from "@/api/providers";
 import { majorityShape, providerItemShape } from "@/art-shape";
@@ -131,17 +131,10 @@ export function RoomHead({
   );
 }
 
-/** Follows the room's list on Home, as Add to Home does for any list. */
-export function AddRoomToHome({ provider, url, title }: Parameters<typeof addToHome>[0]) {
-  return (
-    <Button
-      variant="secondary"
-      onClick={(event) => addToHome({ provider, url, title }, event.currentTarget)}
-    >
-      <HousePlus aria-hidden="true" />
-      Add to Home
-    </Button>
-  );
+/** The room's own "…", at the end of its head: Add to Home follows the room's list, as it does for any list. */
+export function RoomOptions(target: Parameters<typeof addToHome>[0]) {
+  const menu = useItemMenu([{ label: "Add to Home", run: () => addToHome(target) }]);
+  return <ItemMenu menu={menu} size="icon-lg" title={target.title} className="opacity-100" />;
 }
 
 export type Door = { label: string; meta?: string; href?: string; onPress?: () => void };

@@ -336,7 +336,7 @@ function CollectionPage({
           shape={shape}
           addToHome={
             url && !collection.single
-              ? (from) => addToHome({ provider, url, title: collection.title }, from)
+              ? () => addToHome({ provider, url, title: collection.title })
               : undefined
           }
           trail={
@@ -556,7 +556,7 @@ function CollectionHeader({
   canPlay: boolean;
   shape: ArtShape;
   trail: ReactNode;
-  addToHome?: (from: HTMLElement) => void;
+  addToHome?: () => void;
 }) {
   const disabled = !canPlay || c.disabled;
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
@@ -594,10 +594,10 @@ function CollectionHeader({
       }
       save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
       playOn={c.playOn && { run: c.playOn, disabled }}
-      addToHome={addToHome}
       more={[
         ...browserActions(c.url),
         ...(c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []),
+        ...(addToHome ? [{ label: "Add to Home", run: addToHome }] : []),
       ]}
     />
   );
