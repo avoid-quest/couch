@@ -713,6 +713,8 @@ function ShellChrome({ children }: PropsWithChildren) {
     if (playback && playback.liveSourceId !== localLiveSourceId) showShare(false);
   }, [state?.playback, state?.currentEntryId]);
   const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
+  // The full share is modal: what it covers is out of reach of focus and screen readers; messages stay reachable.
+  const shareFull = !!state && sharing && shareView.full;
   // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again.
   const outside = livePlayback(state) && !playbackControls(state).leave;
   const nowPlaying =
@@ -817,6 +819,7 @@ function ShellChrome({ children }: PropsWithChildren) {
               <header
                 ref={header}
                 hidden={onPlayer}
+                inert={shareFull}
                 className="app-header room-ground drag-region @container/header sticky top-0 z-30 shrink-0"
               >
                 <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
@@ -867,8 +870,12 @@ function ShellChrome({ children }: PropsWithChildren) {
                 </div>
               </header>
             )}
-            {sidePlayer && nowPlayingView}
-            <AppPage>
+            {sidePlayer && (
+              <div inert={shareFull} className="contents">
+                {nowPlayingView}
+              </div>
+            )}
+            <AppPage inert={shareFull}>
               {!paired ? (
                 <PairingPage status={<ConnectionStatus />} />
               ) : (
@@ -897,13 +904,14 @@ function ShellChrome({ children }: PropsWithChildren) {
             {paired && (
               <div
                 ref={footer}
+                inert={shareFull}
                 className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
               >
                 {nowPlaying && !sidePlayer && nowPlayingView}
                 <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
               </div>
             )}
-            {state && sharing && shareView.full && (
+            {state && shareFull && (
               <SharePlayer
                 state={state}
                 size="full"
@@ -930,11 +938,12 @@ const subscribePhoneLayout = (onChange: () => void) => {
 };
 const isPhoneLayout = () => window.matchMedia(phoneLayout).matches;
 
-function AppPage({ children }: PropsWithChildren) {
+function AppPage({ children, inert }: PropsWithChildren<{ inert: boolean }>) {
   const { nativeHost, tvPresentation } = useSessionGate();
   const props = {
     className: "app-page flex min-w-0 flex-1 flex-col",
     "data-scroll-restoration-id": "app-page",
+    inert,
   };
   return nativeHost && !tvPresentation && !/Mac/.test(navigator.platform) ? (
     <ScrollArea

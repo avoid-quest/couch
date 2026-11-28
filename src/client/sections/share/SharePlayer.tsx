@@ -92,6 +92,17 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
   const routes = useRoutes(sharing);
   // One input level at a time: the full share's while it stands over the side player.
   const { full } = useShareView();
+  // The full share hands focus back to what opened it (the pill, the side player, Home's row) as it closes.
+  const opener = useRef(size === "full" ? document.activeElement : null);
+  useEffect(() => {
+    const element = opener.current;
+    if (!(element instanceof HTMLElement)) return;
+    return () =>
+      void requestAnimationFrame(() => {
+        if (element.isConnected && document.activeElement === document.body)
+          element.focus({ preventScroll: true });
+      });
+  }, []);
   if (!sharing || !source) return null;
   const parts = shareParts(
     state,
