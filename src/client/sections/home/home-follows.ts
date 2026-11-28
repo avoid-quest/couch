@@ -45,13 +45,14 @@ function parse(raw: string | null): HomeFollow[] {
   }
 }
 
-// Where storage is refused (a private window), the follows live for this page's life.
+// Where storage is refused (a private window, a full disk), the follows live for this page's life and win over what
+// storage still holds.
 let unsaved: string | null = null;
 let snapshot: { raw: string | null; follows: HomeFollow[] } = { raw: null, follows: [] };
 export function readHomeFollows(): HomeFollow[] {
   let raw = unsaved;
   try {
-    raw = localStorage.getItem(storageKey) ?? unsaved;
+    raw = unsaved ?? localStorage.getItem(storageKey);
   } catch {
     // Storage refused: keep the page's own copy.
   }
@@ -63,6 +64,7 @@ export function writeHomeFollows(follows: HomeFollow[]) {
   const raw = JSON.stringify(follows);
   try {
     localStorage.setItem(storageKey, raw);
+    unsaved = null;
   } catch {
     unsaved = raw;
   }
