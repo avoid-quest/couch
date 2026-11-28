@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Pencil, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldTitle } from "@/components/ui/field";
-import { useShell } from "@/sections/shell/shell-context";
 import { controlBox, undoable } from "@/toasts";
 import { providerNames } from "../../../shared/providers";
 import { useHomeFollows, type FollowId, type HomeFollow } from "./home-follows";
 import { removeHomeFollow, type HomeSectionId } from "./home-rows";
 import { RenameSection } from "./FollowShelf";
+import { AddSectionPanel } from "./AddToHome";
 
 /** Edit Home's lines for the sections that follow a source: each one's name, what it follows, Rename and Remove. */
 export function useFollowedRows() {
@@ -64,21 +64,26 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
   );
 }
 
-/** Edit Home's Add a section: a section follows a page's list, so it starts in Search, which finds the page. */
+/** Edit Home's Add a section: from what you've played and saved, or anything Search finds. */
 export function AddSection() {
-  const { focusSearch } = useShell();
+  const [adding, setAdding] = useState<HTMLElement | null>(null);
   return (
     <Field orientation="horizontal" className="items-center gap-4 border-b py-3">
       <FieldContent className="min-w-0 flex-1 gap-0.5">
         <FieldTitle className="text-body font-medium">Add a section</FieldTitle>
         <FieldDescription className="text-meta">
-          Find a series, programme or channel in Search, then choose Add to Home in its … menu.
+          A series, programme or channel you've played or saved, or anything you find in Search.
         </FieldDescription>
       </FieldContent>
-      <Button variant="outline" aria-label="Add a section" onClick={focusSearch}>
+      <Button
+        variant="outline"
+        aria-label="Add a section"
+        onClick={(event) => setAdding(event.currentTarget)}
+      >
         <Plus aria-hidden="true" />
         Add
       </Button>
+      <AddSectionPanel anchor={adding} onClose={() => setAdding(null)} />
     </Field>
   );
 }

@@ -48,6 +48,7 @@ import {
 } from "./home-rows";
 import { isFollowId, useHomeFollows } from "./home-follows";
 import { FollowShelf } from "./FollowShelf";
+import { AddSectionPanel } from "./AddToHome";
 import { BoardArt, BoardList } from "./HomeBoard";
 import { ContinueSection, LeadSkeleton } from "./ContinueSection";
 import { HomeOrder, SectionOptions } from "./SectionOptions";
@@ -105,6 +106,7 @@ export function HomePage() {
   } = useSessionGate();
   const details = useDetailNavigation();
   const [queueOpen, setQueueOpen] = useState(false);
+  const [adding, setAdding] = useState<HTMLElement | null>(null);
   const layout = useHomeRows();
   const onHome = layout.rows.filter((row) => row.shown);
   const follows = useHomeFollows();
@@ -477,11 +479,16 @@ export function HomePage() {
                 Edit Home
               </Link>
             </Button>
-            <Button variant="ghost" className="text-muted-foreground" onClick={shell.focusSearch}>
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={(event) => setAdding(event.currentTarget)}
+            >
               <Plus aria-hidden="true" />
               Add a section
             </Button>
           </div>
+          <AddSectionPanel anchor={adding} onClose={() => setAdding(null)} />
         </>
       )}
 
