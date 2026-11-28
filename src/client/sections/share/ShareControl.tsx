@@ -197,7 +197,8 @@ function Capsule({
       data-tv-local-only
       className="flex w-fit min-w-0 max-w-full items-center gap-1 rounded-full bg-bar p-0.5 shadow-(--float-shadow)"
     >
-      {desktop && !tv ? (
+      {/* Its panel hangs from it on desktops and the TV; a phone's Sheet rises from the bottom. */}
+      {desktop || tv ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
           <PopoverContent

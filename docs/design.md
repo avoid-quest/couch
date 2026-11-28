@@ -105,8 +105,13 @@ Messages: **toasts** (`src/client/toasts.ts`, a fixed set of kinds, at most one
 action, never taking focus) for errors, Undo and unexpected outcomes; routine
 actions stay quiet. **Alert** for a problem that is the page, **Empty** for empty
 states, **Dialog** for short tasks, **AlertDialog** for confirmations, **Popover**
-for panels over the picture, **Sheet** for longer panels on phones and the TV.
+for panels over the picture, **Sheet** for longer panels on phones.
 Portalled surfaces share `z-50`; later portals cover earlier ones.
+
+**A control's panel opens from it.** On desktops and the TV its Popover or menu
+hangs from the control and fits the screen; on phones a Sheet rises from the
+bottom, by the dock. Undo and confirmations show in the toast corner nearest the
+control that caused them.
 
 ## Copy
 

@@ -27,7 +27,6 @@ import {
   PlaybackTransport,
   VolumeButton,
   playbackCapabilities,
-  toolPanel,
   useEndTime,
 } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
@@ -673,10 +672,14 @@ export function PlayerPage({
   ) : (
     title
   );
-  // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
-  const queueOrigin = queueOpen
-    ? `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`
-    : undefined;
+  // Up next hangs from its button, as the band's Popovers do (toolPanel): it ends at the button's right edge and grows
+  // from it.
+  const queueAnchor = queueOpen &&
+    root.current &&
+    queueTrigger.current?.offsetWidth && {
+      end: rightGap(root.current, queueTrigger.current),
+      origin: `calc(100% - ${queueTrigger.current.offsetWidth / 2}px) 100%`,
+    };
   const settings =
     player && state?.preferences && playbackControls(state).programme
       ? {
@@ -1023,7 +1026,14 @@ export function PlayerPage({
               (osd || queueBeside) &&
                 "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90",
             )}
-            style={osd || queueBeside ? { transformOrigin: queueOrigin } : undefined}
+            style={
+              (osd || queueBeside) && queueAnchor
+                ? ({
+                    transformOrigin: queueAnchor.origin,
+                    "--queue-end": `${queueAnchor.end}px`,
+                  } as CSSProperties)
+                : undefined
+            }
           >
             <QueuePanel
               state={state}
@@ -1219,6 +1229,12 @@ export function PlayerPage({
       )}
     </section>
   );
+}
+
+/** The gap from a box's right edge to the page's, in CSS pixels: rects are zoomed (--interface-scale), offsets aren't. */
+function rightGap(page: HTMLElement, box: HTMLElement) {
+  const outer = page.getBoundingClientRect();
+  return ((outer.right - box.getBoundingClientRect().right) * page.offsetWidth) / outer.width;
 }
 
 // The station's next show by the guide's own clock, so a broadcast boundary moves it on without re-rendering the player.

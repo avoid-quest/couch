@@ -555,28 +555,22 @@ export function PlaybackVolume({
 }
 
 /**
- * Where the band's and the now-playing bar's panels open (Volume, Where it plays, the gear's menu): above the whole row,
- * clear of its timeline, and ending at the tools' right edge (the gutter, as Up next does) whichever tool opened them,
- * so they line up as one family. Elsewhere a panel just sits above its trigger. Read as the panel opens.
+ * Where a player control's panel opens (Volume, Where it plays, the gear's menu): from its own button, growing up from
+ * the button's outer edge (its right edge in the right half of the screen, its left edge in the left), so the panel
+ * is plainly that button's. In the band and the now-playing bar it clears their whole row, timeline included. Read as
+ * the panel opens.
  */
 export function toolPanel(trigger: HTMLElement | null): {
   side: "top";
-  align: "end";
+  align: "start" | "end";
   sideOffset?: number;
-  alignOffset?: number;
 } {
-  const tools = trigger?.closest<HTMLElement>("[data-player-tools], [data-bar-tools]"),
-    row = tools?.closest<HTMLElement>("[data-player-band], [data-now-playing]");
-  if (!trigger || !tools || !row) return { side: "top", align: "end" };
+  if (!trigger) return { side: "top", align: "end" };
   const at = trigger.getBoundingClientRect(),
-    group = tools.getBoundingClientRect();
-  // The group pulls back past the gutter (-mr-2.5) so its last glyph lines up with the time; its margin box ends at the gutter.
-  return {
-    side: "top",
-    align: "end",
-    sideOffset: at.top - row.getBoundingClientRect().top + 8,
-    alignOffset: at.right - group.right - parseFloat(getComputedStyle(tools).marginRight),
-  };
+    align = at.left + at.width / 2 < window.innerWidth / 2 ? "start" : "end",
+    row = trigger.closest<HTMLElement>("[data-player-band], [data-now-playing]");
+  if (!row) return { side: "top", align };
+  return { side: "top", align, sideOffset: at.top - row.getBoundingClientRect().top + 8 };
 }
 
 /** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */

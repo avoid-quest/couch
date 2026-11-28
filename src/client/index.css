@@ -400,8 +400,9 @@
   transition-duration: 200ms;
   transition-timing-function: var(--ease-out);
 }
-/* A toast hugs its words, its action beside them, at the toaster's right edge (the gutter), rather than a slab the
-   toaster's width. On phones, where sonner stretches both, the toaster spans the gutters and toasts still hug. */
+/* A toast hugs its words, its action beside them, at the toaster's outer edge (the gutter), rather than a slab the
+   toaster's width: its right edge, or its left or middle where an Undo shows beside its control (toasts.ts). On phones,
+   where sonner stretches both, the toaster spans the gutters and toasts still hug. */
 [data-sonner-toaster][data-x-position] {
   width: var(--width);
 }
@@ -415,6 +416,14 @@
   right: 0;
   width: fit-content;
   max-width: 100%;
+}
+[data-sonner-toaster][data-x-position="left"] [data-sonner-toast] {
+  left: 0;
+  right: auto;
+}
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast] {
+  left: 0;
+  margin-inline: auto;
 }
 
 /* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window
@@ -845,7 +854,7 @@ html:has(body.tv-presentation),
 .player-video-controls [data-timeline-preview] {
   background: var(--player-surface);
 }
-/* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
+/* The mixer's Sheet (phones) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"],
 .player-page[data-osd] :is(.player-queue, .player-next-up) {
@@ -883,14 +892,20 @@ html:has([data-slot="popover-content"]) .player-next-up {
   pointer-events: auto;
 }
 /* It is one of the band's panels (Volume, Where it plays, the gear's menu): their surface and corner, their wide width,
-   their .75rem inset, and the same place, 8px above the band and ending at the gutter. */
+   their .75rem inset, and the same place, 8px above the band and ending at its button's right edge (--queue-end,
+   PlayerPage.tsx), kept a gutter inside the screen. */
 .player-page[data-osd][data-queue-open] .player-queue {
+  --queue-width: min(32rem, calc(100% - 2 * var(--gutter)));
   display: flex;
   position: absolute;
   z-index: 30;
-  right: var(--gutter);
+  right: clamp(
+    var(--gutter),
+    var(--queue-end, var(--gutter)),
+    calc(100% - var(--queue-width) - var(--gutter))
+  );
   bottom: calc(var(--bottom-bar, 0px) + 8px);
-  width: min(32rem, calc(100% - 2 * var(--gutter)));
+  width: var(--queue-width);
   max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem);
   padding: 0.25rem 0.75rem 0.75rem;
   border-radius: var(--radius-lg);
@@ -1053,13 +1068,13 @@ html:has([data-slot="popover-content"]) .player-next-up {
   justify-self: end;
 }
 @media (min-width: 960px) {
-  /* The artwork has the room; Up next, summoned from its button, is a panel over the room at the right above the band,
-     as it is over a picture. */
+  /* The artwork has the room; Up next, summoned from its button, is a panel over the room above the band ending at its
+     button, as it is over a picture. The workspace already stands a gutter in from the screen's edge. */
   .player-page[data-artwork-stage][data-queue-open] .player-queue {
     display: flex;
     position: absolute;
     z-index: 30;
-    right: 0;
+    right: max(0px, calc(var(--queue-end, var(--gutter)) - var(--gutter)));
     bottom: 0;
     width: min(28rem, 100%);
     max-height: 100%;

@@ -70,9 +70,9 @@ type Props = {
   connected: boolean;
   run: (action: Action) => Promise<boolean>;
 };
-type Side = "popover" | "right" | "bottom";
+type Side = "popover" | "bottom";
 
-// A desktop's pointer and width: there the panel hangs from its button, so the bar and the transport stay usable.
+// A desktop's pointer and width: there, as on the TV, the panel hangs from its button; a phone's rises from the bottom.
 const desktopQuery = "(min-width: 960px) and (pointer: fine)";
 export const subscribeDesktop = (onChange: () => void) => {
   const media = window.matchMedia(desktopQuery);
@@ -80,8 +80,6 @@ export const subscribeDesktop = (onChange: () => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 export const isDesktop = () => window.matchMedia(desktopQuery).matches;
-/** The longest list a Popover holds; past it the same button opens a right-side Sheet. */
-const popoverRows = 10;
 
 /**
  * Where it plays: the mixer for one Couch's devices, its own button in the now-playing bar and the player band.
@@ -121,11 +119,7 @@ function Panel({
   const rows = picker(state, { here: deviceId() }).rows;
   const fresh = () => ({
     order: orderOf(rows),
-    side: (tv || !desktop
-      ? "bottom"
-      : arrange(rows).listed > popoverRows
-        ? "right"
-        : "popover") as Side,
+    side: (tv || desktop ? "popover" : "bottom") as Side,
   });
   if (open && !view) setView(fresh());
   const side = view?.side ?? fresh().side;
@@ -196,16 +190,11 @@ function Panel({
     <Sheet open={open} onOpenChange={change}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent
-        side={side === "right" ? "right" : "bottom"}
+        side="bottom"
         aria-describedby={undefined}
         onOpenAutoFocus={focusFirst}
         showCloseButton={false}
-        className={cn(
-          "gap-0 overflow-y-auto px-(--gutter) pb-8",
-          side === "right"
-            ? "data-[side=right]:w-[min(34rem,100vw)] data-[side=right]:sm:max-w-[34rem]"
-            : "max-h-[85dvh] items-center",
-        )}
+        className="max-h-[85dvh] items-center gap-0 overflow-y-auto px-(--gutter) pb-8"
       >
         <SheetTitle className="sr-only">Where it plays</SheetTitle>
         <SyncScope>

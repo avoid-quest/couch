@@ -80,16 +80,40 @@ export function failed(text: string, reason?: unknown) {
   return show("failed", said ? reason.message : text, { duration: long }, toast.error);
 }
 
-// Each Undo offer retires the last, so it takes a new id.
+/** Sonner's own phone breakpoint: there every toast sits at the bottom, by the thumb (sonner.tsx). */
+export const phoneQuery = "(max-width: 600px)";
+/** Where a control is, or the focused one: none for the page itself. */
+export function controlBox(control = globalThis.document?.activeElement) {
+  return control && control !== document.body ? control.getBoundingClientRect() : undefined;
+}
+/**
+ * The toast corner nearest a control, so what it caused shows beside it as far as sonner's six places allow: the top
+ * or bottom half, then the left, middle or right third. Phones keep the Toaster's own place.
+ */
+function nearest(box = controlBox()): ExternalToast["position"] {
+  if (!box?.width || window.matchMedia(phoneQuery).matches) return undefined;
+  const x = (box.left + box.width / 2) / window.innerWidth,
+    y = (box.top + box.height / 2) / window.innerHeight;
+  return `${y < 0.5 ? "top" : "bottom"}-${x < 1 / 3 ? "left" : x > 2 / 3 ? "right" : "center"}`;
+}
+
+// Each Undo offer retires the last, so it takes a new id. It shows by the control that caused it: where it was when
+// pressed, else the one holding focus, where a closed menu returns it.
 export const dismissUndo = () => dismiss("undo");
-export const undoable = (text: string, undo: () => void, duration = long) => {
+export const undoable = (text: string, undo: () => void, duration = long, control?: DOMRect) => {
   dismissUndo();
-  return show("undo", text, { duration, action: { label: "Undo", onClick: undo } });
+  return show("undo", text, {
+    duration,
+    position: nearest(control),
+    action: { label: "Undo", onClick: undo },
+  });
 };
 
+// Beside the control that queued it, as Undo is.
 export const queued = (title: string | undefined, upNext: () => void) =>
   show("queued", title ? `Queued ${title}` : "Queued", {
     duration: brief,
+    position: nearest(),
     action: { label: "Up next", onClick: upNext },
   });
 export const playingOn = (name: string, deviceId: string) => {
