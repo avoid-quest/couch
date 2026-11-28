@@ -188,9 +188,9 @@ on Home), **Go** (Details, at most two Go to {name}, nearest first), **Share**
 Move down, Mark as watched, Remove from {list}, Hide). A menu keeps to nine rows:
 past that Open in browser goes, then the second Go to, then Queue beside Play
 next. What never applies is hidden; what can't run now is disabled. A label that
-opens a panel ends in "…". Copy link hands out only a public page: never Couch's
-address, a stream or a private link's secret, and nothing for Live TV or shared
-sources. On phones a menu of more than two rows is a Sheet titled with the
+opens a panel ends in "…". Copy link hands out only a known source's public page,
+in its usual form: never Couch's address, a stream, a signed or private link, and
+nothing for Live TV, shared sources or a link Couch has no source for. On phones a menu of more than two rows is a Sheet titled with the
 item's name; the TV opens it with a held OK.
 
 ## Copy

@@ -65,14 +65,32 @@ test("Copy link hands out only a public page: never a private link's secret or a
     "http://localhost:4353/item",
     "http://living-room.local/page",
     "https://cdn.example/stream.m3u8",
+    // Couch's own address under any name, an extensionless stream, a signed CDN link, a secret in a fragment.
+    "http://review-couchbox:4361/watch",
+    "https://couch.example.org/watch",
+    "https://cdn.example/live/stream",
+    "https://d1.cloudfront.net/media/abc?Expires=1&Signature=x&Key-Pair-Id=y",
+    "https://soundcloud.com/artist/sets/an-album#secret_token=s-AbCdEf123",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ#t=1",
+    "https://soundcloud.com/artist/sets/an-album/s-AbCdEf123",
+    "https://www.youtube.com:8443/watch?v=dQw4w9WgXcQ",
+    "https://rr3---sn-a5mekn7z.googlevideo.com/videoplayback?expire=1",
+    "https://www.raiplay.it/programmi/show?token=abc",
   ])
     expect(shareableUrl(value)).toBeUndefined();
   for (const value of [
     "https://soundcloud.com/artist/public-track",
     "https://soundcloud.com/artist/sets/an-album",
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube.com/playlist?list=PL6B3937A5D230E335",
+    "https://www.raiplay.it/programmi/ilcommissariomontalbano",
+    "https://www.mixcloud.com/NTSRadio/playlists/",
+    "https://www.nts.live/",
   ])
     expect(shareableUrl(value)).toBe(value);
+  expect(shareableUrl("https://youtu.be/dQw4w9WgXcQ?si=share")).toBe(
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  );
   expect(shareableUrl("https://www.raiplay.it/video/2024/01/Un-programma-abc123.json")).toBe(
     "https://www.raiplay.it/video/2024/01/Un-programma-abc123.html",
   );

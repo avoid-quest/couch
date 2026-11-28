@@ -3,7 +3,7 @@ import type { QueueEntry } from "../shared/protocol";
 import { isDesktop } from "@/sections/shell/Outputs";
 import { isTvPresentation } from "@/session/presentation";
 import { confirmed, failed } from "@/toasts";
-import { providerForUrl, publicProviderMediaUrl, soundCloudListUrl } from "../shared/providers";
+import { providerForUrl, publicPageUrl } from "../shared/providers";
 import { animeUnitySiteOrigin } from "../shared/animeunity";
 
 /** Only the entry's webpage reference is a page; source otherwise holds a file, stream or input. */
@@ -48,26 +48,13 @@ export function originalPageUrl(value?: string | null): string | undefined {
 }
 
 /**
- * A page link fit to hand to someone else: the original page, never Couch's own address or another on the network, nor
- * a private link's secret (a query naming a token or key; a SoundCloud page other than its public track, set or profile).
+ * A page link fit to hand to someone else: only a known source's public page, canonical (publicPageUrl), as the site
+ * spells it today; never Couch's own address or another on the network, a stream, nor a private link's secret.
  */
 export function shareableUrl(value?: string | null): string | undefined {
   const href = originalPageUrl(value);
-  if (!href) return;
-  const url = new URL(href);
-  if (
-    url.origin === globalThis.location?.origin ||
-    /^(?:localhost|\[.*\]|[\d.]+)$|\.(?:local|lan|home|internal)$/i.test(url.hostname) ||
-    [...url.searchParams.keys()].some((name) => /token|secret|key|auth|sig|pass/i.test(name))
-  )
-    return;
-  if (
-    providerForUrl(href) === "soundcloud" &&
-    !publicProviderMediaUrl(href) &&
-    !soundCloudListUrl(href)
-  )
-    return;
-  return href;
+  const page = href && publicPageUrl(href);
+  return page ? originalPageUrl(page) : undefined;
 }
 
 /**

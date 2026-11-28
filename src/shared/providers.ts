@@ -247,6 +247,79 @@ export function providerMediaPage(value: string): string | undefined {
   }
 }
 
+/**
+ * A known source's public page in its canonical form, fit to hand to someone else (Copy link, Share…): what plays, or a
+ * public list, channel, show or station of it. Anything else is never a public page: a stream, a signed or private link,
+ * an address with a port or a fragment, a host no source of Couch's publishes on.
+ */
+export function publicPageUrl(value: string): string | undefined {
+  if (value.length > 2048 || /[\u0000- \u007f\\]/.test(value)) return;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash
+  )
+    return;
+  // A YouTube share's extras (`si`, `t`) go; any other source's query stays its own page or none.
+  const media = providerMediaPage(value);
+  if (media) return media;
+  const path = url.pathname.replace(/\/$/, "");
+  const youtube = ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"];
+  if (youtube.includes(url.hostname) && path === "/playlist" && isYouTubePlaylistUrl(value))
+    return `https://www.youtube.com/playlist?list=${url.searchParams.get("list")}`;
+  if (url.search) return;
+  if (isStationSite(url.hostname) && !path) return `https://${url.hostname}/`;
+  switch (providerForUrl(value)) {
+    case "youtube":
+      return youtube.includes(url.hostname) &&
+        /^\/(?:@[\w.-]{1,100}|channel\/UC[\w-]{22})$/.test(path)
+        ? `https://www.youtube.com${path}`
+        : undefined;
+    case "soundcloud":
+      return soundCloudListUrl(value);
+    case "spotify":
+      return spotifyLink(value)?.url;
+    case "mixcloud":
+      return mixcloudLink(value)?.url;
+    case "archives":
+      return archiveLink(value)?.url;
+    case "bandcamp":
+      return /^[a-z0-9-]+\.bandcamp\.com$/.test(url.hostname) &&
+        /^(?:\/album\/[a-z0-9_-]+)?$/.test(path)
+        ? `https://${url.hostname}${path || "/"}`
+        : bandcampFanUrl(value)?.url;
+    case "twitch":
+      return ["twitch.tv", "www.twitch.tv"].includes(url.hostname) &&
+        /^\/(?:[a-z0-9_]{3,25}|directory\/category\/[a-z0-9-]{1,100})$/i.test(path) &&
+        !/^\/(?:directory|videos|settings|search|downloads|jobs|p|subscriptions|inventory|wallet|drops)$/i.test(
+          path,
+        )
+        ? `https://www.twitch.tv${path}`
+        : undefined;
+    case "raiplay":
+      return ["raiplay.it", "www.raiplay.it"].includes(url.hostname) &&
+        /^\/programmi\/[a-z0-9-]{1,200}$/i.test(path)
+        ? `https://www.raiplay.it${path}`
+        : undefined;
+    case "animeunity":
+      return animeUnityPageUrl(value)?.href;
+    case "animesaturn":
+      return animeSaturnPageUrl(value)?.href;
+    case "movies123": {
+      const page = movies123PageUrl(value);
+      return page && `${movies123Origin}${page.pathname}`;
+    }
+  }
+}
+
 export const providerNames: Record<ProviderId, string> = {
   youtube: "YouTube",
   raiplay: "RaiPlay",
