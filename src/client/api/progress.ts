@@ -24,5 +24,7 @@ const updateProgress = (
 ) => apiSend<Removal>(credentials, progressPath(mediaId), body, "POST", 10_000);
 export const removeFromContinue = (credentials: ApiCredentials, mediaId: string) =>
   updateProgress(credentials, mediaId, { clearResume: true });
+export const markWatched = (credentials: ApiCredentials, mediaId: string, watched: boolean) =>
+  updateProgress(credentials, mediaId, { watched });
 export const undoProgressAction = (credentials: ApiCredentials, undoToken: string) =>
   apiSend(credentials, "/api/progress/undo", { token: undoToken });

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { deviceName, offline } from "@/copy";
 import { SetupQr } from "./SetupQr";
-import { notice } from "@/toasts";
+import { confirmed } from "@/toasts";
 
 export function PairingDialog({
   credentials,
@@ -43,7 +43,7 @@ export function PairingDialog({
     const paired =
       before.current && state.devices.find((device) => !before.current!.ids.has(device.id));
     if (paired) {
-      notice(
+      confirmed(
         `${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " as admin" : ""}`,
       );
       onOpenChange(false);

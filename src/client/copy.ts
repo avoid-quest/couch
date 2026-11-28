@@ -3,12 +3,21 @@
 /** The TV computer's name, falling back to "Couch". */
 export const deviceName = (name?: string | null) => name || "Couch";
 
-export const offline = (name?: string | null) => `Offline. Reconnecting to ${deviceName(name)}…`;
+/** Couch can't be reached: the whole app's problem, said once in the header (docs/design.md "Problems"). */
+export const offline = (name?: string | null) =>
+  `Couldn't reach ${deviceName(name)}. Reconnecting…`;
 
 export const ADMIN_ONLY = "Only an admin can change this.";
 
 export const TRY_AGAIN = "Try again";
 
+/** A page that can't show at all. */
+export const PAGE_PROBLEM = "Couldn't open this page.";
+
 /** Copy for Saved recovery actions. */
 export const savedNotice = (title: string, saved: boolean) =>
   saved ? `Saved ${title}.` : `Removed ${title} from Saved.`;
+
+/** A menu's Keep toggle says what it will do: Save, or once kept, take it out of its list. */
+export const saveLabel = (saved: boolean, list: "For later" | "Saved" = "For later") =>
+  saved ? `Remove from ${list}` : "Save";

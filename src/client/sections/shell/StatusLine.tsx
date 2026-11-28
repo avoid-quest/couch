@@ -1,25 +1,38 @@
 import type { ReactNode } from "react";
+import { CircleAlert } from "lucide-react";
+import { Dismiss, dismissOnEscape, useDismiss } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-/** One quiet line under the header for connection and player state. */
+/**
+ * One quiet line for the whole app's state, in its one place (docs/design.md "Problems"): a Spinner while Couch works
+ * on it by itself, otherwise a problem's red icon, then one sentence in ink and its actions. Dismissed, it stays away
+ * until the state changes; a line with actions (Reload after an update) keeps them, so it has no Dismiss.
+ */
 export function StatusLine({
   busy = false,
   actions,
+  dismissible = !actions,
   children,
   className,
 }: {
   busy?: boolean;
   actions?: ReactNode;
+  /** Off for plain progress ("Starting…"), which goes by itself. */
+  dismissible?: boolean;
   children: ReactNode;
   className?: string;
 }) {
+  const { ref, dismissed, dismiss } = useDismiss<HTMLDivElement>();
   return (
     <div
+      ref={ref}
       role="status"
+      hidden={dismissed}
+      onKeyDown={dismissible ? dismissOnEscape(dismiss) : undefined}
       data-status-line
       className={cn(
-        "flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground",
+        "flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-foreground tv:text-base",
         className,
       )}
     >
@@ -28,26 +41,14 @@ export function StatusLine({
           role="presentation"
           aria-hidden="true"
           aria-label={undefined}
-          className="size-3.5"
+          className="size-3.5 text-muted-foreground"
         />
       ) : (
-        <StatusDot connected={false} />
+        <CircleAlert aria-hidden="true" className="size-[1.15em] shrink-0 text-destructive" />
       )}
       <span className="min-w-0">{children}</span>
-      {actions && <span className="flex flex-wrap gap-1">{actions}</span>}
+      {actions && <span className="flex flex-wrap gap-2">{actions}</span>}
+      {dismissible && <Dismiss onClick={dismiss} />}
     </div>
-  );
-}
-
-/** Filled while connected, hollow while not. */
-function StatusDot({ connected }: { connected: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "size-2 shrink-0 rounded-full border border-current",
-        connected && "bg-current",
-      )}
-    />
   );
 }

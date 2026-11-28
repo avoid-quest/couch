@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -160,9 +161,9 @@ export function CompressorControls({
         </div>
       </CollapsibleContent>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
     </Collapsible>
   );

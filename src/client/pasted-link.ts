@@ -6,7 +6,7 @@ import type { ApiCredentials } from "@/api/client";
 import { createId } from "@/session/session";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { dismiss, notice, pendingNotice } from "@/toasts";
-import type { Action, VideoQuality } from "../shared/protocol";
+import type { Action, PlayOn, VideoQuality } from "../shared/protocol";
 import { onStationSite } from "../shared/archives";
 import type { LinkTarget, ProviderId } from "../shared/providers";
 
@@ -91,12 +91,12 @@ export function linkAction(
   verb: LinkVerb,
   quality: VideoQuality,
   list: { title?: string; count?: number; queued?: number } = {},
-  deviceId?: string,
+  on?: PlayOn,
 ): Action {
   const how = {
     ...(verb === "play" ? { playNow: true } : {}),
     ...(verb === "next" ? { placement: "next" as const } : {}),
-    ...(deviceId ? { deviceId } : {}),
+    ...on,
   };
   if (target?.shape !== "playlist")
     return { type: "enqueueWeb", entryId: createId(), url, quality, ...how };

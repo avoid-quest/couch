@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { TryAgain } from "@/components/TryAgain";
 import { radioSourcesQuery } from "@/api/radio";
 import { streamingCommunityQuery } from "@/api/settings";
+import { coreSentence } from "@/api/client";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
@@ -87,16 +88,14 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
         ))}
         {failed.length > 0 && (
           <Alert variant="destructive">
-            <AlertDescription>Couldn't load sources.</AlertDescription>
+            <AlertDescription>
+              {coreSentence(failed[0]!.error) ?? "Couldn't load sources."}
+            </AlertDescription>
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
+              <TryAgain
                 disabled={!available}
                 onClick={() => failed.forEach((query) => void query.refetch())}
-              >
-                Try again
-              </Button>
+              />
             </AlertAction>
           </Alert>
         )}

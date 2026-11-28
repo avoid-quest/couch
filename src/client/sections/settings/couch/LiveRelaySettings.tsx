@@ -7,10 +7,11 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 import { liveRelayQuery, localRelayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkLiveRelay } from "@/session/check-live-relay";
-import { notice } from "@/toasts";
+import { confirmed, notice } from "@/toasts";
 import type {
   LiveRelay,
   LiveRelaySettings as RelaySettings,
@@ -65,7 +66,7 @@ export function LiveRelaySettings({
     onSuccess: (result) => {
       client.setQueryData(liveRelayQuery(credentials).queryKey, result);
       setDraft(null);
-      notice(result.relay ? "External relay saved" : "External relay removed");
+      confirmed(result.relay ? "External relay saved" : "External relay removed");
     },
   });
   const busy = !connected || query.isPending || query.isError || save.isPending || check.isPending;
@@ -137,9 +138,7 @@ export function LiveRelaySettings({
           <AlertDescription>{local.error?.message ?? toggle.error?.message}</AlertDescription>
           {local.isError && (
             <AlertAction>
-              <Button variant="outline" onClick={() => void local.refetch()}>
-                Try again
-              </Button>
+              <TryAgain onClick={() => void local.refetch()} />
             </AlertAction>
           )}
         </Alert>
@@ -238,9 +237,7 @@ export function LiveRelaySettings({
           </AlertDescription>
           {query.isError && (
             <AlertAction>
-              <Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>
-                Try again
-              </Button>
+              <TryAgain disabled={!connected} onClick={() => void query.refetch()} />
             </AlertAction>
           )}
         </Alert>

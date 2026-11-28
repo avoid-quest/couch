@@ -9,6 +9,7 @@ const portals =
   '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
 const localOnly = "[data-tv-local-only], .tv-local-only";
 const toaster = "[data-sonner-toaster]";
+const toastButtons = "[data-button], [data-close-button]";
 const navigationRow = '[data-nav-row], [data-slot="field"], [data-slot="alert"]';
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
@@ -28,6 +29,7 @@ const visible = (element: HTMLElement) =>
   rendered(element) &&
   !element.closest('[inert], [aria-hidden="true"]') &&
   !element.matches(':disabled, [aria-disabled="true"]');
+const sidePlayer = '[data-now-playing][data-size="side"]';
 const lastVisible = (selector: string) =>
   [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
 const navigationScope = () =>
@@ -72,9 +74,15 @@ function moveFocus(key: string) {
   const scope = navigationScope();
   const controls = controlsIn(scope);
   const active = document.activeElement;
-  // Any arrow leaves a toast's action; sonner returns focus to where it came from.
+  // Left and Right go between a toast's action and its Dismiss; Up and Down leave it, as sonner returns focus to where
+  // it came from.
   if (active instanceof HTMLElement && active.closest(toaster)) {
-    active.blur();
+    const buttons = [
+      ...(active.closest("[data-sonner-toast]")?.querySelectorAll<HTMLElement>(toastButtons) ?? []),
+    ].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+    const next = buttons[buttons.indexOf(active) + (key === "ArrowRight" ? 1 : -1)];
+    if ((key === "ArrowLeft" || key === "ArrowRight") && next) next.focus();
+    else if (key === "ArrowUp" || key === "ArrowDown") active.blur();
     return;
   }
   if (
@@ -82,6 +90,8 @@ function moveFocus(key: string) {
     !scope.contains(active) ||
     !visible(active) ||
     active === scope ||
+    // A page's hidden heading holds the focus only until its first control arrives (focusPageControl).
+    active.matches('[data-page] h1.sr-only[tabindex="-1"]') ||
     (remoteNavigation && active.closest(localOnly))
   ) {
     focus(entry(controls));
@@ -93,6 +103,21 @@ function moveFocus(key: string) {
     );
     if (first) {
       focus(first);
+      return;
+    }
+  }
+  // Up from the top of the full player's band (no timeline above) reaches what stands under the title (a station's
+  // notes and their links) before the top bar, though it stands beside the picture: its lowest line, from the left.
+  const band = key === "ArrowUp" ? active.closest("[data-player-band]") : null;
+  if (
+    band &&
+    !controls.some((element) => band.contains(element) && box(element).bottom <= box(active).top)
+  ) {
+    const notes = controls
+      .filter((element) => element.closest("[data-player-summary]"))
+      .sort((a, b) => box(b).bottom - box(a).bottom || box(a).left - box(b).left);
+    if (notes[0]) {
+      focus(notes[0]);
       return;
     }
   }
@@ -115,11 +140,26 @@ function moveFocus(key: string) {
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const own = active.closest(navigationRow);
   const row = key === "ArrowRight" ? own : null;
+  // The side player is a column of its own, at either side: Up and Down stay in it, or beside it, and Left and Right
+  // cross over.
+  const side = active.closest(sidePlayer);
   const destinations = row
     ? controls.filter((element) => row.contains(element))
-    : !horizontal && content?.contains(active)
-      ? controls.filter((element) => !element.closest("[data-nav-rail]"))
+    : !horizontal
+      ? controls.filter(
+          (element) =>
+            !!element.closest(sidePlayer) === !!side &&
+            !(content?.contains(active) && element.closest("[data-nav-rail]")),
+        )
       : controls;
+  let strip = row ? active.parentElement : null;
+  while (
+    strip &&
+    row?.contains(strip) &&
+    !["auto", "scroll"].includes(getComputedStyle(strip).overflowX)
+  )
+    strip = strip.parentElement;
+  if (strip && !row?.contains(strip)) strip = null;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2,
     cy = from.y + from.height / 2;
@@ -133,7 +173,7 @@ function moveFocus(key: string) {
       : Math.max(to.left - from.right, from.left - to.right);
     return gap < 0 ? 0 : gap * 2 + 1000;
   };
-  // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
+  // The header and the footer (the capsule or the dock, phone tabs) come after the page's controls, which scroll under them.
   const bar =
     key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
@@ -173,7 +213,13 @@ function moveFocus(key: string) {
       return { element, forward, beside, score: forward + penalty + (last(element) ? 100_000 : 0) };
     })
     .filter((candidate) => candidate.forward > 1 && !candidate.beside)
-    .sort((a, b) => a.score - b.score);
+    // Right walks a line that scrolls sideways (Home's Browse doors) to its end before what stands beside it, though
+    // that is nearer than a door still scrolled out of sight.
+    .sort(
+      (a, b) =>
+        (strip ? Number(!strip.contains(a.element)) - Number(!strip.contains(b.element)) : 0) ||
+        a.score - b.score,
+    );
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
   // score. The header and the footer still come last: the page scrolls under the sticky header.
@@ -201,6 +247,23 @@ function moveFocus(key: string) {
   const best = next
     ? candidates.find((candidate) => next.contains(candidate.element))
     : candidates[nearest];
+  // Left and Right between the page and the side player (at either side) cross over though nothing there lines up,
+  // from a row's last control too: to the other column's control nearest in height.
+  const across =
+    horizontal && !best
+      ? controls
+          .filter((element) => element !== active && !!element.closest(sidePlayer) !== !!side)
+          .map((element) => {
+            const to = box(element);
+            return {
+              element,
+              forward: (to.x + to.width / 2 - cx) * sign,
+              distance: Math.abs(to.y + to.height / 2 - cy),
+            };
+          })
+          .filter((candidate) => candidate.forward > 1)
+          .sort((a, b) => a.distance - b.distance)[0]?.element
+      : undefined;
   const rail =
     key === "ArrowLeft" && content?.contains(active) && !content.contains(best?.element ?? null)
       ? controls.find((element) => element.matches('[data-nav-rail] [aria-current="page"]'))
@@ -212,17 +275,27 @@ function moveFocus(key: string) {
           visible,
         )
       : undefined;
-  // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
-  // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
+  // Up or Down with nothing further (the header's tabs, the top of the player's band, the page's foot) reaches the newest
+  // toast's action, or its Dismiss when it has none, at the top or the bottom. Sonner keeps the toasts past the two it
+  // shows, and each one leaving, mounted but unseen.
   const toast =
-    key === "ArrowUp" && !best
+    (key === "ArrowUp" || key === "ArrowDown") && !best
       ? [
           ...scope.querySelectorAll<HTMLElement>(
-            `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`,
+            `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"])`,
           ),
-        ].find((element) => visible(element) && (!remoteNavigation || !element.closest(localOnly)))
+        ]
+          .map(
+            (message) =>
+              message.querySelector<HTMLElement>("[data-button]") ??
+              message.querySelector<HTMLElement>("[data-close-button]"),
+          )
+          .find(
+            (element): element is HTMLElement =>
+              !!element && visible(element) && (!remoteNavigation || !element.closest(localOnly)),
+          )
       : undefined;
-  focus(rail ?? tab ?? best?.element ?? toast);
+  focus(rail ?? tab ?? best?.element ?? across ?? toast);
 }
 
 /** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */
@@ -474,9 +547,12 @@ export function useNavigation(onBack: () => void) {
       if (event.key === "Escape" || (isTvPresentation() && event.key === "BrowserBack")) {
         if (lastVisible(portals)) return;
         event.preventDefault();
-        // Back on a toast's action leaves it, as sonner returns focus to where it came from.
-        if (target?.closest(toaster)) {
-          target.blur();
+        // Back on a focused toast dismisses it with its own close button, after leaving it, as sonner returns focus to
+        // where it came from.
+        const message = target?.closest(toaster) && target.closest("[data-sonner-toast]");
+        if (message) {
+          target!.blur();
+          message.querySelector<HTMLElement>("[data-close-button]")?.click();
           return;
         }
         const localBack = [

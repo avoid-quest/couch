@@ -4,6 +4,7 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 import { lanHttpQuery, originDomainQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -193,14 +194,7 @@ export function NetworkSettings({
             </AlertDescription>
             {lanHttp.error && (
               <AlertAction>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!connected}
-                  onClick={() => void lanHttp.refetch()}
-                >
-                  Try again
-                </Button>
+                <TryAgain disabled={!connected} onClick={() => void lanHttp.refetch()} />
               </AlertAction>
             )}
           </Alert>
@@ -220,14 +214,7 @@ export function NetworkSettings({
             </AlertDescription>
             {originDomain.error && !saveDomain.error && (
               <AlertAction>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!connected}
-                  onClick={() => void originDomain.refetch()}
-                >
-                  Try again
-                </Button>
+                <TryAgain disabled={!connected} onClick={() => void originDomain.refetch()} />
               </AlertAction>
             )}
           </Alert>

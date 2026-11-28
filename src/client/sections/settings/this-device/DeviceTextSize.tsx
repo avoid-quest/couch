@@ -21,6 +21,7 @@ export function DeviceTextSize() {
       <SettingsRow label="Text size" description="Not video or subtitles.">
         <ChoiceGroup
           label="Text size on this device"
+          variant="segmented"
           value={String(size)}
           options={sizeChoices}
           onValueChange={(value) => void change(Number(value) as InterfaceSize)}

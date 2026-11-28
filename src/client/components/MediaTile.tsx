@@ -53,6 +53,7 @@ export function MediaTile({
   logo = false,
   natural = false,
   progress,
+  badge,
   dim = false,
   source,
   className,
@@ -78,6 +79,8 @@ export function MediaTile({
   /** Home's shelves and Saved size the frame to the picture itself (a letterboxed frame without its bars), so it fills it. */
   natural?: boolean;
   progress?: number;
+  /** A word over the artwork's corner: "New" on a followed list's latest. */
+  badge?: string;
   /** Not available now (an offline channel): the artwork dims. */
   dim?: boolean;
   /** Its addresses (a page's URL; a station's `radio:{id}` and stream URL): while it is what plays, its artwork shows the level. */
@@ -125,6 +128,11 @@ export function MediaTile({
               className="block h-full bg-white"
               style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }}
             />
+          </span>
+        )}
+        {badge && (
+          <span className="absolute top-2 left-2 rounded-full bg-foreground px-2.5 py-0.5 text-caption font-semibold text-background">
+            {badge}
           </span>
         )}
         <ArtLevel level={level} className="size-8 text-base" />

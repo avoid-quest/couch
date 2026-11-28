@@ -1,4 +1,4 @@
-import { dismissPlaybackFeedback, failed, notice } from "../toasts";
+import { dismissPlaybackFeedback, failed, notice, sharingStopped } from "../toasts";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type {
@@ -387,6 +387,17 @@ export function useSession(
           uploadUrl,
           failed: (error) => {
             if (isCurrent()) failed(error.message);
+          },
+          // Share again opens the panel on the kind that ended (sections/share/share-view.ts).
+          ended: (source, surface) => {
+            if (isCurrent())
+              sharingStopped(() =>
+                dispatchEvent(
+                  new CustomEvent("couch-share-again", {
+                    detail: { capture: source.kind, surface, intent: source.intent },
+                  }),
+                ),
+              );
           },
           published: (source) => {
             if (isCurrent()) {

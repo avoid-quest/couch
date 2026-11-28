@@ -1,4 +1,6 @@
+import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { useRadioClock } from "@/radio-clock";
+import { restoredByUndo } from "@/session/undo";
 import {
   defaultStringifySearch,
   Link,
@@ -14,13 +16,14 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ErrorInfo,
   type PropsWithChildren,
   type ReactNode,
   type RefObject,
 } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { BookmarkIcon, HouseIcon, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
+import { BookmarkIcon, HouseIcon, SettingsIcon, TvIcon, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import { freshRadioProgramme, type RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -37,7 +40,10 @@ import {
 } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
+import { NowPlaying, type PlayerSize } from "./NowPlaying";
+import { useBottomBar } from "./bottom-bar";
+import { RoomLight, useRoomLight } from "./RoomLight";
+import { usePlayerSide } from "./player-side";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
@@ -54,9 +60,10 @@ import {
   type SettingsPage,
 } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
+import { PageProblem } from "@/components/PageProblem";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
 import { TvRest, useTvName } from "./TvRest";
@@ -68,20 +75,24 @@ import {
 } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
-import { dismiss, waitingForTap } from "@/toasts";
+import { failed } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
-import { ShellContext } from "./shell-context";
+import { RoomStyle, ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
 import { TvPairing } from "./TvPairing";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
-import { UpdateCue } from "@/sections/updates/UpdateCue";
+import { UpdateCue, useUpdatesReady } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
+import { SharePlayer } from "@/sections/share/SharePlayer";
+import { ChooseLayer } from "@/components/ChooseWherePlays";
+import { showShare, useShareView } from "@/sections/share/share-view";
+import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
+import { useTrayStatus } from "./tray-status";
 import { useMediaSession } from "@/session/media-session";
 import { reloadAppShell } from "@/register-sw";
-import { hear, onBlocked } from "@/session/renderer";
 import { showsPicture } from "@/session/device-id";
 
 // The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
@@ -95,6 +106,7 @@ const sections: [string, LucideIcon][] = [
 export type ShellValue = ReturnType<typeof useShellValue>;
 export { useShell } from "./shell-context";
 import { useShell } from "./shell-context";
+import type { PlayOn } from "../../../shared/protocol";
 
 function useShellValue() {
   const {
@@ -109,6 +121,7 @@ function useShellValue() {
     setError,
     videoQualityPreference,
     playerTarget,
+    localLiveSourceId,
   } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
@@ -195,6 +208,8 @@ function useShellValue() {
   const pickedPicture = useRef<string | null>(null);
   const selectPlayback = async (id: string) => {
     const picked = state?.playbacks?.find((playback) => playback.id === id);
+    // Choosing a Playback shows it in the player, in place of this device's share.
+    if (!picked?.liveSourceId || picked.liveSourceId !== localLiveSourceId) showShare(false);
     // Picking a film already showing here keeps the page we picked it from.
     pickedPicture.current = id !== state?.playback && showsPicture(picked) ? id : null;
     if (!(await run({ type: "selectPlayback", playbackId: id }))) {
@@ -235,7 +250,8 @@ function useShellValue() {
       !picked &&
       current.settled &&
       (newlySelected || explicitlyStarted) &&
-      section !== "Now"
+      section !== "Now" &&
+      !restoredByUndo()
     )
       openPlayer();
     current.picture = picture;
@@ -250,10 +266,10 @@ function useShellValue() {
     if (section === "Now") void router.navigate({ href: lastBrowsePath.current }).then(focus);
     else focus();
   };
-  // A source without a home scopes the header's field to itself, so there is one search field, not two.
+  // A source without a home scopes the header's field to itself (a kind, to its sources), so there is one search field.
   const [searchScope, setSearchScope] = useState<SearchScope | null>(null);
-  const scopeSearch = (source: string) => {
-    setSearchScope({ source });
+  const scopeSearch = (scope: string | SearchScope) => {
+    setSearchScope(typeof scope === "string" ? { source: scope } : scope);
     focusSearch();
   };
   const leavePlayer = () => {
@@ -280,7 +296,7 @@ function useShellValue() {
   const enqueueProvider = (
     item: ProviderItem,
     playNow: boolean,
-    deviceId?: string,
+    on?: PlayOn,
     quality = videoQualityPreference.quality,
   ) =>
     run({
@@ -293,18 +309,18 @@ function useShellValue() {
       ...(item.collection ? { collection: item.collection } : {}),
       ...(["bandcamp", "soundcloud"].includes(item.provider) ? {} : { quality }),
       playNow,
-      deviceId,
+      ...on,
     });
-  const enqueueRadio = (station: RadioStation, playNow: boolean, deviceId?: string) => {
+  const enqueueRadio = (station: RadioStation, playNow: boolean, on?: PlayOn) => {
     const owner = installationId;
     const result = run(
       station.sourceId
-        ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, deviceId }
+        ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, ...on }
         : {
             type: "enqueue",
             entry: { id: createId(), title: station.name, source: station.url, kind: "radio" },
             playNow,
-            deviceId,
+            ...on,
           },
     );
     // Recents record what actually played, not what was queued or attempted.
@@ -338,7 +354,7 @@ function useShellValue() {
       ...body
     }: {
       mediaId: string;
-      on?: string;
+      on?: PlayOn;
       fromStart: boolean;
       profileId: string;
       selection?: HistorySelection;
@@ -446,16 +462,9 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
   override render() {
     if (!this.state.error) return this.props.children;
     return (
-      <main id="main" className="px-(--gutter) py-6">
-        <Alert variant="destructive">
-          <AlertDescription>{this.state.error.message}</AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => this.setState({ error: null })}>
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      </main>
+      <PageProblem>
+        <TryAgain onClick={() => this.setState({ error: null })} />
+      </PageProblem>
     );
   }
 }
@@ -481,30 +490,15 @@ export function AppShell() {
 
 function MediaSessionBridge() {
   useMediaSession();
-  useTapToHear();
   return null;
-}
-
-// A browser that needs a gesture before it plays sound asks for one on its own screen (#644).
-function useTapToHear() {
-  useEffect(() => {
-    const unsubscribe = onBlocked((blocked) => {
-      if (blocked) waitingForTap(hear);
-      else dismiss("tap-to-hear");
-    });
-    return () => {
-      unsubscribe();
-      dismiss("tap-to-hear");
-    };
-  }, []);
 }
 
 const isOffline = (status: string) => status === "server-unavailable" || status === "reconnecting";
 
-// Connection and player state as one quiet line; red only for errors that need a decision. Offline is the header's
-// (HeaderOffline) while Couch reconnects on its own; the line stays for the app pointed at another Couch, which offers
-// to try again or use this computer.
-function ConnectionStatus({ paired }: { paired: boolean }) {
+// The whole app's problems (Couch out of reach, refusing this address, updated, its player unavailable) as one quiet
+// line in one fixed place: the header's status row, or the pairing page when there is no header. The app pointed at
+// another Couch offers to try again or use this computer.
+function ConnectionStatus() {
   const { nativeHost, localHost, state, status, details, credentials, connected, reconnect } =
     useSessionGate();
   const device = usePlaybackDevice();
@@ -514,30 +508,16 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
       details?.name ??
       (remoteApp && device?.address ? device.address.replace(/^https?:\/\//i, "") : undefined),
   );
-  const recovery = remoteApp && (
-    <>
-      <Button variant="ghost" size="sm" onClick={reconnect}>
-        {TRY_AGAIN}
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>
-        Use this computer
-      </Button>
-    </>
-  );
   if (status === "connection-rejected")
     return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          {name} refused this address. Open Couch at the address it shows.
-        </AlertDescription>
-      </Alert>
+      <StatusLine>{name} refused this address. Open Couch at the address it shows.</StatusLine>
     );
   if (status === "build-mismatch")
     return (
       <StatusLine
         actions={
-          <Button variant="ghost" size="sm" onClick={() => void reloadAppShell()}>
-            {TRY_AGAIN}
+          <Button variant="secondary" size="sm" onClick={() => void reloadAppShell()}>
+            Reload
           </Button>
         }
       >
@@ -545,8 +525,20 @@ function ConnectionStatus({ paired }: { paired: boolean }) {
       </StatusLine>
     );
   if (isOffline(status))
-    return paired && !remoteApp ? null : (
-      <StatusLine busy actions={recovery}>
+    return (
+      <StatusLine
+        busy
+        actions={
+          remoteApp && (
+            <>
+              <TryAgain onClick={reconnect} />
+              <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>
+                Use this computer
+              </Button>
+            </>
+          )
+        }
+      >
         {offline(name)}
       </StatusLine>
     );
@@ -597,7 +589,9 @@ function PairingPage({ status }: { status: ReactNode }) {
       <Onboarding title="Starting Couch" description={couch || undefined}>
         {status}
         {booting ? (
-          <StatusLine busy>Starting…</StatusLine>
+          <StatusLine busy dismissible={false}>
+            Starting…
+          </StatusLine>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
@@ -680,9 +674,11 @@ function ShellChrome({ children }: PropsWithChildren) {
     run,
     error,
     setError,
+    localLiveSourceId,
   } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
+  useTrayStatus(statusLabel);
   const setupPending = useLocalSetupPending(credentials);
   useEffect(() => {
     if (!tvPresentation) return;
@@ -710,31 +706,79 @@ function ShellChrome({ children }: PropsWithChildren) {
   const remoteVisible = useMatches({
     select: (matches) => matches.some((match) => match.routeId === "/remote"),
   });
-  // Home's top item is what plays, with its own transport, whenever something does.
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
   const tvName = useTvName();
   useRememberCouchName(installationName);
+  // The player follows this device's share as it starts, even while nobody receives it; choosing or starting another
+  // Playback shows that one instead, and the header's pill shows the share again (share-view.ts).
+  const shareView = useShareView();
+  useEffect(() => showShare(!!localLiveSourceId), [localLiveSourceId]);
+  useEffect(() => {
+    const playback = state?.playbacks?.find((item) => item.id === state.playback);
+    if (playback && playback.liveSourceId !== localLiveSourceId) showShare(false);
+  }, [state?.playback, state?.currentEntryId]);
+  const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
+  // The full share is modal: what it covers is out of reach of focus and screen readers; messages stay reachable.
+  const shareFull = !!state && sharing && shareView.full;
+  const phone =
+    useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
+  // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again. A phone's
+  // dock shows the selected Live source before it joins too, with Join where Play would be.
+  const outside = livePlayback(state) && !playbackControls(state).leave && !phone;
   const nowPlaying =
-    !!current &&
-    (active || player?.status === "error" || player?.status === "ended") &&
+    (sharing ||
+      (!!current &&
+        !outside &&
+        (active || player?.status === "error" || player?.status === "ended"))) &&
     !playerVisible &&
     !remoteVisible;
-  // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
+  // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and
+  // is the dock above a phone's tabs.
+  const [minimised, setMinimised] = useState(false);
+  const { side: playerSide } = usePlayerSide();
+  const playerSize: PlayerSize = phone ? "dock" : minimised ? "mini" : "side";
+  const sidePlayer = paired && nowPlaying && !!state && playerSize === "side";
+  // The footer holds the capsule or the dock and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
-  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying);
+  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying && !sidePlayer);
+  const nowPlayingView =
+    state && sharing ? (
+      <SharePlayer
+        state={state}
+        size={playerSize}
+        side={playerSide}
+        onSize={(size) => setMinimised(size === "mini")}
+      />
+    ) : (
+      state && (
+        <NowPlaying
+          state={state}
+          connected={connected}
+          run={run}
+          size={playerSize}
+          side={playerSide}
+          onOpen={() => shell.openPlayer()}
+          onSize={(size) => setMinimised(size === "mini")}
+        />
+      )
+    );
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
+  const room = useRoomLight();
 
-  const status = (
-    <>
-      <ConnectionStatus paired={paired} />
-      {error && section !== "Remote" && (
-        <ErrorAlert error={error} onDismiss={() => setError(null)} />
-      )}
-    </>
-  );
+  // A failed action is a message beside nothing else (docs/design.md "Problems").
+  useEffect(() => {
+    if (!error) return;
+    failed(error);
+    setError(null);
+  }, [error]);
+  // Core couldn't save progress or Up next: said once each time it starts failing.
+  const progressError = state?.progressError;
+  useEffect(() => {
+    if (progressError) failed(progressError);
+  }, [progressError]);
 
   if (setupPending)
     return (
@@ -746,149 +790,170 @@ function ShellChrome({ children }: PropsWithChildren) {
   return (
     <div
       className={cn(
-        "app-shell flex flex-col bg-background",
+        "app-shell flex flex-col",
         tvPresentation && "tv-shell",
         !paired && "drag-region",
       )}
+      data-side-player={sidePlayer || undefined}
+      data-player-side={playerSide}
+      style={room.style}
+      data-light={room.state}
     >
-      <main id="main" className="flex flex-1 flex-col">
-        {tvPresentation && paired && (
-          <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
-        )}
-        {tvPresentation && state?.appearance && (
-          <TvAppearancePreview
-            appearance={state.appearance}
-            credentials={credentials}
-            connected={connected}
-          />
-        )}
-        <div
-          className="tv-browser flex flex-1 flex-col"
-          data-tv-navigation-scope={tvPresentation ? "" : undefined}
-        >
-          <span role="status" className="sr-only">
-            {statusLabel}
-          </span>
-          {/* One header on every screen, the TV's: the Couch switch at the left (the TV names itself there),
+      <RoomLight picture={room.picture} />
+      <RoomStyle value={room.style}>
+        <main id="main" className="flex flex-1 flex-col">
+          {tvPresentation && paired && (
+            <TvRest playing={player?.status === "playing" || player?.status === "loading"} />
+          )}
+          {tvPresentation && state?.appearance && (
+            <TvAppearancePreview
+              appearance={state.appearance}
+              credentials={credentials}
+              connected={connected}
+            />
+          )}
+          <div
+            className="tv-browser flex flex-1 flex-col"
+            data-tv-navigation-scope={tvPresentation ? "" : undefined}
+          >
+            <span role="status" className="sr-only">
+              {statusLabel}
+            </span>
+            {/* One header on every screen, the TV's: the Couch switch at the left (the TV names itself there),
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. Unpaired there is none: the pairing page stands alone. */}
-          {paired && (
-            <header
-              ref={header}
-              hidden={onPlayer}
-              className="app-header drag-region @container/header sticky top-0 z-30 shrink-0 bg-background motion-safe:transition-colors motion-safe:duration-200"
-            >
-              <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
-                {/* On a phone the open search takes the whole row. */}
-                <div className="app-header-couch flex min-w-0 items-center">
-                  {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
-                  {tvPresentation ? (
-                    <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground">
-                      <CouchMark connected={connected} />
-                      <span className="truncate">{tvName}</span>
-                    </span>
-                  ) : (
-                    <CouchSwitch
-                      key={pathname}
-                      credentials={credentials}
-                      connected={connected}
-                      status={statusLabel}
-                      installationName={installationName}
-                      onShortcuts={
-                        section !== "Remote"
-                          ? (opener) => {
-                              shortcutsOpener.current = opener;
-                              setShortcutsOpen(true);
-                            }
-                          : undefined
-                      }
-                    />
+            {paired && (
+              <header
+                ref={header}
+                hidden={onPlayer}
+                inert={shareFull}
+                className="app-header room-ground drag-region @container/header sticky top-0 z-30 shrink-0"
+              >
+                <div className="app-header-controls drag-region window-controls-inset grid min-h-16 items-center gap-x-3 gap-y-2 px-(--gutter) py-3">
+                  {/* On a phone the open search takes the whole row. */}
+                  <div className="app-header-couch flex min-w-0 items-center">
+                    {/* The TV has no Couch switch: its Couch choice lives in Settings → This device. */}
+                    {tvPresentation ? (
+                      <span className="flex min-w-0 items-center gap-2 font-display text-lg font-semibold tracking-tight [font-stretch:118%]">
+                        <CouchMark connected={connected} />
+                        <span className="truncate">{tvName}</span>
+                      </span>
+                    ) : (
+                      <CouchSwitch
+                        key={pathname}
+                        credentials={credentials}
+                        connected={connected}
+                        status={statusLabel}
+                        installationName={installationName}
+                        onShortcuts={
+                          section !== "Remote"
+                            ? (opener) => {
+                                shortcutsOpener.current = opener;
+                                setShortcutsOpen(true);
+                              }
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                  {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
+                  <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
+                  {/* Share stands after the search, and becomes the share's pill while this device shares. */}
+                  <HeaderSearch className="app-header-search w-full" />
+                  <ShareControl />
+                  {tvPresentation && (
+                    <DigitalClock className="app-header-tools text-muted-foreground" />
                   )}
                 </div>
-                {/* Phones keep the sections in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-                <SectionTabs className="app-header-nav flex items-center gap-1 touch:hidden tv:flex" />
-                {/* Share keeps a compact entry slot. Its active capsule occupies its own grid row, so neither it nor
-                  variable status text can move or resize navigation and search. HeaderSearch stays mounted. */}
-                <ShareControl />
-                <HeaderSearch className="app-header-search w-full" />
-                {tvPresentation && (
-                  <DigitalClock className="app-header-tools text-muted-foreground" />
-                )}
-              </div>
-              <div
-                data-app-status
-                className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 empty:hidden"
-              >
-                <HeaderOffline />
-                {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (
-                  <UpdateCue />
-                )}
-              </div>
-              {/* Notices are part of the measured header, above a Stage's artwork, with no space when empty. */}
-              {!onPlayer && (
-                <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden">{status}</div>
-              )}
-            </header>
-          )}
-          <AppPage>
-            {onPlayer && error && (
-              <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3">
-                <ErrorAlert error={error} onDismiss={() => setError(null)} />
-              </div>
-            )}
-            {!paired ? (
-              <PairingPage status={status} />
-            ) : (
-              <>
-                {!tvPresentation && section !== "Remote" && (
-                  <KeyboardShortcuts
-                    open={shortcutsOpen}
-                    onOpenChange={setShortcutsOpen}
-                    openerRef={shortcutsOpener}
-                  />
-                )}
-                {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. The page is its own layer,
-                  so a Stage's room lies under its content and over the shell's black. */}
+                {/* The whole app's one status place, inside the measured header: nothing over the page's content.
+                  It takes no room while it holds only a dismissed line or the update cue's announcement. */}
                 <div
-                  className={cn("isolate min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-8 pb-12")}
+                  data-app-status
+                  className="flex flex-wrap items-center gap-2 px-(--gutter) pb-3 not-has-[>:not([hidden],.sr-only)]:pb-0"
                 >
-                  {children}
+                  <ConnectionStatus />
+                  {!["updates", "device-updates"].includes(settingsPageForPath(pathname) ?? "") && (
+                    <UpdateCue />
+                  )}
                 </div>
-              </>
+              </header>
             )}
-          </AppPage>
-          {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
-              the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
-          {paired && (
-            <div
-              ref={footer}
-              className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
-            >
-              {nowPlaying && state && (
-                <NowPlayingBar
-                  state={state}
-                  connected={connected}
-                  run={run}
-                  onOpen={shell.openPlayer}
-                />
+            {sidePlayer && (
+              <div inert={shareFull} className="contents">
+                {nowPlayingView}
+              </div>
+            )}
+            <AppPage inert={shareFull}>
+              {!paired ? (
+                <PairingPage status={<ConnectionStatus />} />
+              ) : (
+                <>
+                  {!tvPresentation && section !== "Remote" && (
+                    <KeyboardShortcuts
+                      open={shortcutsOpen}
+                      onOpenChange={setShortcutsOpen}
+                      openerRef={shortcutsOpener}
+                    />
+                  )}
+                  {/* Cached routes appear immediately; the player fades in without freezing the page for snapshots. */}
+                  <div
+                    className={cn(
+                      "isolate min-w-0 flex-1",
+                      !onPlayer && "px-(--gutter) pt-8 pb-12",
+                    )}
+                  >
+                    {children}
+                  </div>
+                </>
               )}
-              <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
-            </div>
-          )}
-          {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
-          <Toaster tvPresentation={tvPresentation} />
-        </div>
-      </main>
+            </AppPage>
+            {/* Fixed, not sticky: Chromium centres a focused control that sits inside the page's scroll padding, which
+              the footer itself fills, so focus in a sticky footer scrolled the page beneath it by hundreds of pixels. */}
+            {paired && (
+              <div
+                ref={footer}
+                inert={shareFull}
+                className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
+              >
+                {nowPlaying && !sidePlayer && nowPlayingView}
+                <SectionTabs bar className="room-ground hidden touch:flex tv:hidden" />
+              </div>
+            )}
+            {state && shareFull && (
+              <SharePlayer
+                state={state}
+                size="full"
+                side={playerSide}
+                onSize={(size) => setMinimised(size === "mini")}
+              />
+            )}
+            {paired && <ChooseLayer side={playerSide} phone={phone} />}
+            {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
+            <Toaster tvPresentation={tvPresentation} />
+            {paired && <AddToHomePanel />}
+          </div>
+        </main>
+      </RoomStyle>
     </div>
   );
 }
 
-function AppPage({ children }: PropsWithChildren) {
+// Where the phone's layout starts (the touch variant, index.css): bottom tabs, and Now playing as their dock.
+const phoneLayout = "(max-width: 959px), (pointer: coarse)";
+const subscribePhoneLayout = (onChange: () => void) => {
+  const media = window.matchMedia(phoneLayout);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isPhoneLayout = () => window.matchMedia(phoneLayout).matches;
+
+function AppPage({ children, inert }: PropsWithChildren<{ inert: boolean }>) {
   const { nativeHost, tvPresentation } = useSessionGate();
   const props = {
     className: "app-page flex min-w-0 flex-1 flex-col",
     "data-scroll-restoration-id": "app-page",
+    inert,
   };
   return nativeHost && !tvPresentation && !/Mac/.test(navigator.platform) ? (
     <ScrollArea
@@ -900,23 +965,6 @@ function AppPage({ children }: PropsWithChildren) {
     </ScrollArea>
   ) : (
     <div {...props}>{children}</div>
-  );
-}
-
-/**
- * Offline, the header's status row says so: a Spinner and "Reconnecting…" (the Spinner alone on a phone).
- * Navigation and search keep their place; the hollow mark and the shell's status region say it too.
- */
-function HeaderOffline() {
-  const { nativeHost, localHost, status } = useSessionGate();
-  if (!isOffline(status) || (nativeHost && !localHost)) return null;
-  return (
-    <span className="mr-3 flex shrink-0 items-center gap-2 text-sm text-muted-foreground tv:text-base">
-      <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className="size-3.5" />
-      <span aria-hidden="true" className="max-sm:hidden">
-        Reconnecting…
-      </span>
-    </span>
   );
 }
 
@@ -944,53 +992,56 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   const { tvPresentation, state } = useSessionGate();
   // A TV that's off still has its Remote.
   const remote = !tvPresentation && !!state?.devices?.some((device) => device.tv);
+  // A ready update is a dot on Settings, where its Updates says "Update ready".
+  const updateReady = useUpdatesReady() > 0;
   return (
     <nav data-app-nav aria-label="Main navigation" className={className}>
       {sections
         .filter(([name]) => name !== "Remote" || remote)
-        .map(([name, Icon]) => (
-          <Button
-            key={name}
-            asChild
-            variant="ghost"
-            className={cn(
-              "relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
-              bar
-                ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
-                : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",
-            )}
-          >
-            <Link
-              to={sectionUrl(name)}
-              aria-current={section === name ? "page" : undefined}
-              aria-label={name}
-              title={name}
+        .map(([name, Icon]) => {
+          const dot = name === "Settings" && updateReady;
+          return (
+            <Button
+              key={name}
+              asChild
+              variant="ghost"
+              className={cn(
+                "relative border-0 font-medium text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
+                bar
+                  ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
+                  : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",
+              )}
             >
-              <Icon
-                aria-hidden="true"
-                className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")}
-              />
-              <span
-                className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}
+              <Link
+                to={sectionUrl(name)}
+                aria-current={section === name ? "page" : undefined}
+                aria-label={dot ? `${name}, update ready` : name}
+                title={dot ? `${name}: update ready` : name}
               >
-                {name}
-              </span>
-            </Link>
-          </Button>
-        ))}
+                <Icon
+                  aria-hidden="true"
+                  className={cn("size-5", !bar && "@min-[52rem]/header:hidden tv:hidden")}
+                />
+                <span
+                  className={cn(!bar && "sr-only @min-[52rem]/header:not-sr-only tv:not-sr-only")}
+                >
+                  {name}
+                </span>
+                {dot && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full bg-foreground",
+                      bar
+                        ? "absolute top-2.5 left-[calc(50%+0.625rem)]"
+                        : "absolute top-2 right-2 @min-[52rem]/header:static tv:static",
+                    )}
+                  />
+                )}
+              </Link>
+            </Button>
+          );
+        })}
     </nav>
-  );
-}
-
-function ErrorAlert({ error, onDismiss }: { error: string; onDismiss: () => void }) {
-  return (
-    <Alert variant="destructive">
-      <AlertDescription>{error}</AlertDescription>
-      <AlertAction>
-        <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onDismiss}>
-          <X aria-hidden="true" />
-        </Button>
-      </AlertAction>
-    </Alert>
   );
 }

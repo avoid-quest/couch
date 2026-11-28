@@ -2,8 +2,10 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { coreSentence } from "@/api/client";
 import { addHidden, hiddenQuery, removeHidden } from "@/api/hidden";
 import { providerNames, type ProviderId } from "../../../../shared/providers";
 import type { HiddenRule } from "../../../../shared/hidden";
@@ -37,10 +39,15 @@ export function HiddenSettings({
     onSettled: refresh,
   });
   const pending = add.isPending || remove.isPending;
+  const failure = add.error ?? remove.error ?? rules.error;
   const error =
-    add.error?.message ||
-    remove.error?.message ||
-    (rules.error ? "Couldn't load what's hidden." : "");
+    failure &&
+    (coreSentence(failure) ??
+      (add.error
+        ? `Couldn't hide ${add.variables}.`
+        : remove.error
+          ? "Couldn't remove it."
+          : "Couldn't load what's hidden."));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -86,14 +93,7 @@ export function HiddenSettings({
           <AlertDescription>{error}</AlertDescription>
           {rules.error && (
             <AlertAction>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!available}
-                onClick={() => void rules.refetch()}
-              >
-                Try again
-              </Button>
+              <TryAgain disabled={!available} onClick={() => void rules.refetch()} />
             </AlertAction>
           )}
         </Alert>

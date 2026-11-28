@@ -25,19 +25,20 @@ export function useSettingsScope() {
 // Pages a non-admin can open but change nothing on; Devices & network, Playback and Sources each have a row anyone can use.
 const adminOnly: SettingsPage[] = ["sound", "display"];
 export type SettingsGroup = {
+  owner: "device" | "couch";
   title: string;
   subtitle: string;
-  /** The Couch's connection, shown as a dot. */ connected?: boolean;
   pages: { id: SettingsPage; locked: boolean }[];
 };
 
 /**
- * Settings' pages under their owners: This device, then the Couch by name with how it is connected. On the host they are
- * one Couch. Hardware pages need that hardware; a role locks pages, except Updates, which each viewer has once.
+ * Settings' pages under their owners, named after the real things: this device by its name, then the Couch by its name.
+ * The host has both too: what it keeps for itself, and what it keeps for everyone. Hardware pages need that hardware; a
+ * role locks pages, except Updates, which each viewer has once.
  */
 export function useSettingsGroups(): SettingsGroup[] {
-  const { details, state, identity, status } = useSessionGate();
-  const { device, couch, host, administrator } = useSettingsScope();
+  const { details, state, identity, tvPresentation } = useSessionGate();
+  const { device, couch, administrator } = useSettingsScope();
   const otherApps = state?.devices?.some(
     (device) => device.updates && device.id !== identity?.device?.id,
   );
@@ -52,34 +53,17 @@ export function useSettingsGroups(): SettingsGroup[] {
     (id !== "updates" ||
       (updatesPage(administrator) === id &&
         (!!couchApp?.updates || !!details?.updates || !!otherApps)));
-  const pages = (owner?: "device" | "couch") =>
+  const pages = (owner: "device" | "couch") =>
     (Object.keys(settingsPages) as SettingsPage[])
-      .filter((id) => visible(id) && (!owner || settingsPages[id].owner === owner))
+      .filter((id) => visible(id) && settingsPages[id].owner === owner)
       .map((id) => ({ id, locked: !administrator && adminOnly.includes(id) }));
-  if (host)
-    return [
-      {
-        title: couch,
-        subtitle:
-          details?.tvPresentation || details?.tvAppliance
-            ? "This TV runs it"
-            : "This computer runs it",
-        pages: pages(),
-      },
-    ];
-  const connection =
-    status === "connected"
-      ? "Connected"
-      : ["connecting", "syncing", "reconnecting"].includes(status)
-        ? "Reconnecting"
-        : "Offline";
   return [
-    { title: "This device", subtitle: device, pages: pages("device") },
     {
-      title: couch,
-      subtitle: administrator ? `${connection}, admin` : connection,
-      connected: status === "connected",
-      pages: pages("couch"),
+      owner: "device",
+      title: device,
+      subtitle: tvPresentation ? "This TV" : "This device",
+      pages: pages("device"),
     },
+    { owner: "couch", title: couch, subtitle: "For everyone", pages: pages("couch") },
   ];
 }

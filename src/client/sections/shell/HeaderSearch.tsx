@@ -38,6 +38,7 @@ import {
   type SearchScope,
 } from "@/search-palette";
 import { ScopeChips } from "@/sections/find/ScopeChips";
+import { scopeRoom } from "@/sections/find/Room";
 import { isTvPresentation } from "@/session/presentation";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/shell-context";
@@ -155,9 +156,10 @@ export function HeaderSearch({ className }: { className?: string }) {
   }, [installationId]);
   const search = (query: string, action: "clear" | "submit" | "enter" = "clear") => {
     if (!query && !results) return;
+    // Clearing goes Home, or back to the room of the source it was narrowed to.
     const href = query
       ? searchLocation({ query, ...(isLink(query) ? { source: "All" } : scope) })
-      : "/";
+      : (scopeRoom(scope) ?? "/");
     if (query && !isLink(query) && installationId)
       setRecents(rememberSearch(installationId, query));
     if (action !== "clear") setOpen(false);

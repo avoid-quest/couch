@@ -13,6 +13,7 @@ import type { SetupStep } from "./setup";
 import type { SoundRouteState } from "./sound";
 import type { UpdateAction, UpdateState } from "./app-bridge";
 import type { DisplayAction, DisplayState } from "./display";
+import type { GroupMember, MixerGroup } from "./mixer-groups";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -226,6 +227,8 @@ export type SessionState = {
   appearance?: TvAppearance;
   // Couch-wide, admin-managed opt-in for shared live-source chooser requests. Defaults to false.
   askEveryDevice?: boolean;
+  // The Couch's Groups, which everyone sees and applies; the host and admins save them.
+  groups?: MixerGroup[];
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
   radioProgramme?: RadioProgramme | null;
@@ -245,6 +248,7 @@ type CouchState = Pick<
   | "setupStep"
   | "appearance"
   | "askEveryDevice"
+  | "groups"
   | "administratorClaimed"
   | "activeProfile"
   | "preferences"
@@ -269,6 +273,7 @@ export type Action =
     }
   | { type: "updateLiveMetadata"; sourceId: string; metadata: LiveMetadata }
   | { type: "endLive"; sourceId: string }
+  // A listener leaves a Playback: its item's playbackId, or its PlaybackSummary id.
   | { type: "leave"; playbackId: string }
   // The host or an administrator removes a Live audio listener from a Playback (its PlaybackSummary id).
   | { type: "removeLiveListener"; playbackId: string; deviceId: string }
@@ -286,14 +291,17 @@ export type Action =
   | { type: "compressor"; playbackId: string; settings: Partial<CompressorSettings> }
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "askEveryDevice"; enabled: boolean }
+  // The host or an admin saves a Group (a new one without id) or deletes one. Neither changes what plays.
+  | { type: "saveGroup"; group: { id?: string; name: string; members: GroupMember[] } }
+  | { type: "deleteGroup"; id: string }
   | { type: "control"; deviceId: string | null }
   // The PlaybackSummary id stays with the queue when its playing item changes.
   | { type: "selectPlayback"; playbackId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
-  // With playNow, deviceId plays on that Device, which this window then controls.
-  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
-  | {
+  // With playNow, Play on (PlayOn) chooses where it plays.
+  | ({ type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" } & PlayOn)
+  | ({
       type: "enqueueProvider";
       provider: ProviderId;
       url: string;
@@ -305,17 +313,15 @@ export type Action =
       quality?: VideoQuality;
       placement?: "next";
       collection?: PlaybackCollection;
-      deviceId?: string;
-    }
-  | {
+    } & PlayOn)
+  | ({
       type: "enqueueRadio";
       stationId: string;
       entryId: string;
       playNow?: boolean;
       placement?: "next";
-      deviceId?: string;
-    }
-  | {
+    } & PlayOn)
+  | ({
       type: "enqueueWeb";
       entryId: string;
       url: string;
@@ -325,8 +331,7 @@ export type Action =
       playNow?: boolean;
       fromStart?: boolean;
       placement?: "next";
-      deviceId?: string;
-    }
+    } & PlayOn)
   | { type: "remove"; entryId: string }
   // Takes every waiting entry out of Up next at once; restoreRemoved puts them back.
   | { type: "clearUpNext" }
@@ -355,14 +360,47 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   | { type: "undoStop"; stoppedId: string }
+  // Undo of a change that took devices (Play on, Move here, a device's key, a group), all or nothing, and only while
+  // each device it moved is still where it left it (left; playbackId null: nowhere) and what it started or replaced
+  // still plays its item. started stops; replaced's item plays again (paused, when it was); each restore Playback gets
+  // back the channels the change took (only those, an off one leaving) and a publisher it held; resume plays again what
+  // it paused.
+  | {
+      type: "restoreOutputs";
+      left: (Pick<Output, "deviceId" | "picture" | "sound"> & { playbackId: string | null })[];
+      started?: { playbackId: string; entryId: string };
+      replaced?: { playbackId: string; entryId: string; newEntryId: string; paused?: true };
+      restore: {
+        playbackId: string;
+        outputs: Pick<Output, "deviceId" | "picture" | "sound">[];
+        held?: string;
+      }[];
+      resume: string[];
+    }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
   // sound. allSpeakers (All, which only older clients offer) trims the Playback's existing sound from 0 to 100,
   // preserving its outputs and every Device's volume and mute.
   | { type: "solo"; deviceId: string }
   | { type: "allSpeakers"; level: number }
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the
-  // Device's sound out, more sets its volume and puts its sound in.
-  | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
+  // Device's sound out, more sets its volume and puts its sound in. With playbackId, only while that item plays there.
+  | {
+      type: "output";
+      deviceId: string;
+      picture?: boolean;
+      level?: number;
+      delay?: number;
+      playbackId?: string;
+    };
+
+/**
+ * Play on: deviceId plays it with what that Device lends, and this window then controls it. With outputs it starts
+ * there instead, deviceId among them, each Device with the picture and sound chosen for it.
+ */
+export type PlayOn = {
+  deviceId?: string;
+  outputs?: Pick<Output, "deviceId" | "picture" | "sound">[];
+};
 
 export type ClientMessage = {
   type: "command";

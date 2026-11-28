@@ -12,6 +12,10 @@ export class ApiError extends Error {
   }
 }
 
+/** Core's own sentence for a failed request, when it sent one; a network error, a timeout or a page that isn't Core's has none. */
+export const coreSentence = (reason: unknown) =>
+  reason instanceof ApiError && typeof reason.body.error === "string" ? reason.message : undefined;
+
 export async function apiFetch(
   { origin, token }: ApiCredentials,
   path: string,

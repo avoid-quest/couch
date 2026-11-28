@@ -3,19 +3,18 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { defaultStringifySearch, useLocation, useNavigate } from "@tanstack/react-router";
-import { offline, TRY_AGAIN } from "@/copy";
 import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
 import { collectionPageSize } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { NoPlaylists } from "@/components/NoPlaylists";
-import { PageHeader } from "@/components/PageHeader";
+import { RoomHead } from "@/sections/find/Room";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { FilterBar, FilterInput, FilterSelect } from "@/components/ContentFilters";
@@ -25,6 +24,7 @@ import { failed } from "@/toasts";
 import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "@/sections/find/SearchOnlineResults";
 import { formatClock } from "@/time-format";
+import type { PlayOn } from "../../../shared/protocol";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
 const liveTvLocation = ({ page = 1, filter = "", group = "" }: LiveTvSearch = {}) =>
@@ -50,16 +50,16 @@ export function useChannelActions() {
     mutationFn: ({
       channel,
       playNow,
-      deviceId,
+      on,
     }: {
       channel: GuideChannel;
       playNow: boolean;
-      deviceId?: string;
+      on?: PlayOn;
     }) =>
       playNow
         ? play(
             (on) => apiSend(credentials, `/api/iptv/channels/${channel.id}/play${playOnQuery(on)}`),
-            deviceId,
+            on,
           )
         : queue(channel.name, () => apiSend(credentials, `/api/iptv/channels/${channel.id}/queue`)),
     onError: (reason, { channel, playNow }) =>
@@ -72,11 +72,13 @@ export function useChannelActions() {
     menu: [
       {
         label: "Play on",
+        group: "play",
         disabled,
-        playOn: (deviceId) => action.mutate({ channel, playNow: true, deviceId }),
+        playOn: (on) => action.mutateAsync({ channel, playNow: true, on }).catch(() => false),
       },
       {
         label: "Queue",
+        group: "play",
         disabled: !connected || action.isPending,
         run: () => action.mutate({ channel, playNow: false }),
       },
@@ -101,7 +103,7 @@ export function useChannelLogo(channel: GuideChannel) {
 /** Every Live TV channel, which Home's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
 export function LiveTvPage() {
   const { credentials } = useShell();
-  const { connected, state } = useSessionGate();
+  const { connected } = useSessionGate();
   const search: Record<string, unknown> = useLocation().search;
   const navigate = useNavigate();
   const filter = typeof search.filter === "string" ? search.filter.slice(0, 100) : "";
@@ -151,12 +153,8 @@ export function LiveTvPage() {
     });
   return (
     <section data-page="Live TV" className="min-w-0 space-y-6">
-      <PageHeader breadcrumb={<ContentBreadcrumb />} title="Live TV" />
-      {!connected && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {offline(state?.installationName)}
-        </p>
-      )}
+      {/* No token: the header's search doesn't reach the playlists' channels, so Filter finds one. */}
+      <RoomHead title="Live TV" />
       {/* The filters wait for the guide, so an empty one never offers a choice. */}
       {none ? (
         <NoPlaylists what="channels" settings="/settings/couch/sources/live-tv" />
@@ -190,9 +188,7 @@ export function LiveTvPage() {
         <Alert variant="destructive">
           <AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription>
           <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>
-              {TRY_AGAIN}
-            </Button>
+            <TryAgain onClick={() => void guide.refetch()} />
           </AlertAction>
         </Alert>
       )}

@@ -1,13 +1,14 @@
 import { usePlaybackClock } from "@/session/playback-clock";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { ClientSessionState } from "@/session/session";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PlayButton, Time, TimeSlider, useMedia } from "@videojs/react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Action } from "../../shared/protocol";
 import { isRadio } from "../../shared/radio";
-import { heldOutOf } from "../../shared/live-input";
+import { heldOutOf, liveTitle } from "../../shared/live-input";
 import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
@@ -19,6 +20,23 @@ import { useDurationClock } from "./DurationBar";
 import { CouchMedia } from "@/session/couch-media";
 import { livePlayback, playbackControls } from "@/session/playback-controls";
 import { LiveClock } from "./LiveClock";
+import { subscribeTapToHear, tapToHear as hear, waitingForTap } from "@/session/tap-to-hear";
+import { leftLive } from "@/toasts";
+
+/** Whether this browser waits for a tap before it plays sound: the player then offers Tap to hear where Play is. */
+const useWaitingForTap = () => useSyncExternalStore(subscribeTapToHear, waitingForTap, () => false);
+function TapToHear({ pageFirst, children }: { pageFirst?: boolean; children: ReactNode }) {
+  if (!useWaitingForTap()) return children;
+  return (
+    <Button
+      data-page-first={pageFirst}
+      className="h-(--player-target) rounded-full px-4"
+      onClick={hear}
+    >
+      Tap to hear
+    </Button>
+  );
+}
 
 type Props = {
   state: ClientSessionState;
@@ -125,8 +143,15 @@ export function PlaybackTimeline({
   connected,
   pageFirst = false,
   compact = false,
+  said = false,
   className,
-}: Omit<Props, "run"> & { pageFirst?: boolean; compact?: boolean; className?: string }) {
+}: Omit<Props, "run"> & {
+  pageFirst?: boolean;
+  compact?: boolean;
+  /** Says what is left in words, "2:14 left, ends 19:09", as the side player does. */
+  said?: boolean;
+  className?: string;
+}) {
   const playbackClock = usePlaybackClock();
   const media = useMedia();
   const player = state.player;
@@ -262,10 +287,17 @@ export function PlaybackTimeline({
         </span>
         <span className="shrink-0">
           {!live && length ? (
-            <>
-              <Time.Value type="remaining" negativeSign="−" />
-              <span data-end-time> ends {formatEndTime(remaining)}</span>
-            </>
+            said ? (
+              <>
+                <Time.Value type="remaining" negativeSign="" /> left,
+                <span data-end-time> ends {formatEndTime(remaining)}</span>
+              </>
+            ) : (
+              <>
+                <Time.Value type="remaining" negativeSign="−" />
+                <span data-end-time> ends {formatEndTime(remaining)}</span>
+              </>
+            )
           ) : null}
         </span>
       </div>
@@ -273,15 +305,36 @@ export function PlaybackTimeline({
   );
 }
 
+/** "23:13 / 25:27", where the timeline shows: the full player's row says it beside Volume. */
+export function PlaybackTime({
+  state,
+  className,
+}: {
+  state: ClientSessionState;
+  className?: string;
+}) {
+  const playbackClock = usePlaybackClock();
+  const current = state.queue.find((entry) => entry.id === state.currentEntryId);
+  if (!current || !playbackControls(state).seek) return null;
+  const length = playbackClock.duration || current.duration || 0;
+  if (current.endless || isRadio(current) || !length) return null;
+  return (
+    <span data-player-time className={cn("text-sm whitespace-nowrap tabular-nums", className)}>
+      <Time.Value type="current" /> / <Time.Value type="duration" />
+    </span>
+  );
+}
+
 const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean) =>
   failed ? "Try again" : button.ended ? "Replay" : button.paused ? "Play" : "Pause";
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar, Home's hero and the remote pad,
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, Now playing and the remote pad,
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
+ * Now playing and the full player (`quiet`) read Play/Pause, Next, then Stop, as YouTube's and Twitch's players lead
+ * with Play and Next. Every one is an icon of one size, named by its label and tooltip.
  */
 export function PlaybackTransport({
   state,
@@ -289,13 +342,19 @@ export function PlaybackTransport({
   run,
   pageFirst = false,
   className,
-  moreClassName,
   participation = true,
+  quiet = false,
+  next: skip = true,
+  onLeft,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
-  moreClassName?: string;
   participation?: boolean;
+  quiet?: boolean;
+  /** Next, left out where the place is short (a phone's dock keeps it for its sheet and the full player). */
+  next?: boolean;
+  /** Leaving Live audio closes the player that showed it. */
+  onLeft?: () => void;
 }) {
   const player = state.player;
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
@@ -309,6 +368,8 @@ export function PlaybackTransport({
         connected={connected}
         run={run}
         pageFirst={pageFirst}
+        quiet={quiet}
+        onLeft={onLeft}
         className={className}
       />
     ) : null;
@@ -323,75 +384,91 @@ export function PlaybackTransport({
     nextReady && hasNext,
   ];
   const first = (slot: number) => (pageFirst && enabled.indexOf(true) === slot) || undefined;
+  const stop = (
+    <Button
+      data-page-first={first(1)}
+      variant="ghost"
+      size="icon-lg"
+      className={transportInk}
+      aria-label="Stop"
+      title="Stop"
+      disabled={!enabled[1]}
+      onClick={() => void run({ type: "stop" })}
+    >
+      <Square aria-hidden="true" className="fill-current" />
+    </Button>
+  );
+  const next = (
+    <Button
+      data-page-first={first(2)}
+      variant="ghost"
+      size="icon-lg"
+      className={transportInk}
+      aria-label="Next"
+      title="Next"
+      disabled={!enabled[2]}
+      onClick={() => {
+        if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
+      }}
+    >
+      <SkipForward aria-hidden="true" className="fill-current" />
+    </Button>
+  );
   return (
     <div
       className={cn("flex shrink-0 items-center gap-0.5", className)}
       role="group"
       aria-label="Playback controls"
     >
-      {/* Video.js's own Play button: CouchMedia sends Play, Pause, Replay and Try again to Core. */}
-      <PlayButton
-        disabled={!enabled[0]}
-        label={(button) => slotLabel(button, failed)}
-        render={(props, button) => (
-          <Button
-            {...props}
-            data-page-first={first(0)}
-            data-play-button
-            variant="ghost"
-            size="icon-lg"
-            className={transportInk}
-            title={slotLabel(button, failed)}
-            disabled={!enabled[0]}
-          >
-            {button.ended || failed ? (
-              <RotateCcw aria-hidden="true" />
-            ) : button.paused ? (
-              <Play aria-hidden="true" className="fill-current" />
-            ) : (
-              <Pause aria-hidden="true" className="fill-current" />
-            )}
-          </Button>
-        )}
-      />
-      <Button
-        data-page-first={first(1)}
-        variant="ghost"
-        size="icon-lg"
-        className={cn(transportInk, moreClassName)}
-        aria-label="Stop"
-        title="Stop"
-        disabled={!enabled[1]}
-        onClick={() => void run({ type: "stop" })}
-      >
-        <Square aria-hidden="true" className="fill-current" />
-      </Button>
-      <Button
-        data-page-first={first(2)}
-        variant="ghost"
-        size="icon-lg"
-        className={cn(transportInk, moreClassName)}
-        aria-label="Next"
-        title="Next"
-        disabled={!enabled[2]}
-        onClick={() => {
-          if (player.playbackId) void run({ type: "next", playbackId: player.playbackId });
-        }}
-      >
-        <SkipForward aria-hidden="true" className="fill-current" />
-      </Button>
+      {/* A browser that needs a gesture before it plays sound asks for one here, in Play's place (#644). */}
+      <TapToHear pageFirst={first(0)}>
+        {/* Video.js's own Play button: CouchMedia sends Play, Pause, Replay and Try again to Core. */}
+        <PlayButton
+          disabled={!enabled[0]}
+          label={(button) => slotLabel(button, failed)}
+          render={(props, button) => (
+            <Button
+              {...props}
+              data-page-first={first(0)}
+              data-play-button
+              variant="ghost"
+              size="icon-lg"
+              className={transportInk}
+              title={slotLabel(button, failed)}
+              disabled={!enabled[0]}
+            >
+              {button.ended || failed ? (
+                <RotateCcw aria-hidden="true" />
+              ) : button.paused ? (
+                <Play aria-hidden="true" className="fill-current" />
+              ) : (
+                <Pause aria-hidden="true" className="fill-current" />
+              )}
+            </Button>
+          )}
+        />
+      </TapToHear>
+      {/* A share follows its source: nothing to skip. */}
+      {quiet ? skip && !current?.liveSourceId && next : stop}
+      {quiet ? stop : skip && !current?.liveSourceId && next}
     </div>
   );
 }
 
-/** Audience membership is local; leaving never pauses or stops the source. */
+/**
+ * Audience membership is local; leaving never pauses or stops the source. Leaving closes the player here, and its message
+ * offers Join again. While the browser waits for a tap, Tap to hear takes Join's place, with Leave beside it. `quiet`
+ * (Now playing's sizes) keeps the buttons; the side player and the dock say the rest in their own lines.
+ */
 export function LiveParticipation({
   state,
   connected,
   run,
   pageFirst,
+  quiet = false,
+  onLeft,
   className,
-}: Props & { pageFirst?: boolean; className?: string }) {
+}: Props & { pageFirst?: boolean; quiet?: boolean; onLeft?: () => void; className?: string }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const busy = useRef(false);
@@ -402,21 +479,38 @@ export function LiveParticipation({
   const publisher = !!source && heldOutOf(source) === deviceId();
   const output = state.outputs?.find((output) => output.deviceId === deviceId());
   const error = receiving ? output?.error || state.player.error : null;
+  const waiting = useWaitingForTap() && receiving;
   if (!source || publisher) return null;
   const label = receiving ? "Leave" : "Join";
+  const join = () => void run({ type: "playLive", sourceId: source.id, deviceId: deviceId() });
   return (
     <div
       data-live-participation
       className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}
     >
-      <span className="text-sm text-muted-foreground">
-        <LiveClock startedAt={source.startedAt} />
-      </span>
+      {!quiet && (
+        <span className="text-sm text-muted-foreground">
+          <LiveClock startedAt={source.startedAt} />
+        </span>
+      )}
+      {waiting && (
+        <Button
+          data-page-first={pageFirst || undefined}
+          className="h-(--player-target) rounded-full px-5"
+          onClick={hear}
+        >
+          Tap to hear
+        </Button>
+      )}
       <Button
-        data-page-first={pageFirst || undefined}
+        data-page-first={(!waiting && pageFirst) || undefined}
+        variant={waiting ? "ghost" : "default"}
         aria-busy={pending || undefined}
         aria-disabled={pending || undefined}
-        className="aria-disabled:opacity-50"
+        className={cn(
+          "aria-disabled:opacity-50",
+          !waiting && "h-(--player-target) rounded-full px-5",
+        )}
         disabled={!connected || (receiving && !state.player.playbackId)}
         onClick={async () => {
           if (busy.current || (receiving && !state.player.playbackId)) return;
@@ -424,13 +518,16 @@ export function LiveParticipation({
           setPending(true);
           setFailed(false);
           try {
-            setFailed(
-              !(await run(
-                receiving
-                  ? { type: "leave", playbackId: state.player.playbackId! }
-                  : { type: "playLive", sourceId: source.id, deviceId: deviceId() },
-              )),
+            const done = await run(
+              receiving
+                ? { type: "leave", playbackId: state.player.playbackId! }
+                : { type: "playLive", sourceId: source.id, deviceId: deviceId() },
             );
+            setFailed(!done);
+            if (done && receiving) {
+              leftLive(liveTitle(source), join);
+              onLeft?.();
+            }
           } catch {
             setFailed(true);
           } finally {
@@ -445,7 +542,7 @@ export function LiveParticipation({
         role="status"
         className={cn(
           "min-w-0 text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]",
-          pending && "sr-only",
+          (pending || quiet) && "sr-only",
         )}
       >
         {pending
@@ -455,21 +552,25 @@ export function LiveParticipation({
           : receiving && !error
             ? !connected
               ? "Reconnecting…"
-              : state.player.status === "playing" && !state.player.buffering
-                ? "Listening"
-                : "Waiting for audio…"
+              : waiting
+                ? "Sound is waiting for a tap."
+                : state.player.status === "playing" && !state.player.buffering
+                  ? "Listening"
+                  : "Waiting for audio…"
             : ""}
       </span>
-      {error && (
-        <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">
-          {error}
-        </p>
-      )}
-      {failed && (
-        <p role="alert" className="min-w-0 text-sm text-destructive [overflow-wrap:anywhere]">
-          Couldn't {receiving ? "leave" : "join"}. Try again.
-        </p>
-      )}
+      {(error || failed) &&
+        (quiet ? (
+          <span role="alert" className="min-w-0 truncate text-xs text-muted-foreground">
+            {error || `Couldn't ${receiving ? "leave" : "join"}. Try again.`}
+          </span>
+        ) : (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {error || `Couldn't ${receiving ? "leave" : "join"}. Try again.`}
+            </AlertDescription>
+          </Alert>
+        ))}
     </div>
   );
 }
@@ -555,46 +656,52 @@ export function PlaybackVolume({
 }
 
 /**
- * Where the band's and the now-playing bar's panels open (Volume, Where it plays, the gear's menu): above the whole row,
- * clear of its timeline, and ending at the tools' right edge (the gutter, as Up next does) whichever tool opened them,
- * so they line up as one family. Elsewhere a panel just sits above its trigger. Read as the panel opens.
+ * Where a player control's panel opens (Volume, Where it plays, the gear's menu): from its own button, growing up from
+ * the button's outer edge (its right edge in the right half of the screen, its left edge in the left), so the panel
+ * is plainly that button's. In the band, the capsule and the dock it clears their whole row, timeline included. Read
+ * as the panel opens.
  */
 export function toolPanel(trigger: HTMLElement | null): {
-  side: "top";
-  align: "end";
+  side: "top" | "right" | "left";
+  align: "start" | "end";
   sideOffset?: number;
-  alignOffset?: number;
 } {
-  const tools = trigger?.closest<HTMLElement>("[data-player-tools], [data-bar-tools]"),
-    row = tools?.closest<HTMLElement>("[data-player-band], [data-now-playing]");
-  if (!trigger || !tools || !row) return { side: "top", align: "end" };
+  if (!trigger) return { side: "top", align: "end" };
   const at = trigger.getBoundingClientRect(),
-    group = tools.getBoundingClientRect();
-  // The group pulls back past the gutter (-mr-2.5) so its last glyph lines up with the time; its margin box ends at the gutter.
-  return {
-    side: "top",
-    align: "end",
-    sideOffset: at.top - row.getBoundingClientRect().top + 8,
-    alignOffset: at.right - group.right - parseFloat(getComputedStyle(tools).marginRight),
-  };
+    align = at.left + at.width / 2 < window.innerWidth / 2 ? "start" : "end",
+    row = trigger.closest<HTMLElement>("[data-player-band], [data-now-playing]");
+  if (!row) return { side: "top", align };
+  // The side player stands the window's height at one edge (Player side): its panels open past its inner edge, over
+  // the page, level with the control's top.
+  if (row.matches('[data-size="side"]')) {
+    const panel = row.getBoundingClientRect();
+    return panel.left > window.innerWidth / 2
+      ? { side: "left", align: "start", sideOffset: at.left - panel.left + 12 }
+      : { side: "right", align: "start", sideOffset: panel.right - at.right + 12 };
+  }
+  // The full share fills the window: its panels hang just above their buttons.
+  if (row.matches('[data-size="full"]')) return { side: "top", align, sideOffset: 8 };
+  return { side: "top", align, sideOffset: at.top - row.getBoundingClientRect().top + 8 };
 }
 
-/** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
+/** The band's volume for Live audio: a speaker that opens the slider and Mute in a Popover. */
+/** Whether this device shares the Live audio it looks at: its own sound is the source, with no volume to set here. */
+export function sharesLive(state: ClientSessionState) {
+  const sourceId = state.playbacks?.find(
+    (playback) => playback.id === state.playback,
+  )?.liveSourceId;
+  return !!state.liveSources?.some(
+    (source) =>
+      source.id === sourceId && source.intent === "live" && heldOutOf(source) === deviceId(),
+  );
+}
+
 export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
   const trigger = useRef<HTMLButtonElement>(null);
   // Controlled, so it places itself as it opens (toolPanel).
   const [open, setOpen] = useState(false);
   const tv = isTvPresentation();
-  const sourceId = state.playbacks?.find(
-    (playback) => playback.id === state.playback,
-  )?.liveSourceId;
-  if (
-    state.liveSources?.some(
-      (source) =>
-        source.id === sourceId && source.intent === "live" && heldOutOf(source) === deviceId(),
-    )
-  )
-    return null;
+  if (sharesLive(state)) return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

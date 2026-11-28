@@ -16,11 +16,10 @@ type Options = {
     url: string,
     collection?: Extract<ForLaterReference, { kind: "web" }>["collection"],
   ) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection" | "creator">;
-  reservePlay: (playedBy?: PlaybackActor) => number;
   prepare: (entry: QueueEntry) => Promise<void>;
   enqueue: (
     entry: QueueEntry,
-    intent: number | undefined,
+    play: boolean,
     authorize: () => void,
     playedBy?: PlaybackActor,
   ) => void;
@@ -37,7 +36,6 @@ export function createForLater({
   onChange,
   lookup,
   prepare,
-  reservePlay,
   enqueue,
   webMetadata,
 }: Options) {
@@ -279,13 +277,8 @@ export function createForLater({
           await prepare(entry);
           authorize();
           get(id); // Another controller may have removed it while the source was checked.
-          // Reserved only now, so a source that fails moves no output.
-          enqueue(
-            { ...entry, id: crypto.randomUUID() },
-            mode === "play" ? reservePlay(playedBy) : undefined,
-            authorize,
-            playedBy,
-          );
+          // Played only now, so a source that fails moves no output.
+          enqueue({ ...entry, id: crypto.randomUUID() }, mode === "play", authorize, playedBy);
           return Response.json({ ok: true });
         }
         if (request.method !== "DELETE")

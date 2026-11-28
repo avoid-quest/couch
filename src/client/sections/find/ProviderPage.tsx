@@ -33,10 +33,13 @@ import { artShape, type ArtShape } from "@/art-shape";
 import { isChannelTab, metaLine, pageTitle } from "@/media-caption";
 import { collectionLinks } from "@/collection-target";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { TRY_AGAIN } from "@/copy";
+import { TryAgain } from "@/components/TryAgain";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
-import type { ProviderId } from "../../../shared/providers";
+import { pageSection, type ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
+import { itemTarget, useHomeAction, type AddTarget } from "@/sections/home/AddToHome";
+import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
+import { ListShelf, RoomTile, sourceScope, useRoomScope } from "./Room";
 
 export function ProviderPage() {
   const state = useOwnSearch(readCollectionSearch);
@@ -66,6 +69,7 @@ function CollectionPage({
   search: ReturnType<typeof readCollectionSearch>;
 }) {
   const { credentials, available, openProvider, current, playHistory, section } = useShell();
+  useRoomScope(sourceScope(provider));
   const { connected, run, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const cursor = search.cursors.at(-1);
@@ -212,28 +216,114 @@ function CollectionPage({
       onSelectPage={(page) => goToPage(locationFor({ page }))}
     />
   );
+  const reader = (
+    <SearchOnlineResults
+      provider={provider}
+      query=""
+      url={url}
+      cursor={cursor}
+      context={search.context}
+      paged
+      onOpenCollection={openProvider}
+      onResults={report}
+      onPlayHistory={playHistory}
+      origin={credentials.origin}
+      token={credentials.token}
+      connected={connected}
+      canPlay={available}
+      active
+      onCommand={run}
+      quality={videoQualityPreference.quality}
+      onEnqueued={() => {}}
+    />
+  );
+  const problems =
+    summary?.error && moved.test(summary.errorMessage ?? "") ? (
+      <MovedSource
+        name={providerNames[provider]}
+        message={summary.errorMessage!.replace(moved, "")}
+        retry={summary.retry}
+      />
+    ) : (
+      <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
+    );
+  // A source's own front page and its sections are rooms (docs/design.md, Room), as is a list it files by letter; one
+  // of a section's lists (its #block=) is a list.
+  const raiplayRoom =
+    provider === "raiplay" &&
+    (!url || (path.startsWith("/tipologia/") && !pageSection({ provider, url })));
+  const twitchRoom = provider === "twitch" && !url;
+  const lettered =
+    !!page?.letters || (provider === "raiplay" && path.startsWith("/genere/") && !page);
+  // A Twitch category is who is on now in it, as a grid; a RaiPlay programme's first lists are shelves of their episodes.
+  const category = provider === "twitch" && path.startsWith("/directory/category/");
+  const sets =
+    provider === "raiplay" && /^\/programmi\/[^/]+$/.test(path) && paging.page === 1
+      ? (page?.items ?? []).filter((item) => item.kind === "collection")
+      : [];
+  const catalogueRoom = posterCatalogue && !url;
+  // A section's name waits for its page, so the source's name doesn't stand in for it first, unless the page failed.
+  const roomTitle = page || !url || summary?.error ? collection.title : "";
+  // A genre's A to Z is named by RaiPlay with its section first ("Programmi - Inchieste e Reportage"); the trail has it.
+  const lettersTitle =
+    search.context && roomTitle.startsWith(`${search.context.title} - `)
+      ? roomTitle.slice(search.context.title.length + 3)
+      : roomTitle;
+  if (raiplayRoom || twitchRoom || lettered)
+    return (
+      <section data-page="Collection" className="min-w-0">
+        {reader}
+        {raiplayRoom ? (
+          <RaiPlayRoom
+            page={page}
+            summary={summary}
+            title={roomTitle}
+            url={url}
+            context={search.context}
+          />
+        ) : twitchRoom ? (
+          <TwitchRoom onNow={page?.items} />
+        ) : (
+          <AToZRoom
+            page={page}
+            summary={summary}
+            title={lettersTitle}
+            url={url}
+            context={search.context}
+          />
+        )}
+        {!connected && (
+          <p role="status" className="mt-6 text-sm text-muted-foreground">
+            Connect to Couch to load this collection.
+          </p>
+        )}
+        <div className="mt-6 empty:hidden">{problems}</div>
+      </section>
+    );
   return (
     <section data-page="Collection" className="min-w-0 space-y-6">
-      <SearchOnlineResults
-        provider={provider}
-        query=""
-        url={url}
-        cursor={cursor}
-        context={search.context}
-        paged
-        onOpenCollection={openProvider}
-        onResults={report}
-        onPlayHistory={playHistory}
-        origin={credentials.origin}
-        token={credentials.token}
-        connected={connected}
-        canPlay={available}
-        active
-        onCommand={run}
-        quality={videoQualityPreference.quality}
-        onEnqueued={() => {}}
-      />
-      {cold && url ? (
+      {reader}
+      {catalogueRoom ? (
+        <CatalogueRoomHead
+          provider={provider}
+          doors={
+            provider === "movies123"
+              ? [
+                  {
+                    label: "Movies",
+                    meta: "Newest first",
+                    href: collectionLocation({ provider, url: `${movies123Origin}/movies/` }),
+                  },
+                  {
+                    label: "TV series",
+                    meta: "Newest first",
+                    href: collectionLocation({ provider, url: `${movies123Origin}/tv-series/` }),
+                  },
+                ]
+              : []
+          }
+        />
+      ) : cold && url ? (
         <DetailSkeleton
           trail={
             <ContentBreadcrumb title={collection.title} provider={provider} collection={trail} />
@@ -244,6 +334,13 @@ function CollectionPage({
           collection={collection}
           canPlay={available}
           shape={shape}
+          home={
+            collection.single
+              ? itemTarget({ collection: collection.context, creator: collection.creator })
+              : url
+                ? { provider, url, title: collection.title }
+                : undefined
+          }
           trail={
             <ContentBreadcrumb
               title={collection.title}
@@ -260,12 +357,17 @@ function CollectionPage({
         </p>
       )}
       {emptyRoot && <EmptyRoot provider={provider} />}
+      {sets.slice(0, 2).map((set) => (
+        <ListShelf key={set.url} provider="raiplay" url={set.url} title={set.title} />
+      ))}
       {!collection.single && !emptyRoot && (
         <>
+          {sets.length > 0 && (
+            <h2 className="text-heading font-semibold">All of {collection.title}'s lists</h2>
+          )}
           {/* Filter waits for more than a glance holds: one season or eight tracks need none. */}
-          {(filterable ||
-            (provider === "twitch" && !url) ||
-            (provider === "movies123" && posterCatalogue)) && (
+          {/* A room has no second search field: the header's, narrowed to the source, searches it. */}
+          {!catalogueRoom && (filterable || (provider === "movies123" && posterCatalogue)) && (
             <FilterBar label="Collection filters">
               {filterable && (
                 <FilterInput
@@ -279,18 +381,6 @@ function CollectionPage({
                     })
                   }
                 />
-              )}
-              {provider === "twitch" && !url && (
-                <Button variant="ghost" asChild>
-                  <Link
-                    to={keepSection(
-                      collectionLocation({ provider, url: "https://www.twitch.tv/directory" }),
-                      section,
-                    )}
-                  >
-                    Categories
-                  </Link>
-                </Button>
               )}
               {provider === "movies123" && posterCatalogue && (
                 <>
@@ -339,7 +429,32 @@ function CollectionPage({
               shape={artShape(providerNames[provider]) === "square" ? "square" : "video"}
             />
           )}
-          {posterCatalogue ? (
+          {category ? (
+            <section aria-labelledby="on-now" className="grid gap-3">
+              <div className="flex items-baseline gap-3">
+                <h2 id="on-now" className="text-heading font-semibold">
+                  On now
+                </h2>
+                {!cold && (
+                  <span className="text-meta text-muted-foreground">
+                    {hits.length} {hits.length === 1 ? "channel" : "channels"}
+                  </span>
+                )}
+              </div>
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(14rem,40vw),1fr))] gap-x-4 gap-y-6">
+                {hits.slice(paging.start, paging.end).map((hit) => {
+                  const item = page?.items.find((item) => item.url === hit.url);
+                  return (
+                    item && (
+                      <li key={hit.id} className="@container min-w-0">
+                        <RoomTile hit={hit} item={item} shape="video" fluid />
+                      </li>
+                    )
+                  );
+                })}
+              </ul>
+            </section>
+          ) : posterCatalogue ? (
             <ul
               aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`}
               className="grid list-none grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6 p-0"
@@ -417,15 +532,7 @@ function CollectionPage({
           {pager}
         </>
       )}
-      {summary?.error && moved.test(summary.errorMessage ?? "") ? (
-        <MovedSource
-          name={providerNames[provider]}
-          message={summary.errorMessage!.replace(moved, "")}
-          retry={summary.retry}
-        />
-      ) : (
-        <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
-      )}
+      {problems}
       {collection.single && (
         <RelatedCollection
           collection={search.context ?? page?.item?.collection}
@@ -445,13 +552,17 @@ function CollectionHeader({
   canPlay,
   shape,
   trail,
+  home: target,
 }: {
   collection: SearchCollection;
   canPlay: boolean;
   shape: ArtShape;
   trail: ReactNode;
+  /** What Home can follow from here: the page itself, or for one item its series or channel. */
+  home?: AddTarget;
 }) {
   const disabled = !canPlay || c.disabled;
+  const home = useHomeAction()(target);
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
   const creator =
     c.creator &&
@@ -488,8 +599,11 @@ function CollectionHeader({
       save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
       playOn={c.playOn && { run: c.playOn, disabled }}
       more={[
-        ...browserActions(c.url),
-        ...(c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []),
+        ...(c.playNext
+          ? [{ label: "Play next", group: "play", disabled: c.disabled, run: c.playNext }]
+          : []),
+        ...home,
+        ...browserActions(c.url, c.title),
       ]}
     />
   );
@@ -511,15 +625,13 @@ function MovedSource({
     <Alert variant="destructive">
       <AlertTitle>Couldn't load {name}.</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
-      <AlertAction className="flex gap-2">
+      <AlertAction>
         {administrator && (
-          <Button data-page-first variant="ghost" size="sm" asChild>
+          <Button data-page-first variant="secondary" size="sm" asChild>
             <Link to="/settings/couch/sources/streaming-community">Set site address</Link>
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={() => retry?.()}>
-          {TRY_AGAIN}
-        </Button>
+        <TryAgain onClick={() => retry?.()} />
       </AlertAction>
     </Alert>
   );

@@ -1,76 +1,78 @@
-import { livePlayback, playbackControls } from "@/session/playback-controls";
-import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
-import { playbackStatus } from "@/playback-status";
+import { playbackControls } from "@/session/playback-controls";
+import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
-import { Play, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Plus, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Stage, StageTitle } from "@/components/Stage";
 import { MediaTile } from "@/components/MediaTile";
 import { historyShape, majorityShape, savedShape, type ArtShape } from "@/art-shape";
-import { historyCaption, mediaCaption, metaLine, savedCaption } from "@/media-caption";
-import { Shelf } from "@/components/Shelf";
+import { mediaCaption, metaLine, savedCaption } from "@/media-caption";
+import { Shelf, StaleNote } from "@/components/Shelf";
 import { PageHeader } from "@/components/PageHeader";
-import { ProgressLine, useDurationClock } from "@/components/DurationBar";
+import { useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
-import { forLaterQuery, loadForLater } from "@/api/for-later";
-import { apiSend } from "@/api/client";
+import { forLaterQuery, loadForLater, removeForLater, restoreForLater } from "@/api/for-later";
+import { savedNotice } from "@/copy";
+import { useHistoryMenu } from "./history-menu";
 import type { MenuAction } from "@/components/RowMenu";
 import { failed } from "@/toasts";
 import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
+import { useUpNextMenu } from "@/sections/now/UpNextMenu";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
+import { mediaIdentity } from "@/sections/find/provider-progress";
 import { useSessionGate } from "@/session/session-context";
-import { sourceLabel } from "@/source-label";
-import { playsOn } from "@/session/device-id";
-import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
-import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
-import { TRY_AGAIN } from "@/copy";
-import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
+import { formatDuration, formatEndTime } from "@/time-format";
 import {
   avoidRadioPlaylistId,
-  isRadio,
-  radioHost,
-  radioShowLabels,
   stationSources,
   type RadioProgrammeDetails,
   type RadioStation,
 } from "../../../shared/radio";
 import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
-import type { QueueEntry } from "../../../shared/protocol";
-import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
-import { useOnAir, useStationMenu, useStationShow } from "./on-air";
-import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
-import { Board, BoardArt, BoardList } from "./HomeBoard";
+import type { PlayOn, QueueEntry } from "../../../shared/protocol";
+import { useOnAir, useStationMenu } from "./on-air";
+import {
+  homeRows,
+  useHomeRows,
+  useKeptOrder,
+  type HomeRowId,
+  type HomeSectionId,
+} from "./home-rows";
+import { isFollowId, useHomeFollows } from "./home-follows";
+import { FollowShelf } from "./FollowShelf";
+import { AddSectionPanel, itemTarget, useHomeAction } from "./AddToHome";
+import { BoardArt, BoardList } from "./HomeBoard";
+import { ContinueSection, LeadSkeleton } from "./ContinueSection";
+import { focusAfter, HomeOrder, SectionOptions } from "./SectionOptions";
 import {
   Failed,
   LiveTvShelf,
   SavedSourceShelf,
   SharedSources,
-  SourcesLine,
+  BrowseLine,
   sourceHomes,
 } from "./HomeSources";
 import { MediaRow } from "@/components/MediaRow";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { providerFavoritesQuery } from "@/api/providers";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
-import type { ProviderId } from "../../../shared/providers";
+import { providerMediaPage, type ProviderId } from "../../../shared/providers";
+import { settingsPagePath } from "../../../shared/settings-pages";
 
 export type HistoryPlayback = (
   item: HistoryItem,
-  options: { fromStart?: boolean; on?: string; selection?: HistorySelection },
+  options: { fromStart?: boolean; on?: PlayOn; selection?: HistorySelection },
 ) => Promise<boolean>;
 
-// A shelf scrolls, so it holds more than fits; a board's list holds its first few. Their headings open the rest.
+// A shelf scrolls, so it holds more than fits; Up next holds its first few. Their headings open the rest.
 const shelfLength = 12;
 const boardLength = 4;
 const knownLength = (entry: QueueEntry) =>
@@ -84,27 +86,11 @@ const recentCaption = (item: HistoryItem) => {
     meta: metaLine(caption.lead, item.creator?.title ?? caption.subtitle),
   };
 };
-// Continue says how much is left where Played recently says how long it is; the line on the artwork shows how far it got.
-const continueCaption = (item: HistoryItem) => {
-  const caption = mediaCaption(item);
-  return {
-    title: caption.title,
-    meta: metaLine(
-      caption.lead,
-      item.duration ? `${formatRuntime(Math.max(0, item.duration - item.position))} left` : null,
-    ),
-  };
-};
-
-type Hero =
-  | { kind: "playing" }
-  | { kind: "continue"; item: HistoryItem }
-  | { kind: "radio"; station: RadioStation; show: RadioProgrammeDetails };
 
 /**
- * Home is the evening's departures board: one large item on top (what you control playing now, else the
- * first thing to continue, else the first station on air), then shelves of tiles, each headed by the
- * clock time it matters at. Each device picks which shelves it shows and in what order.
+ * Home is your shelf: the Browse line, then sections in the order this device keeps (Continue, whose lead is what you
+ * stopped last; the lists you follow; For later; Radio; the sources). Each section's "…" moves or hides it. What plays
+ * is the player's: Home never leads with it, and nothing on Home moves when something starts.
  */
 export function HomePage() {
   const shell = useShell();
@@ -115,13 +101,16 @@ export function HomePage() {
     connected,
     run,
     queue: queued,
+    offerUndo,
     nativeHost,
     videoQualityPreference,
   } = useSessionGate();
   const details = useDetailNavigation();
   const [queueOpen, setQueueOpen] = useState(false);
+  const [adding, setAdding] = useState<HTMLElement | null>(null);
   const layout = useHomeRows();
   const onHome = layout.rows.filter((row) => row.shown);
+  const follows = useHomeFollows();
   const hasRow = (id: HomeRowId) => onHome.some((row) => row.id === id);
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
@@ -129,22 +118,14 @@ export function HomePage() {
   const {
     stations: allStations,
     show: onAir,
-    playing: playingStation,
     meta: showMeta,
     pending: radioPending,
     favorites,
     builtIn,
   } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
-    mutationFn: ({
-      item,
-      fromStart,
-      deviceId,
-    }: {
-      item: HistoryItem;
-      fromStart: boolean;
-      deviceId?: string;
-    }) => play((on) => shell.playHistory(item, { fromStart, on }), deviceId),
+    mutationFn: ({ item, fromStart, on }: { item: HistoryItem; fromStart: boolean; on?: PlayOn }) =>
+      play((on) => shell.playHistory(item, { fromStart, on }), on),
   });
   const resumable = (item: HistoryItem) =>
     available && !resume.isPending && !!(item.playable || item.queueEntryId);
@@ -152,54 +133,49 @@ export function HomePage() {
   const stationMenu = useStationMenu();
   const queueItem = (title: string, work: () => Promise<unknown>) =>
     void queued(title, work).catch((reason) => failed(`Couldn't queue ${title}.`, reason));
-  const historyMenu = (item: HistoryItem, resumes: boolean): MenuAction[] => [
-    resumes
-      ? { label: "Details", run: () => details.open(itemLocation("history", item.mediaId)) }
-      : {
-          label: item.position > 0 ? "Resume" : "Play",
-          disabled: !resumable(item),
-          run: () => resume.mutate({ item, fromStart: item.position === 0 }),
-        },
-    ...(item.position > 0
-      ? [
-          {
-            label: "From start",
-            disabled: !resumable(item),
-            run: () => resume.mutate({ item, fromStart: true }),
-          },
-        ]
-      : []),
-    {
-      label: "Queue",
-      disabled: !connected,
-      run: () =>
-        queueItem(item.title, () =>
-          apiSend(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, {
-            profileId: state?.activeProfile.id,
-          }),
-        ),
-    },
-    ...browserActions(item.url),
-    {
-      label: "Play on",
-      disabled: !resumable(item) || !item.playable,
-      playOn: (deviceId) => resume.mutate({ item, fromStart: item.position === 0, deviceId }),
-    },
-  ];
+  const historyMenu = useHistoryMenu();
+  const homeAction = useHomeAction();
+  const changeFailed = (title: string) => (reason: unknown) =>
+    failed(`Couldn't change ${title}.`, reason);
   const savedMenu = (item: ForLaterItem): MenuAction[] => {
-    const start = (deviceId?: string) =>
-      void play((on) => loadForLater(credentials, item.id, "play", on), deviceId).catch((reason) =>
-        failed(`Couldn't play ${item.title}.`, reason),
-      );
+    // Play on looks for its Undo once the play is done.
+    const start = (on?: PlayOn) =>
+      play((on) => loadForLater(credentials, item.id, "play", on), on).catch((reason) => {
+        failed(`Couldn't play ${item.title}.`, reason);
+        return false;
+      });
+    const remove = async () => {
+      const result = await removeForLater(credentials, item.id);
+      void later.refetch();
+      if (result?.undoToken)
+        offerUndo(savedNotice(item.title, false), async () => {
+          await restoreForLater(credentials, result.undoToken!);
+          void later.refetch();
+        });
+    };
     return [
-      { label: "Play", disabled: !available, run: () => start() },
+      { label: "Play", group: "play", disabled: !available, run: () => start() },
       {
         label: "Queue",
+        group: "play",
         disabled: !connected,
         run: () => queueItem(item.title, () => loadForLater(credentials, item.id, "append")),
       },
-      { label: "Play on", disabled: !available, playOn: start },
-      ...browserActions(item.url),
+      {
+        label: "Play on",
+        group: "play",
+        disabled: !available,
+        thumbnail: item.thumbnail,
+        playOn: start,
+      },
+      ...homeAction(itemTarget(item)),
+      ...browserActions(item.url, item.title),
+      {
+        label: "Remove from For later",
+        group: "list",
+        disabled: !connected,
+        run: () => void remove().catch(changeFailed(item.title)),
+      },
     ];
   };
 
@@ -212,86 +188,57 @@ export function HomePage() {
   const upcoming = playbackControls(state).queue ? queue.slice(cursor + 1) : [];
 
   const past = history.data?.items ?? [];
-  const unfinished = past.filter((item) => item.position > 0 && !item.watched);
-  const firstOnAir = allStations.find((station) => onAir(station.id));
-  // The hero waits for what decides it (undefined), so it never swaps under the focus; null when there is nothing to lead with.
-  const hero: Hero | null | undefined = !state
-    ? undefined
-    : current
-      ? { kind: "playing" }
-      : hasRow("continue") && history.isPending
-        ? undefined
-        : hasRow("continue") && unfinished[0]
-          ? { kind: "continue", item: unfinished[0] }
-          : radioPending
-            ? undefined
-            : // A hidden Radio's queries are off, but their cache (and recents) still hold stations on air.
-              hasRow("radio") && firstOnAir
-              ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
-              : null;
+  // One programme can be in history twice, under each form of link it played from (a share's ?si=, a moved catalogue):
+  // the same known media is one programme, its latest; an item whose media isn't known stays itself.
+  const identityOf = (url?: string) =>
+    (url && mediaIdentity(providerMediaPage(url) ?? url)) || undefined;
+  const unfinished = past.filter(
+    (item, index) =>
+      item.position > 0 &&
+      !item.watched &&
+      (!identityOf(item.url) ||
+        past.findIndex((other) => identityOf(other.url) === identityOf(item.url)) === index),
+  );
   const playingMedia = current && past.find((item) => item.queueEntryId === current.id)?.mediaId;
-  // Play replaces the hero's verbs with its playing title. Hand over lost focus,
-  // as page entry would, unless the user moved elsewhere while playback started.
-  const leading = useRef(false);
-  const playHero = (item: HistoryItem, fromStart: boolean) => {
-    leading.current = true;
-    resume.mutate(
-      { item, fromStart },
-      {
-        onSettled: (ok) => {
-          if (!ok) leading.current = false;
-        },
-      },
-    );
-  };
-  const playRadioHero = (station: RadioStation) => {
-    leading.current = true;
-    void shell.enqueueRadio(station, true).then((ok) => {
-      if (!ok) leading.current = false;
-    });
-  };
-  useEffect(() => {
-    if (hero?.kind !== "playing" || !leading.current) return;
-    leading.current = false;
-    if (document.activeElement === document.body)
-      document.querySelector<HTMLElement>("[data-home-hero] [data-page-first]")?.focus();
-  }, [hero?.kind]);
-  // Shelves keep the order Home opened with, less the item that led it then, so nothing moves under the focus: a station that starts playing stays where it is, marked Playing.
-  const historyReady = hero !== undefined && !history.isPending;
-  const continued = useKeptOrder(
-    unfinished,
-    (item) => item.mediaId,
-    historyReady,
-    hero?.kind === "continue" ? hero.item.mediaId : playingMedia,
+  const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
+  const playingIdentity = identityOf(currentUrl);
+  const isPlaying = (item: HistoryItem) =>
+    item.mediaId === playingMedia ||
+    (!!playingIdentity && identityOf(item.url) === playingIdentity);
+  // A row still loading holds its place, so nothing moves under the focus when it arrives; before Couch answers, all do.
+  const loading = (query: { isPending: boolean }) => (!state || connected) && query.isPending;
+  // Each row keeps the order Home opened with (useKeptOrder), so nothing takes an item's place under you. Continue
+  // keeps what plays too, its level showing: Resume opens the player, and its lead is still there on the way back.
+  // For later and Played recently leave out what played as Home opened; it is the player's.
+  const continued = useKeptOrder(unfinished, (item) => item.mediaId, !history.isPending);
+  // Played recently and For later leave out what Continue shows.
+  const continuing = new Set(
+    (hasRow("continue") ? unfinished : []).map((item) => identityOf(item.url)).filter(Boolean),
   );
   const recent = useKeptOrder(
-    past.filter((item) => !(item.position > 0 && !item.watched)),
+    past.filter(
+      (item) => !(item.position > 0 && !item.watched) && !continuing.has(identityOf(item.url)),
+    ),
     (item) => item.mediaId,
-    historyReady,
-    playingMedia,
+    !history.isPending,
+    isPlaying,
   );
-  // One Radio shelf: your stations (played here lately, saved) first, then the rest on air (on-air.ts).
-  const stations = useKeptOrder(
-    allStations,
-    (station) => station.id,
-    hero !== undefined && !radioPending,
-    hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id,
-  ).slice(0, shelfLength);
+  // One Radio shelf: your stations (played here lately, saved) first, then the rest on air (on-air.ts). A station
+  // that starts playing keeps its place, its level showing that it plays.
+  const stations = useKeptOrder(allStations, (station) => station.id, !radioPending).slice(
+    0,
+    shelfLength,
+  );
   const onAirPending = favorites.isPending || builtIn.isPending;
-  const continuingUrls = new Set(
-    hasRow("continue") ? unfinished.map((item) => item.url).filter(Boolean) : [],
-  );
-  const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
   const savedMedia = useKeptOrder(
     later.data?.items.filter(
-      (item) =>
-        item.kind !== "radio" &&
-        !item.endless &&
-        !continuingUrls.has(item.url) &&
-        (!currentUrl || item.url !== currentUrl),
+      (item) => item.kind !== "radio" && !item.endless && !continuing.has(identityOf(item.url)),
     ) ?? [],
     (item) => item.id,
-    hero !== undefined && !later.isPending,
+    !later.isPending,
+    (item) =>
+      (!!currentUrl && item.url === currentUrl) ||
+      (!!playingIdentity && identityOf(item.url) === playingIdentity),
   );
   const stationMeta = (station: RadioStation, show: RadioProgrammeDetails | null) =>
     metaLine(
@@ -300,12 +247,6 @@ export function HomePage() {
           ? undefined
           : station.groupTitle || station.countryCode),
     );
-  const filled: Partial<Record<HomeRowId, boolean>> = {
-    upNext: !!upcoming.length,
-    continue: !!continued.length,
-    later: !!savedMedia.length,
-    recent: !!recent.length,
-  };
   // The sources: shared inputs, Live TV while a source has channels, and what's saved from each source with a home.
   const sharedSources = useLiveSourceHits("");
   const iptv = useQuery({
@@ -319,182 +260,58 @@ export function HomePage() {
   });
   const saved = (provider: ProviderId) =>
     sourceFavorites.data?.favorites.filter((item) => item.provider === provider) ?? [];
-
-  const live = !!(current?.endless || current?.kind === "radio");
-  const at = playsOn(state);
-  const show = useStationShow();
-  // A station without its show reads Radio, as the player does, never its stream's host.
-  const status = playbackStatus(state, connected);
-  const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(
-    playing?.lead,
-    current && mediaSubtitle({ ...current, subtitle: playing?.subtitle }),
-    ...radioShowLabels(show),
-    radioHost(show),
-    current && !isRadio(current) && sourceLabel(current.source),
-    !livePlayback(state) && !status.quiet && status.label,
-  );
-  const heroCaption =
-    hero?.kind === "continue"
-      ? {
-          ...historyCaption(hero.item),
-          ...(hero.item.creator ? { meta: mediaCaption(hero.item).lead } : {}),
-        }
-      : undefined;
-
-  const lead = !hero ? null : hero.kind === "playing" ? (
-    current &&
-    playing && (
-      <HomeHero
-        at={at}
-        context={
-          <MediaContext
-            collection={current.collection}
-            creator={current.creator}
-            radio={
-              isRadio(current) && current.source.startsWith("radio:")
-                ? { id: current.source.slice(6), title: current.title }
-                : undefined
-            }
-          />
-        }
-        thumbnail={show?.artworkUrl ?? current.thumbnail}
-        shape={entryShape(current)}
-        title={playing.title}
-        meta={playingMeta}
-        progress={
-          live ? (
-            <RadioProgress show={show} />
-          ) : (
-            <PlayingProgress current={current} speed={state?.player.speed || 1} />
-          )
-        }
-        // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
-        open={() => shell.changeSection("Now")}
-      />
-    )
-  ) : hero.kind === "continue" && heroCaption ? (
-    <HomeHero
-      context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />}
-      thumbnail={hero.item.thumbnail}
-      shape={historyShape(hero.item)}
-      title={heroCaption.title}
-      meta={heroCaption.meta}
-      // Not playing, it has no end time: how much is left, as Details says it.
-      progress={
-        hero.item.duration ? (
-          <ProgressLine position={hero.item.position} duration={hero.item.duration} />
-        ) : undefined
-      }
-    >
-      <Button
-        data-page-first
-        size="lg"
-        aria-label={on(`Resume ${hero.item.title}`)}
-        disabled={!resumable(hero.item)}
-        onClick={() => playHero(hero.item, false)}
-      >
-        <Play aria-hidden="true" />
-        {on("Resume")}
-      </Button>
-      <Button
-        variant="ghost"
-        size="lg"
-        className="max-md:hidden"
-        disabled={!resumable(hero.item)}
-        onClick={() => playHero(hero.item, true)}
-      >
-        From start
-      </Button>
-      {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
-      <Button
-        variant="ghost"
-        size="lg"
-        aria-label={`Details ${hero.item.title}`}
-        onClick={() => details.open(itemLocation("history", hero.item.mediaId))}
-      >
-        Details
-      </Button>
-    </HomeHero>
-  ) : hero.kind === "radio" ? (
-    <HomeHero
-      context={
-        <RadioStationLine
-          className="text-sm"
-          station={<MediaContext radio={{ id: hero.station.id, title: hero.station.name }} />}
-          tags={hero.station.tags}
-        />
-      }
-      thumbnail={hero.show.artworkUrl ?? hero.station.logoUrl}
-      shape="square"
-      title={hero.show.title}
-      meta={metaLine(...radioShowLabels(hero.show), radioHost(hero.show))}
-      progress={<RadioProgress show={hero.show} />}
-    >
-      <Button
-        data-page-first
-        size="lg"
-        aria-label={on(`Play ${hero.station.name}`)}
-        disabled={!available}
-        onClick={() => playRadioHero(hero.station)}
-      >
-        <Play aria-hidden="true" />
-        {on("Play")}
-      </Button>
-    </HomeHero>
-  ) : null;
+  const options = (id: HomeRowId) => <SectionOptions id={id} name={homeRows[id].label} />;
 
   // A list takes its items' majority shape; an item of another shape is contained in that frame.
   const shelfShape = (shapes: ArtShape[]) =>
     shapes.every((shape) => shape === shapes[0]) ? (shapes[0] ?? "video") : "square";
-  const continueShape = shelfShape(continued.slice(0, shelfLength).map(historyShape));
   const laterShape = shelfShape(savedMedia.slice(0, shelfLength).map(savedShape));
   const recentShape = shelfShape(recent.slice(0, shelfLength).map(historyShape));
-  // With no Stage, a remote starts on the board's first row.
-  const firstBoard =
-    !hero && onHome.find((row) => boardRows.includes(row.id) && filled[row.id])?.id;
-  const lists: Partial<Record<HomeRowId, ReactNode>> = {
-    continue: !!continued.length && (
-      <Shelf title="Continue" href="/saved?tab=played">
-        {continued.slice(0, shelfLength).map((item, index) => (
-          <li key={item.mediaId} className="flex shrink-0">
-            <MediaTile
-              natural
-              data-history-details={item.mediaId}
-              data-page-first={(firstBoard === "continue" && index === 0) || undefined}
-              related={{ collection: item.collection, creator: item.creator }}
-              shape={continueShape}
-              own={historyShape(item)}
-              {...continueCaption(item)}
-              source={item.url}
-              thumbnail={item.thumbnail}
-              progress={item.duration ? item.position / item.duration : undefined}
-              aria-label={`Resume ${item.title}`}
-              disabled={!resumable(item)}
-              onClick={() => resume.mutate({ item, fromStart: false })}
-              menu={historyMenu(item, true)}
-            />
-          </li>
-        ))}
-      </Shelf>
-    ),
+  const lists: Partial<Record<HomeSectionId, ReactNode>> = {
+    continue:
+      continued.length || loading(history) ? (
+        <ContinueSection
+          items={continued}
+          loading={loading(history)}
+          resume={(item, options) => resume.mutateAsync({ item, ...options }).catch(() => false)}
+          resumable={resumable}
+          menu={(item) => historyMenu(item, { press: "Resume", continues: true })}
+          playing={isPlaying}
+          note={history.isRefetchError && <StaleNote />}
+        />
+      ) : (
+        history.error && (
+          <Failed
+            title="Continue"
+            href="/saved?tab=played"
+            error={history.error}
+            options={options("continue")}
+            retry={() => void history.refetch()}
+          />
+        )
+      ),
 
     upNext: !!upcoming.length && (
       <UpcomingBoard
         cursor={cursor}
-        pageFirst={firstBoard === "upNext"}
+        name={homeRows.upNext.label}
         onMore={() => setQueueOpen(true)}
       />
     ),
 
-    later: !!savedMedia.length && (
-      <Shelf title="For later" href="/saved?tab=later">
+    later: savedMedia.length ? (
+      <Shelf
+        title="For later"
+        href="/saved?tab=later"
+        note={later.isRefetchError && <StaleNote />}
+        options={options("later")}
+      >
         {savedMedia.slice(0, shelfLength).map((item, index) => (
           <li key={item.id} className="flex shrink-0">
             <MediaTile
               natural
               data-saved-details={item.id}
-              data-page-first={(firstBoard === "later" && index === 0) || undefined}
+              data-page-first={index === 0 || undefined}
               related={{ collection: item.collection, creator: item.creator }}
               shape={laterShape}
               own={savedShape(item)}
@@ -510,16 +327,31 @@ export function HomePage() {
           </li>
         ))}
       </Shelf>
+    ) : (
+      later.error && (
+        <Failed
+          title="For later"
+          href="/saved?tab=later"
+          error={later.error}
+          options={options("later")}
+          retry={() => void later.refetch()}
+        />
+      )
     ),
 
-    recent: !!recent.length && (
-      <Shelf title="Played recently" href="/saved?tab=played">
+    recent: recent.length ? (
+      <Shelf
+        title="Played recently"
+        href="/saved?tab=played"
+        note={history.isRefetchError && <StaleNote />}
+        options={options("recent")}
+      >
         {recent.slice(0, shelfLength).map((item, index) => (
           <li key={item.mediaId} className="flex shrink-0">
             <MediaTile
               natural
               data-history-details={item.mediaId}
-              data-page-first={(firstBoard === "recent" && index === 0) || undefined}
+              data-page-first={index === 0 || undefined}
               related={{ collection: item.collection, creator: item.creator }}
               shape={recentShape}
               own={historyShape(item)}
@@ -529,18 +361,38 @@ export function HomePage() {
               aria-label={`Details ${item.title}`}
               href={itemLocation("history", item.mediaId)}
               onClick={() => details.open(itemLocation("history", item.mediaId))}
-              menu={historyMenu(item, false)}
+              menu={historyMenu(item, { press: "Details" })}
             />
           </li>
         ))}
       </Shelf>
+    ) : (
+      // One failure, said once: at Continue when Home shows it.
+      history.error &&
+      !hasRow("continue") && (
+        <Failed
+          title="Played recently"
+          href="/saved?tab=played"
+          error={history.error}
+          options={options("recent")}
+          retry={() => void history.refetch()}
+        />
+      )
     ),
 
-    shared: !!sharedSources.length && <SharedSources hits={sharedSources} />,
+    shared: !!sharedSources.length && (
+      <SharedSources hits={sharedSources} options={options("shared")} />
+    ),
 
     // Every station on air, yours (played here lately, saved) first; the heading opens every station.
-    radio: !!stations.length && (
-      <Shelf title="Radio" label="Radio stations" href="/radio">
+    radio: stations.length ? (
+      <Shelf
+        title="Radio"
+        label="Radio stations"
+        href="/radio"
+        note={(favorites.isRefetchError || builtIn.isRefetchError) && <StaleNote />}
+        options={options("radio")}
+      >
         {stations.map((station, index) => {
           const show = onAir(station.id);
           const logo = !show?.artworkUrl || show.artworkUrl === station.logoUrl;
@@ -567,124 +419,111 @@ export function HomePage() {
           );
         })}
       </Shelf>
+    ) : (
+      (favorites.error || builtIn.error) && (
+        <Failed
+          title="Radio"
+          href="/radio"
+          error={favorites.error ?? builtIn.error}
+          options={options("radio")}
+          retry={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}
+        />
+      )
     ),
 
     "live-tv": iptv.data?.sources.some((source) => source.channelCount) ? (
-      <LiveTvShelf />
+      <LiveTvShelf options={options("live-tv")} />
     ) : iptv.error && !iptv.data ? (
-      <Failed what="Live TV" retry={() => void iptv.refetch()} />
+      <Failed
+        title="Live TV"
+        href="/live-tv"
+        error={iptv.error}
+        options={options("live-tv")}
+        retry={() => void iptv.refetch()}
+      />
     ) : null,
     // Saved channels fail once, where the first source shelf would be.
     ...Object.fromEntries(
       sourceHomes.map((provider) => [
         provider,
         provider === shownHomes[0] && sourceFavorites.error && !sourceFavorites.data ? (
-          <Failed what="saved channels" retry={() => void sourceFavorites.refetch()} />
+          <Failed
+            title={homeRows[provider].label}
+            what="saved channels"
+            error={sourceFavorites.error}
+            options={options(provider)}
+            retry={() => void sourceFavorites.refetch()}
+          />
         ) : (
-          <SavedSourceShelf provider={provider} items={saved(provider)} />
+          <SavedSourceShelf
+            provider={provider}
+            items={saved(provider)}
+            options={options(provider)}
+          />
         ),
       ]),
     ),
-    sources: <SourcesLine />,
+    sources: (
+      <BrowseLine options={options("sources")} first={!(hasRow("continue") && continued.length)} />
+    ),
   };
-  // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
-  const pending = (id: HomeRowId) =>
-    connected &&
-    (id === "later"
-      ? later.isPending
-      : id === "continue" || id === "recent"
-        ? history.isPending
-        : id === "radio"
-          ? onAirPending
-          : false);
-  const section = (id: HomeRowId) =>
+  for (const follow of follows)
+    lists[follow.id] = (
+      <FollowShelf follow={follow} lead={hasRow("continue") ? continued[0] : undefined} />
+    );
+  // A shelf still loading holds its place, so nothing moves under the focus when it arrives.
+  const pending = (id: HomeSectionId) =>
+    id === "later"
+      ? loading(later)
+      : id === "radio"
+        ? (!state || connected) && onAirPending
+        : false;
+  const deciding = !state || (hasRow("continue") && loading(history));
+  // What Home shows, in order: a section's moves pass over sections hidden or empty here, so each is seen.
+  const rendered = onHome.map((row) => row.id).filter((id) => lists[id] || pending(id));
+  const section = (id: HomeSectionId) =>
     lists[id] ||
-    (pending(id) &&
-      (id === "upNext" ? (
-        <BoardList title={homeRowLabels[id]} loading />
-      ) : (
-        <Shelf title={homeRowLabels[id]} loading>
-          <MediaTilesSkeleton shape="square" />
-        </Shelf>
-      )));
-  // Adjacent artwork shelves share the width, as do compact history and queue lists.
-  const groupKind = (id: HomeRowId) =>
-    id === "continue" || id === "later" || id === "recent"
-      ? "shelves"
-      : id === "upNext"
-        ? "board"
-        : id;
-  const groups = onHome.reduce<HomeRowId[][]>((all, row) => {
-    const last = all.at(-1);
-    if (last && groupKind(row.id) === groupKind(last[0]!)) last.push(row.id);
-    else all.push([row.id]);
-    return all;
-  }, []);
+    (!isFollowId(id) && pending(id) && (
+      <Shelf title={homeRows[id].label} loading options={options(id)}>
+        <MediaTilesSkeleton shape="square" />
+      </Shelf>
+    ));
 
   return (
     <section data-page="Home" aria-label="Home" className="grid gap-section">
       <PageHeader title="Home" hidden />
-      {historyShown && history.error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}
-          </AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void history.refetch()}>
-              {TRY_AGAIN}
+      {/* Home waits for what decides Continue's lead, so no control above it (Browse) or below it takes a remote's
+        first press. Which sections it shows, and in what order, is this device's choice: Edit Home is its page in Settings. */}
+      {deciding ? (
+        <div role="status" aria-label="Loading your Home…">
+          <LeadSkeleton />
+        </div>
+      ) : (
+        <>
+          <HomeOrder.Provider value={rendered}>
+            {rendered.map((id) => (
+              <Fragment key={id}>{section(id)}</Fragment>
+            ))}
+          </HomeOrder.Provider>
+          <div data-nav-row className="-ml-3.5 flex flex-wrap gap-1">
+            <Button asChild variant="ghost" className="text-muted-foreground">
+              <Link to={settingsPagePath("home")}>
+                <SlidersHorizontal aria-hidden="true" />
+                Edit Home
+              </Link>
             </Button>
-          </AlertAction>
-        </Alert>
-      )}
-      {hasRow("later") && later.error && (
-        <Alert variant="destructive">
-          <AlertDescription>Couldn't load For later.</AlertDescription>
-          <AlertAction>
-            <Button variant="ghost" size="sm" onClick={() => void later.refetch()}>
-              {TRY_AGAIN}
-            </Button>
-          </AlertAction>
-        </Alert>
-      )}
-      {hasRow("radio") && !stations.length && (favorites.error || builtIn.error) && (
-        <Alert variant="destructive">
-          <AlertDescription>Couldn't load Radio.</AlertDescription>
-          <AlertAction>
             <Button
               variant="ghost"
-              size="sm"
-              onClick={() => void Promise.all([favorites.refetch(), builtIn.refetch()])}
+              className="text-muted-foreground"
+              onClick={(event) => setAdding(event.currentTarget)}
             >
-              {TRY_AGAIN}
+              <Plus aria-hidden="true" />
+              Add a section
             </Button>
-          </AlertAction>
-        </Alert>
+          </div>
+          <AddSectionPanel anchor={adding} onClose={() => setAdding(null)} />
+        </>
       )}
-
-      {hero === undefined && <DetailSkeleton home />}
-      {lead}
-      {hero !== undefined &&
-        groups.map((group) =>
-          groupKind(group[0]!) === "shelves" ? (
-            group.some((id) => lists[id] || pending(id)) && (
-              <div className="home-shelves" key={group.join(" ")}>
-                {group.map((id) => (
-                  <Fragment key={id}>{section(id)}</Fragment>
-                ))}
-              </div>
-            )
-          ) : groupKind(group[0]!) === "board" ? (
-            group.some((id) => lists[id] || pending(id)) && (
-              <Board key={group.join(" ")}>
-                {group.map((id) => (
-                  <Fragment key={id}>{section(id)}</Fragment>
-                ))}
-              </Board>
-            )
-          ) : (
-            <Fragment key={group[0]}>{section(group[0]!)}</Fragment>
-          ),
-        )}
 
       <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
         <SheetContent
@@ -725,29 +564,14 @@ export function HomePage() {
   );
 }
 
-// Only the progress and timetable subscribe to playback time; a tick must not render Home's shelves and artwork.
-function PlayingProgress({ current, speed }: { current: QueueEntry; speed: number }) {
-  const clock = usePlaybackClock();
-  const now = useDurationClock();
-  const length = clock.duration || knownLength(current);
-  if (!length) return null;
-  const remaining = Math.max(0, length - clock.position) / speed;
-  return (
-    <ProgressLine
-      position={clock.position}
-      duration={length}
-      label={`${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}`}
-    />
-  );
-}
-
+// Only the timetable subscribes to playback time; a tick must not render Home's shelves and artwork.
 function UpcomingBoard({
   cursor,
-  pageFirst,
+  name,
   onMore,
 }: {
   cursor: number;
-  pageFirst: boolean;
+  name: string;
   onMore: () => void;
 }) {
   const { credentials, available, current } = useShell();
@@ -773,10 +597,27 @@ function UpcomingBoard({
     clock = clock == null || seconds == null ? null : clock + seconds;
     return { entry, starts, seconds };
   });
+  // Up next's own menu, as the player's has it: cleared, the section goes, so the focus moves on first.
+  const list = useUpNextMenu({
+    state,
+    credentials,
+    connected,
+    run,
+    upcoming: upcoming.length,
+    options: () => document.querySelector<HTMLElement>('[data-section-options="upNext"] button'),
+    onClear: () =>
+      focusAfter(document.querySelector('[data-section-options="upNext"]')?.closest("section")),
+  });
   return (
     <BoardList
       title="Up next"
       time={clock != null ? `until ${formatEndTime(clock, now)}` : undefined}
+      options={
+        <>
+          <SectionOptions id="upNext" name={name} list={list.actions} />
+          {list.dialog}
+        </>
+      }
       more={
         upcoming.length > boardLength && (
           <Button
@@ -794,7 +635,7 @@ function UpcomingBoard({
           key={entry.id}
           entry={entry}
           shape={shape}
-          pageFirst={pageFirst && index === 0}
+          pageFirst={index === 0}
           disabled={!available}
           onPlay={() => void run({ type: "play", entryId: entry.id })}
           meta={
@@ -853,100 +694,5 @@ function UpNextRow({
       primary={{ label: "Play", disabled, onClick: onPlay }}
       menu={useQueueActions(verbs)}
     />
-  );
-}
-
-/**
- * The board's top line, Home's Stage (Stage.tsx): a compact whole picture beside its title, one muted meta line and its links, how far it got, then its verbs. Its verbs are a row, so Up and Down
- * pass between it and the shelves. While something plays (`open`), the now-playing bar holds the transport, so the
- * Stage has no verbs: its title is the one stop and opens the player, as its picture does under a pointer.
- */
-function HomeHero({
-  thumbnail,
-  shape,
-  title,
-  meta,
-  context,
-  at = null,
-  progress,
-  open,
-  children,
-}: {
-  thumbnail?: string;
-  shape: ArtShape;
-  title: string;
-  meta?: string;
-  context?: ReactNode;
-  at?: ReturnType<typeof playsOn>;
-  progress?: ReactNode;
-  open?: () => void;
-  children?: ReactNode;
-}) {
-  const router = useRouter();
-  // Stop from anywhere replaces the playing title: return its lost focus as the bar does.
-  const titleFocused = useRef(false);
-  useLayoutEffect(() => {
-    if (open)
-      return () => {
-        if (titleFocused.current) {
-          titleFocused.current = false;
-          returnLostFocus(router);
-        }
-      };
-  }, [!!open, router]);
-  return (
-    <Stage
-      data-home-hero
-      size="home"
-      label={title}
-      thumbnail={thumbnail ?? ""}
-      shape={shape}
-      title={title}
-      onPicture={open}
-    >
-      {open ? (
-        <div data-nav-row className="w-full">
-          <StageTitle as="h2" title={title}>
-            <button
-              type="button"
-              data-page-first
-              aria-label={`Open player: ${title}`}
-              className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]"
-              onFocus={() => {
-                titleFocused.current = true;
-              }}
-              onBlur={() => {
-                titleFocused.current = false;
-              }}
-              onClick={open}
-            >
-              {title}
-            </button>
-          </StageTitle>
-        </div>
-      ) : (
-        <StageTitle as="h2" title={title} />
-      )}
-      {/* The meta line and its links read as one block under the title. */}
-      {(meta || context) && (
-        <div className="home-hero-meta flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <PlaysOnLine at={at}>
-            {meta && (
-              <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>
-            )}
-            {context}
-          </PlaysOnLine>
-        </div>
-      )}
-      {progress}
-      {children && (
-        <div
-          data-nav-row
-          className="mt-2 flex flex-wrap items-center gap-2 max-md:w-full max-md:[&>[data-page-first]]:flex-1"
-        >
-          {children}
-        </div>
-      )}
-    </Stage>
   );
 }

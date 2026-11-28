@@ -1,44 +1,47 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { isTvPresentation } from "@/session/presentation";
 import { failed } from "@/toasts";
 
-// The app window follows the page's fullscreen, like any Chromium tab. The TV is always fullscreen.
+// In the app, fullscreen is the window's own, which the system's green button and menu also change, so the button
+// always shows what the window is. A browser tab uses the page's Fullscreen API. The TV is always fullscreen.
 export function usePlayerFullscreen() {
-  const supported = !isTvPresentation() && document.fullscreenEnabled === true;
-  const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
-  const [pending, setPending] = useState(false);
-  const [nativePending, setNativePending] = useState(false);
-
-  useEffect(() => window.couchApp?.onFullscreenPending?.(setNativePending), []);
+  const app = window.couchApp?.fullScreen && window.couchApp;
+  const supported = !isTvPresentation() && (!!app || document.fullscreenEnabled === true);
+  const [fullscreen, setFullscreen] = useState(!app && !!document.fullscreenElement);
 
   useEffect(() => {
     if (!supported) return;
+    if (app) {
+      void app.fullScreen?.().then(setFullscreen);
+      return app.onFullScreen?.(setFullscreen);
+    }
     const refresh = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", refresh);
     return () => document.removeEventListener("fullscreenchange", refresh);
-  }, [supported]);
+  }, [app, supported]);
 
-  const toggle = async () => {
-    if (!supported || pending || nativePending) return;
-    setPending(true);
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      // Fullscreen the document so portaled playback sheets stay available.
-      else {
-        await window.couchApp?.playerFullscreen?.(true);
-        try {
-          await document.documentElement.requestFullscreen();
-        } catch (reason) {
-          await window.couchApp?.playerFullscreen?.(false);
-          throw reason;
+  const change = useCallback(
+    async (enter: boolean) => {
+      if (!supported) return;
+      try {
+        if (app) await app.fullScreen?.(enter);
+        else if (!enter) {
+          if (document.fullscreenElement) await document.exitFullscreen();
         }
+        // Fullscreen the document so portaled playback sheets stay available.
+        else if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      } catch (reason) {
+        failed("Couldn't change fullscreen.", reason);
       }
-    } catch (reason) {
-      failed("Couldn't change fullscreen.", reason);
-    } finally {
-      setPending(false);
-    }
-  };
+    },
+    [app, supported],
+  );
+  const exit = useCallback(() => change(false), [change]);
 
-  return { supported, fullscreen, pending: pending || nativePending, toggle };
+  return {
+    supported,
+    fullscreen,
+    toggle: () => change(!fullscreen),
+    exit,
+  };
 }

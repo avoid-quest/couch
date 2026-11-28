@@ -7,8 +7,9 @@ import { createServer } from "node:http";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
-import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
 import { applyUndo, undoPlan } from "../src/client/session/undo";
+import { madeWay, undoMadeWay } from "../src/client/session/made-way";
 import { withState } from "./whole-state.fixture";
 
 const hostId = "h".repeat(43),
@@ -172,7 +173,7 @@ test("Stop returns to this Device's film and Undo returns to the stopped Playbac
     await until(() => f.phone.state.playback === film);
     assert.equal(f.phone.state.controlling, phoneId);
     assert.equal(f.phone.state.currentEntryId, "film");
-    const undo = undoPlan({ type: "stop", playbackId: stoppedId }, radio, f.phone.state);
+    const undo = undoPlan({ type: "stop", playbackId: stoppedId }, radio, f.phone.state, phoneId);
     assert.ok(undo);
     await applyUndo(undo, f.phone.command, () => f.phone.state);
     await until(
@@ -550,6 +551,98 @@ test(
   },
 );
 
+test(
+  "Play on starts where it was chosen, and refuses a channel a device doesn't lend before anything moves",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("chosen"),
+        playNow: true,
+        deviceId: speakerId,
+        outputs: [
+          { deviceId: speakerId, picture: true, sound: false },
+          { deviceId: phoneId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "chosen");
+      const chosen = f.phone.state.playback;
+      assert.equal(f.phone.state.controlling, speakerId);
+      assert.deepEqual(
+        f.phone.state.outputs?.map(({ deviceId, picture, sound }) => ({
+          deviceId,
+          picture,
+          sound,
+        })),
+        [
+          { deviceId: speakerId, picture: true, sound: false },
+          { deviceId: phoneId, picture: false, sound: true },
+        ],
+      );
+      await f.speaker.command({ type: "sharing", sharing: { audio: true, video: false } });
+      await assert.rejects(
+        f.phone.command({
+          type: "enqueue",
+          entry: f.entry("refused"),
+          playNow: true,
+          deviceId: phoneId,
+          outputs: [
+            { deviceId: phoneId, picture: false, sound: true },
+            { deviceId: speakerId, picture: true, sound: false },
+          ],
+        }),
+        /not sharing video/,
+      );
+      assert.equal(f.phone.state.playback, chosen);
+      assert.equal(f.phone.state.currentEntryId, "chosen");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+const mix = (state: SessionState) =>
+  state.outputs?.map(({ deviceId, picture, sound }) => ({
+    deviceId,
+    picture,
+    sound,
+  }));
+
+test(
+  "Play on from For later reserves and starts its chosen devices on the same playback",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.speaker, "radio", speakerId);
+      await until(() => f.speaker.state.currentEntryId === "radio");
+      await f.speaker.command({ type: "enqueue", entry: f.entry("clip") });
+      const { item } = await f.rest("/api/for-later", {
+        reference: { kind: "queue", id: "clip" },
+      });
+      await f.rest(
+        `/api/for-later/${item.id}/load?on=${speakerId}&picture=${speakerId}&sound=${phoneId}`,
+        { mode: "play" },
+      );
+      await until(
+        () => f.phone.state.currentEntryId !== null && f.phone.state.currentEntryId !== "radio",
+      );
+      assert.equal(
+        f.phone.state.queue.find((entry) => entry.id === f.phone.state.currentEntryId)?.title,
+        "clip",
+      );
+      assert.deepEqual(mix(f.phone.state), [
+        { deviceId: speakerId, picture: true, sound: false },
+        { deviceId: phoneId, picture: false, sound: true },
+      ]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 for (const [how, end] of [
   [
     "withdrawing consent",
@@ -590,3 +683,355 @@ for (const [how, end] of [
       }
     },
   );
+
+test(
+  "Undo of Play on stops what it started and gives a Playback that waited its device back",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const film = f.phone.state.playback!;
+      const before = f.phone.state;
+      // The speaker leaves the film for the clip, so the film pauses and waits for a device.
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("clip"),
+        playNow: true,
+        deviceId: phoneId,
+        outputs: [
+          { deviceId: phoneId, picture: true, sound: true },
+          { deviceId: speakerId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "clip");
+      const after = f.phone.state;
+      assert.deepEqual(
+        after.playbacks?.find((playback) => playback.id === film)?.outputs,
+        [],
+        "the film waits for a device",
+      );
+      const plan = madeWay(before, after, true);
+      assert.equal(plan.undo.started?.playbackId, after.playback);
+      assert.deepEqual(plan.undo.restore, [
+        { playbackId: film, outputs: [{ deviceId: speakerId, picture: true, sound: true }] },
+      ]);
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(
+        () =>
+          f.phone.state.playbacks?.find((playback) => playback.id === film)?.outputs.length === 1,
+      );
+      assert.deepEqual(
+        mix({
+          outputs: f.phone.state.playbacks!.find((p) => p.id === film)!.outputs,
+        } as SessionState),
+        [{ deviceId: speakerId, picture: true, sound: true }],
+      );
+      await until(
+        () =>
+          !f.phone.state.playbacks?.some(
+            (playback) =>
+              playback.id === plan.undo.started?.playbackId &&
+              playback.outputs.some((output) => output.deviceId === speakerId),
+          ),
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of Play on that replaced a device's own item plays that item again",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", phoneId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const before = f.phone.state;
+      await f.play(f.phone, "clip", phoneId);
+      await until(() => f.phone.state.currentEntryId === "clip");
+      assert.equal(
+        f.phone.state.playback,
+        before.playback,
+        "Play on its own device keeps its Playback",
+      );
+      const plan = madeWay(before, f.phone.state, true);
+      assert.deepEqual(plan.undo.replaced, {
+        playbackId: before.playback,
+        entryId: "film",
+        newEntryId: "clip",
+      });
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(
+        () =>
+          f.phone.state.currentEntryId === "film" &&
+          !f.phone.state.queue.some((entry) => entry.id === "clip"),
+      );
+      assert.equal(f.phone.state.playback, before.playback);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of Play on that replaced a paused item brings it back paused where it was",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      // The phone plays what it loads: the film paused 42 s in, everything else playing.
+      const loads: Extract<PlaybackCommand, { type: "load" }>[] = [];
+      f.phone.socket.on("message", (data) => {
+        const message = JSON.parse(String(data)) as ServerMessage;
+        if (message.type !== "player" || message.command.type !== "load") return;
+        const { command } = message;
+        loads.push(command);
+        const film = loads.length === 1;
+        f.phone.socket.send(
+          JSON.stringify({
+            type: "player",
+            state: {
+              playbackId: command.playbackId,
+              status: film || command.paused ? "paused" : "playing",
+              buffering: false,
+              position: film ? 42 : (command.startPosition ?? 0),
+              duration: 600,
+              volume: 80,
+              seekable: true,
+              error: null,
+              speed: 1,
+              tracks: [],
+              audioDelay: 0,
+              subtitleDelay: 0,
+            },
+          }),
+        );
+      });
+      const entry = (id: string) => ({
+        ...f.entry(id),
+        source: `${f.hub.origin}/api/health?${id}`,
+      });
+      await f.phone.command({
+        type: "enqueue",
+        entry: entry("film"),
+        playNow: true,
+        deviceId: phoneId,
+      });
+      await until(() => f.phone.state.player.status === "paused");
+      const before = f.phone.state;
+      await f.phone.command({
+        type: "enqueue",
+        entry: entry("clip"),
+        playNow: true,
+        deviceId: phoneId,
+      });
+      await until(() => f.phone.state.player.status === "playing");
+      const plan = madeWay(before, f.phone.state, true);
+      assert.deepEqual(plan.undo.replaced, {
+        playbackId: before.playback,
+        entryId: "film",
+        newEntryId: "clip",
+        paused: true,
+      });
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(() => f.phone.state.currentEntryId === "film" && loads.length === 3);
+      assert.equal(loads[2]!.paused, true, "the film loads paused");
+      assert.equal(loads[2]!.startPosition, 42, "where it was");
+      await until(() => f.phone.state.player.status === "paused");
+      assert.equal(f.phone.state.player.position, 42);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "an older Undo of Play on changes nothing once another controller took its speaker",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "old-film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "old-film");
+      const film = f.phone.state.playback!;
+      const before = f.phone.state;
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("new-clip"),
+        playNow: true,
+        deviceId: phoneId,
+        outputs: [
+          { deviceId: phoneId, picture: true, sound: true },
+          { deviceId: speakerId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "new-clip");
+      const plan = madeWay(before, f.phone.state, true);
+      const clip = plan.undo.started!.playbackId;
+      // Another controller plays something of its own on the speaker.
+      await f.play(f.host, "later", speakerId);
+      await until(() =>
+        f.phone.state.playbacks!.some(
+          (playback) =>
+            playback.id !== clip &&
+            playback.id !== film &&
+            playback.outputs.some((output) => output.deviceId === speakerId),
+        ),
+      );
+      const was = JSON.stringify(f.phone.state.playbacks);
+      await assert.rejects(
+        undoMadeWay(plan, f.phone.command, () => f.phone.state),
+        /^Error: Undo isn't possible anymore: Speaker plays something else\.$/,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(JSON.stringify(f.phone.state.playbacks), was, "nothing changed");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "an Undo of Play on changes nothing once what it started plays something else",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const before = f.phone.state;
+      await f.play(f.phone, "clip", phoneId);
+      await until(() => f.phone.state.currentEntryId === "clip");
+      const plan = madeWay(before, f.phone.state, true);
+      assert.ok(plan.undo.started);
+      await f.play(f.phone, "newer", phoneId);
+      await until(() => f.phone.state.currentEntryId === "newer");
+      await assert.rejects(
+        undoMadeWay(plan, f.phone.command, () => f.phone.state),
+        /Undo isn't possible anymore: what it started plays something else\./,
+      );
+      assert.equal(f.phone.state.currentEntryId, "newer");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo of a key gives back only the channel it changed, and refuses once another controller moved that device",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const film = f.phone.state.playback!;
+      await f.play(f.phone, "clip", phoneId);
+      await until(() => f.phone.state.currentEntryId === "clip");
+      const clip = f.phone.state.playback!;
+      // The speaker's Sound key in the clip takes the speaker from the film.
+      const before = f.phone.state;
+      await f.phone.command({ type: "output", deviceId: speakerId, level: 50 });
+      await until(() =>
+        f.phone.state.playbacks!.some(
+          (playback) =>
+            playback.id === clip &&
+            playback.outputs.some((output) => output.deviceId === speakerId),
+        ),
+      );
+      const plan = madeWay(before, f.phone.state);
+      assert.deepEqual(
+        plan.undo.restore.map(({ playbackId, outputs }) => ({ playbackId, outputs })),
+        [
+          { playbackId: film, outputs: [{ deviceId: speakerId, picture: true, sound: true }] },
+          { playbackId: clip, outputs: [{ deviceId: speakerId, picture: false, sound: false }] },
+        ],
+        "only the speaker, not the phone's own channels",
+      );
+      await undoMadeWay(plan, f.phone.command, () => f.phone.state);
+      await until(() =>
+        f.phone.state.playbacks!.some(
+          (playback) =>
+            playback.id === film &&
+            playback.outputs.some((output) => output.deviceId === speakerId),
+        ),
+      );
+      assert.deepEqual(
+        f.phone.state
+          .playbacks!.find((playback) => playback.id === clip)!
+          .outputs.map((output) => output.deviceId),
+        [phoneId],
+      );
+
+      // Again, but the host moves the speaker on before the Undo.
+      const again = f.phone.state;
+      await f.phone.command({ type: "output", deviceId: speakerId, level: 50 });
+      await until(() =>
+        f.phone.state.playbacks!.some(
+          (playback) =>
+            playback.id === clip &&
+            playback.outputs.some((output) => output.deviceId === speakerId),
+        ),
+      );
+      const stale = madeWay(again, f.phone.state);
+      await f.play(f.host, "later", speakerId);
+      await until(() => f.host.state.currentEntryId === "later");
+      await assert.rejects(
+        undoMadeWay(stale, f.phone.command, () => f.phone.state),
+        /Undo isn't possible anymore: Speaker plays something else\./,
+      );
+      assert.ok(
+        !f.phone.state.playbacks!.some(
+          (playback) =>
+            playback.id === film &&
+            playback.outputs.some((output) => output.deviceId === speakerId),
+        ),
+        "the film didn't take the speaker back",
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "Undo refuses at once, changing nothing, while a device it would give back is offline",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.phone, "film", speakerId);
+      await until(() => f.phone.state.currentEntryId === "film");
+      const before = f.phone.state;
+      await f.phone.command({
+        type: "enqueue",
+        entry: f.entry("clip"),
+        playNow: true,
+        deviceId: phoneId,
+        outputs: [
+          { deviceId: phoneId, picture: true, sound: true },
+          { deviceId: speakerId, picture: false, sound: true },
+        ],
+      });
+      await until(() => f.phone.state.currentEntryId === "clip");
+      const plan = madeWay(before, f.phone.state, true);
+      f.speaker.socket.close();
+      await until(
+        () => f.phone.state.devices?.find((device) => device.id === speakerId)?.online === false,
+      );
+      const was = JSON.stringify(f.phone.state.playbacks);
+      await assert.rejects(
+        undoMadeWay(plan, f.phone.command, () => f.phone.state),
+        /Undo isn't possible anymore: Speaker is offline\./,
+      );
+      assert.equal(f.phone.state.currentEntryId, "clip", "what it started still plays");
+      assert.equal(JSON.stringify(f.phone.state.playbacks), was);
+    } finally {
+      await f.close();
+    }
+  },
+);

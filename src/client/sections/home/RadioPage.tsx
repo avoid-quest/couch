@@ -1,13 +1,11 @@
 import { radioLabels } from "../../../shared/radio";
 import { MediaRowsSkeleton } from "@/components/LoadingMedia";
-import { offline } from "@/copy";
 import { useSessionGate } from "@/session/session-context";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { useCallback, useState } from "react";
 import { FilterBar, FilterChoice, FilterInput, FilterSelect } from "@/components/ContentFilters";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
-import { PageHeader } from "@/components/PageHeader";
+import { RoomHead, useRoomScope } from "@/sections/find/Room";
 import { NoPlaylists } from "@/components/NoPlaylists";
 import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
 import { SearchRadioResults } from "@/sections/find/SearchRadioResults";
@@ -28,8 +26,9 @@ const sourceLabels = {
 
 /** Every station, which Home's Radio heading opens: its source and Filter, then the stations and, past one page, a pager. */
 export function RadioPage() {
+  useRoomScope({ kind: "radio", source: "All" });
   const { credentials, available } = useShell();
-  const { state, connected, run } = useSessionGate();
+  const { connected, run } = useSessionGate();
   const { search, searchStr } = useLocation();
   const navigate = useNavigate();
   const source =
@@ -83,12 +82,7 @@ export function RadioPage() {
     });
   return (
     <section data-page="Radio" className="min-w-0 space-y-6">
-      <PageHeader breadcrumb={<ContentBreadcrumb />} title="Radio" />
-      {!connected && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {offline(state?.installationName)}
-        </p>
-      )}
+      <RoomHead title="Radio" />
       <FilterBar label="Radio filters">
         <FilterChoice
           label="Source"
@@ -120,17 +114,20 @@ export function RadioPage() {
             ]}
           />
         )}
-        <FilterInput
-          label="Filter stations"
-          value={filter}
-          onChange={(filter) =>
-            void navigate({
-              href: radioBrowseLocation(source, 1, filter, genre),
-              replace: true,
-              resetScroll: false,
-            })
-          }
-        />
+        {/* The header's field, narrowed to Radio, finds a station; an older link's filter can still be cleared. */}
+        {filter && (
+          <FilterInput
+            label="Filter stations"
+            value={filter}
+            onChange={(filter) =>
+              void navigate({
+                href: radioBrowseLocation(source, 1, filter, genre),
+                replace: true,
+                resetScroll: false,
+              })
+            }
+          />
+        )}
       </FilterBar>
       <p id="radio-stations" tabIndex={-1} role="status" className="sr-only">
         {summary && !summary.loading

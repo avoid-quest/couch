@@ -23,12 +23,18 @@ function destination(at: Destination) {
   return `on ${at.name}${at.more ? ` +${at.more}` : ""}`;
 }
 
+/** The Playbacks this device may control, to choose the one it controls: from "on {device}" or the side player's chip. */
 function PlaybackPicker({
   playbacks,
   children,
+  className,
+  label,
 }: {
   playbacks: PlaybackSummary[];
   children: ReactNode;
+  /** The side player's chip draws its own trigger, without the chevron. */
+  className?: string;
+  label?: string;
 }) {
   const { state, connected, tvPresentation } = useSessionGate();
   const { selectPlayback } = useShell();
@@ -37,10 +43,14 @@ function PlaybackPicker({
     <button
       type="button"
       disabled={!connected}
-      className="flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded-full px-1 font-medium text-foreground hover:bg-accent"
+      aria-label={label}
+      className={
+        className ??
+        "flex min-w-0 max-w-full shrink-0 items-center gap-1 rounded-full px-1 font-medium text-foreground hover:bg-accent"
+      }
     >
       {children}
-      <ChevronDown aria-hidden="true" className="size-3 shrink-0" />
+      {!className && <ChevronDown aria-hidden="true" className="size-3 shrink-0" />}
     </button>
   );
   const content = (playback: PlaybackSummary) => {
@@ -64,7 +74,8 @@ function PlaybackPicker({
       </>
     );
   };
-  if (desktop && !tvPresentation)
+  // Its menu hangs from it on desktops and the TV; a phone's Sheet rises from the bottom.
+  if (desktop || tvPresentation)
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
@@ -113,6 +124,10 @@ function PlaybackPicker({
 }
 
 /** Where it comes from, then where it plays; in the bar the context gives way first. */
+/** The running Playbacks this device may choose to control. */
+const playbackChoices = (state: ReturnType<typeof useSessionGate>["state"]) =>
+  state?.playbacks?.filter((playback) => playback.running && !playback.private) ?? [];
+
 export function PlaysOnLine({
   at,
   children,
@@ -125,8 +140,7 @@ export function PlaysOnLine({
   overPicture?: boolean;
 }) {
   const { state } = useSessionGate();
-  const choices =
-    state?.playbacks?.filter((playback) => playback.running && !playback.private) ?? [];
+  const choices = playbackChoices(state);
   // Also when the controlled Playback stopped running (it can't play), so a running one stays in reach.
   const canPick = choices.some((playback) => playback.id !== state?.playback);
   // The same elements with or without where it plays, so a focused link survives another device joining.

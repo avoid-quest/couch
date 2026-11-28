@@ -12,7 +12,6 @@ import {
   screen,
   session,
   shell,
-  Tray,
   utilityProcess,
   type IpcMainInvokeEvent,
   type Rectangle,
@@ -39,6 +38,8 @@ import { createLiveAudio } from "./live-audio";
 import { flushReports, setDesktopReporting } from "./sentry";
 import { startLog } from "./log-file";
 import { rendererStatus } from "./renderer-status";
+import { createTray, isTrayStatus } from "./tray";
+import type { TrayAction } from "../src/shared/app-bridge";
 
 // 128 frames cut MacBook Chrome's reported Sendspin output latency from 42 to 27 ms.
 // Linux is unmeasured; Windows' WASAPI warns that mismatched fixed sizes can glitch.
@@ -145,7 +146,6 @@ const save = (next: Choice) => {
 };
 
 let window: BrowserWindow | null = null;
-let playerFullscreen: ((enter: boolean) => Promise<void>) | null = null;
 const capture = createCapture(
   () => window?.webContents ?? null,
   () => (choice.mode === "remote" ? choice.address : localOrigin),
@@ -164,7 +164,7 @@ const liveAudio = createLiveAudio(
       )
     : undefined,
 );
-let tray: Tray | null = null;
+let tray: ReturnType<typeof createTray> | null = null;
 let quitting = false;
 let updating = false;
 let stopped = false;
@@ -662,51 +662,13 @@ function createWindow() {
     if (tv) window?.setFullScreen(true);
   });
   if (!tv) {
-    if (process.platform === "darwin") {
-      const host = window;
-      let nativeFullscreen = false,
-        restoreFullscreen: boolean | null = null;
-      const pending = (value: boolean) => host.webContents.send("couch:fullscreen-pending", value);
-      const change = (value: boolean) => {
-        if (nativeFullscreen === value && host.isFullScreen() === value) return Promise.resolve();
-        pending(true);
-        return new Promise<void>((resolve) => {
-          if (value) host.once("enter-full-screen", () => resolve());
-          else host.once("leave-full-screen", () => resolve());
-          if (host.isFullScreen() !== value) host.setFullScreen(value);
-        });
-      };
-      playerFullscreen = async (enter) => {
-        if (enter) {
-          restoreFullscreen ??= host.isFullScreen();
-          await change(true);
-        } else if (restoreFullscreen !== null) {
-          const restore = restoreFullscreen;
-          restoreFullscreen = null;
-          // The window's own fullscreen control may already be leaving; don't reverse it.
-          await change(restore && host.isFullScreen());
-        }
-      };
-      // HTML begins after native entry. Escape and older remote pages also exit here.
-      host.webContents.on("enter-html-full-screen", () => {
-        void playerFullscreen?.(true);
-      });
-      host.webContents.on("leave-html-full-screen", () => {
-        void playerFullscreen?.(false);
-      });
-      host.on("enter-full-screen", () => {
-        nativeFullscreen = true;
-        pending(false);
-      });
-      host.on("leave-full-screen", () => {
-        nativeFullscreen = false;
-        pending(false);
-      });
-    }
     // Fullscreen hides the window controls, so the header drops their space.
     const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
     window.on("enter-full-screen", fullScreen);
-    window.on("leave-full-screen", fullScreen);
+    window.on("leave-full-screen", () => {
+      pageFullScreen = false;
+      fullScreen();
+    });
     window.webContents.on("dom-ready", fullScreen);
   }
   window.on("close", (event) => {
@@ -729,7 +691,12 @@ function createWindow() {
   // Only a document load resets playback: did-start-loading also fires on in-app page changes.
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
     if (!mainFrame || inPlace) return;
+    if (pageFullScreen) {
+      pageFullScreen = false;
+      window?.setFullScreen(false);
+    }
     capture.clear();
+    tray?.show(null);
     updatePlayback = "loading";
   });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
@@ -783,10 +750,16 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
-handle("player-fullscreen", (_event, enter) => {
-  if (typeof enter !== "boolean" || !playerFullscreen)
-    throw new Error("Player fullscreen is unavailable.");
-  return playerFullscreen(enter);
+// The player's fullscreen is the window's, so the system's own controls and Couch's button agree.
+// Whether the page asked for this fullscreen (the player), so a new document leaves it rather than keep it on Home.
+let pageFullScreen = false;
+handle("full-screen", (_event, enter) => {
+  if (tv || !window) throw new Error("Fullscreen is unavailable.");
+  if (typeof enter === "boolean") {
+    pageFullScreen = enter;
+    window.setFullScreen(enter);
+  }
+  return window.isFullScreen();
 });
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
@@ -889,6 +862,10 @@ handle("install-update", (_event, version) =>
 handle("show-logs", () => shell.showItemInFolder(logPath));
 // The page's app shell mounted (renderer-status.json); handle() admits only the main frame.
 handle("shell-ready", () => renderer?.acknowledge() ?? false);
+handle("tray-status", (_event, status) => {
+  if (!isTrayStatus(status)) throw new Error("Invalid tray status.");
+  tray?.show(status);
+});
 handle("quit", () => {
   setImmediate(() => app.quit());
 });
@@ -973,26 +950,6 @@ else {
             { label: "View", submenu: [{ role: "togglefullscreen" }] },
             { role: "windowMenu" },
           ]);
-    if (!tv) {
-      const icon =
-        process.platform === "darwin"
-          ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), {
-              scaleFactor: 2,
-            })
-          : nativeImage
-              .createFromPath(join(app.getAppPath(), appIcon))
-              .resize({ width: 32, height: 32 });
-      icon.setTemplateImage(process.platform === "darwin");
-      tray = new Tray(icon);
-      tray.setToolTip("Couch");
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          { label: "Show Couch", click: show },
-          { label: "Quit Couch", click: () => app.quit() },
-        ]),
-      );
-      if (process.platform !== "darwin") tray.on("click", show);
-    }
     screen.on("display-added", () => {
       if (tv && !preview) present();
     });
@@ -1053,7 +1010,39 @@ else {
       playing: async () =>
         ["loading", "playing", "paused"].includes(updatePlayback) ||
         !!(await interruption())?.includes("playback"),
-      onState: (state) => window?.webContents.send("couch:updates", state),
+      onState: (state) => {
+        window?.webContents.send("couch:updates", state);
+        tray?.render();
+      },
     });
+    if (!tv) {
+      const icon =
+        process.platform === "darwin"
+          ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), {
+              scaleFactor: 2,
+            })
+          : nativeImage
+              .createFromPath(join(app.getAppPath(), appIcon))
+              .resize({ width: 32, height: 32 });
+      icon.setTemplateImage(process.platform === "darwin");
+      // Stop sharing needs no window; the rest open a page in it.
+      const act = (action: TrayAction) => {
+        if (action !== "stop-sharing") show();
+        window?.webContents.send("couch:tray", action);
+      };
+      tray = createTray({
+        icon,
+        open: show,
+        act,
+        updates: () => updates.state(),
+        checkForUpdates: () => void updates.check(),
+        // Updates page explains a refusal, such as playback it would stop.
+        restartToUpdate: () =>
+          void updates
+            .action({ op: "install", version: updates.state().available }, 250)
+            .catch(() => act("updates")),
+        quit: () => app.quit(),
+      });
+    }
   });
 }

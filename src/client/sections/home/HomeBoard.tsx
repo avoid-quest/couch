@@ -4,27 +4,14 @@ import { MediaList } from "@/components/MediaRow";
 import { MediaRowsSkeleton } from "@/components/LoadingMedia";
 import { ShelfHeading } from "@/components/Shelf";
 
-/**
- * Your own rows (Continue, For later, Played recently, Up next) as one board: short lists side by side, sharing the
- * page's width in columns of at least 20rem, so their titles have the room to be read whole. Phones stack them. Each list holds its first few; its heading opens the rest.
- */
-export function Board({ children }: { children: ReactNode }) {
-  return (
-    <div
-      data-home-board
-      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] items-start gap-x-12 gap-y-10"
-    >
-      {children}
-    </div>
-  );
-}
-
+/** A short list under its heading (Up next); its heading opens the rest. */
 export function BoardList({
   title,
   href,
   time,
   loading = false,
   more,
+  options,
   children,
 }: {
   title: string;
@@ -32,6 +19,8 @@ export function BoardList({
   time?: string;
   loading?: boolean;
   more?: ReactNode;
+  /** The section's own "…", at the end of its heading's line. */
+  options?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -40,7 +29,10 @@ export function BoardList({
       aria-busy={loading || undefined}
       className="grid min-w-0 content-start gap-2"
     >
-      <ShelfHeading title={title} href={href} time={time} loading={loading} />
+      <div className="flex items-center gap-4">
+        <ShelfHeading title={title} href={href} time={time} loading={loading} />
+        {options}
+      </div>
       {loading ? (
         <MediaRowsSkeleton compact shape="video" count={3} label={`Loading ${title}…`} />
       ) : (

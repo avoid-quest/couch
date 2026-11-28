@@ -2,7 +2,8 @@
 
 Couch is one app on three kinds of screen: the TV (a remote), a desktop window
 (mouse and keyboard) and phones (touch). It is a dark living room lit by what
-plays. **One layout**: the TV's layout is Couch's layout everywhere, one
+plays: playing lights the room from the picture's own colours, paused dims it,
+and once nothing plays the light goes out. **One layout**: the TV's layout is Couch's layout everywhere, one
 component tree. Screens differ only where input demands it, through the `tv:`
 and `touch:` variants and, where keys or focus differ, a `tvPresentation`
 branch. Phones keep a bottom tab bar for thumb reach.
@@ -14,11 +15,11 @@ branch. Phones keep a bottom tab bar for thumb reach.
   custom.
 - **Flat.** Pages, rows, tiles and menus have no Cards or bordered panels: open
   typography, whitespace and divided rows. A tile is a picture and a caption.
-  Only what floats casts a shadow: the now-playing bar, toasts, an object on the
-  Stage, Up next over the picture.
+  Only what floats casts a shadow: Now playing, toasts, an object on the Stage,
+  Up next over the picture.
 - **Show only what people need.** No filler copy, no headers or labels that
-  repeat the screen, nothing said twice (the bar holds the transport, so nothing
-  else repeats it while something plays).
+  repeat the screen, nothing said twice (Now playing holds the transport, so
+  nothing else repeats it while something plays).
 - **Show the whole picture.** Artwork keeps its true shape, never cropped into a
   band or used as a backdrop.
 - **Real content only.** Browse pages show what a source returns; Couch picks
@@ -30,21 +31,51 @@ branch. Phones keep a bottom tab bar for thumb reach.
   an AlertDialog.
 - **Disabled keeps its place**: half ink (`disabled:opacity-50`), nothing moves.
 
-## Room, glass and stage
+## Room, surfaces and stage
 
-- **Room** (`.room`, `artwork-light.ts`): behind a Stage and the player's Now
-  playing, the room is painted with two colours read from the artwork (via
-  `/api/artwork`), set dark enough that ink keeps 7:1, with a static grain.
+- **Room** (`RoomLight.tsx`, `.room`, `artwork-light.ts`): every screen stands in
+  one warm dark room (`#110f13`) with a static grain. What plays lights it, a
+  video too: two colours read from its picture (via `/api/artwork`) as a lamp
+  by the player and a spill from the bottom left, at full strength while it
+  plays, dimmed while paused, out once nothing plays. With nothing playing, the
+  picture a page leads with (a Stage, `useRoomLead`) lights it a little.
   Search's results and a pasted list's page stand in the room too, lit by the
-  top or focused item, neutral without artwork. Artwork colour is the only
-  colour besides danger's red. Video keeps black bars and no artwork light.
-- **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
-  page, its backdrop blurred and tinted with the artwork's tone. Besides the
-  player's Up next panel, it's the one backdrop filter on a page.
-- **Stage** (`components/Stage.tsx`): opens Home and every Details page
-  (`DetailHeader`), reaching under the header in its picture's room. The picture
-  stands whole at the right as an **object** with a shadow, or as a **mark**
-  (a logo on nothing) without one.
+  top or focused item, neutral without artwork. So does a source's own page
+  (`sections/find/Room.tsx`, `SourceRooms.tsx`): its name set large, its own
+  doors (the Browse line's), its lead, then its lists as Shelves, while the
+  header's field wears the source as a token. The header and the phone's tabs
+  paint the same room (`.room-ground`), so it runs
+  on under them. The full player throws the picture itself, blurred, on its
+  wall; the full video player stays black. Artwork colour is the only colour
+  besides danger's red. Artwork Core can't read (an SVG logo) gives no light.
+- **Now playing** (`NowPlaying.tsx`, `.now-playing`): while something plays it
+  stands at one side of every screen on desktops and the TV, a column the
+  window's height that the page steps beside: the right unless This device →
+  **Player side** says the left (`player-side.ts`). The column has no ground:
+  its tools, the picture (whole, or beside its title when the devices need the
+  room), the title and Up next stand on the room, and at its foot the **desk**
+  (`Desk.tsx`, `.desk`) holds where it plays, Volume on its own row, the
+  timeline and the transport. The page's inset at each
+  edge is `--content-inset-left` and `--content-inset-right` (0 without a side
+  player), which messages keep clear of; its panels open toward the page, and
+  the room's lamp stands by it. Its picture and title open the full player
+  ("Open player" on hover and focus); **Minimise player** (a chevron) folds it
+  to a capsule in that side's bottom corner, for this window only, which shows
+  it again when pressed. A phone keeps it as a dock above its tabs, which opens
+  the full player, and its Where it plays raises the whole desk as a Sheet.
+  Play/Pause, Next and Stop are icons of one size from its bottom-left corner at
+  every size, the full player's too. Where it plays never floats: its list opens
+  and folds in place in the desk; Play on is a short list of places from its
+  control, and Choose where it plays takes the player's column.
+- **Surfaces**: the desk, the capsule and the dock are a **lit panel**
+  (`.lit-panel`): a warm dark that takes the lamps' colours, with a hairline
+  edge, a deep shadow and a little of the light around it. What opens over
+  the page (popovers, menus, dialogs, sheets) is a warm dark, a little
+  see-through, blurring the light behind it, with the same edge and shadow.
+  A toast is ink, the one light surface, with a dark verb.
+- **Stage** (`components/Stage.tsx`): opens every Details page
+  (`DetailHeader`). The picture stands whole as an **object** with a shadow, or
+  as a **mark** (a logo on nothing) without one.
 
 ## Tokens
 
@@ -59,6 +90,10 @@ Tailwind names, never hex values in components. Couch's scales are in the
 | Type | `caption`, `meta`, `body`, `title`, `heading`, `page` |
 | Spacing | `caption`, `stack`, `item`, `section`; the page gutter is `px-(--gutter)` |
 
+- **Colour**: room `#110f13`, ink `#f6f2ec`, quieter ink at 70%
+  (`text-muted-foreground`, an unchosen tab too, so it reads over the light) and 48%
+  for what only labels (`text-subtle-foreground`: a placeholder), lines at 11%.
+  No fixed accent: the light comes from what plays.
 - **Focus inverts** the focused control to white with black ink; the TV's
   highlight is the same, and a focused tile rings its picture and lifts.
 - **One hover language**: a pointer brightens (ink to white, a fill one step up)
@@ -71,7 +106,8 @@ Tailwind names, never hex values in components. Couch's scales are in the
 alike.
 
 - **Mona Sans** (`font-display`, `font-heading`) sets display titles
-  (`.display-title`), page titles and section headings, always at normal width.
+  (`.display-title`), page titles, section headings, the Couch's name and the
+  Browse line, always expanded (`wdth` 112 to 120, widest for page titles).
   `titleLength` steps a title's size down as it grows and `titleFit` sizes it so
   its longest word usually fits one line (very wide words can still break), so
   titles wrap whole instead of ellipsing.
@@ -103,18 +139,87 @@ In `src/client/components`:
 - `playbackStatus`: one status vocabulary for every playback surface
 
 Messages: **toasts** (`src/client/toasts.ts`, a fixed set of kinds, at most one
-action, never taking focus) for errors, Undo and unexpected outcomes; routine
-actions stay quiet. **Alert** for a problem that is the page, **Empty** for empty
-states, **Dialog** for short tasks, **AlertDialog** for confirmations, **Popover**
-for panels over the picture, **Sheet** for longer panels on phones and the TV.
+action, never taking focus) for a failed action, Undo and unexpected outcomes;
+routine actions stay quiet. A message is a short pill in ink, its action a dark capsule
+inside, an Undo draining a thin bar over its time; a problem keeps the bar's dark
+surface and its icon. Every message shows in one place, centred over the content
+beside the side player (`--content-inset-left`, `--content-inset-right`), at the bottom clear of the dock, tabs
+or player controls (`--bottom-bar`), or at the top: each device chooses in This
+device → General, and can turn off confirmations (Queued, Playing on).
+**Alert** for a problem (see Problems), **Empty** for empty states, **Dialog**
+for short tasks, **AlertDialog** for confirmations, **Popover** for panels over
+the picture, **Sheet** for longer panels on phones.
 Portalled surfaces share `z-50`; later portals cover earlier ones.
+
+## Problems
+
+A problem shows where it belongs, never as a banner dropping into the page:
+
+- **One thing** (a shelf, a device's row, a setting, a panel) says so in that
+  thing's own place, quietly: a shelf under its heading (`ShelfProblem`), a
+  device under its name, a setting under its row. Nothing else moves. A shelf
+  that keeps its last list after a refresh fails says "Couldn't refresh" beside
+  its heading (`StaleNote`).
+- **What you just did** (an action failed) is a message (`failed()` in
+  `toasts.ts`), beside nothing else.
+- **The whole app** (Couch out of reach, refusing this address, updated, its
+  player unavailable, an update that failed) is one quiet line in one fixed
+  place: the header's status row (`StatusLine`, `UpdateCue`), or the pairing
+  page, which has no header.
+- **A page that can't show at all** keeps its own space: its title, one line
+  and one action (`PageProblem`, or the page's header with an Alert).
+
+Every problem looks the same: an icon, one sentence in ink and one action
+(`TryAgain` when it can retry), no box or border. Red is only the problem's
+icon. An Alert announces itself (`role="alert"`, or `status` for a note), and
+its action is a remote's next stop below the thing it belongs to.
+
+### Dismissing
+
+Every message and problem line puts away the same way: one **Dismiss** ×, the
+same icon and size, last on its line (`Dismiss` in `alert.tsx` on every Alert and
+`StatusLine`; sonner's own close button on every message, Undo and problems
+included). A focused one also goes with Escape or the remote's Back, and a
+message swipes away on touch. A dismissed problem stays mounted but hidden until
+what it says changes, or until it goes and comes back (Couch reconnects, then
+drops again). A line whose action is the one way on (Reload after an update, a
+page that can't show) has no ×, so dismissing never hides an action you need;
+plain progress ("Starting…") goes by itself.
+
+**A control's panel opens from it.** On desktops and the TV its Popover or menu
+hangs from the control and fits the screen; on phones a longer panel rises as a
+Sheet from the bottom, by the dock, while short menus stay Popovers.
+
+## Menus
+
+A row or tile has one press and one "…"; a Stage (an item's page, Search's top
+result, a room's lead, Continue's lead) has its main verb with where it plays
+(`PlayPill`), Save and its "…". Every other verb is in the menu, never a button
+beside it, and never the press again.
+
+An item's menu draws its groups in one order, a separator between them and no
+group labels: **Play** (Play or Resume, From start, Play next, Queue, then Play
+on…), **Keep** (Save or Remove from For later, Add {name} to Home… or Show {name}
+on Home), **Go** (Details, at most two Go to {name}, nearest first), **Share**
+(Copy link, or Share… on a phone, and Open in browser) and **This list** (Move up,
+Move down, Mark as watched, Remove from {list}, Hide). A menu keeps to nine rows:
+past that Open in browser goes, then the second Go to, then Queue beside Play
+next. What never applies is hidden; what can't run now is disabled. A label that
+opens a panel ends in "…". Copy link hands out only a known source's public page,
+in its usual form: never Couch's address, a stream, a signed or private link, and
+nothing for Live TV, shared sources or a link Couch has no source for. On phones a menu of more than two rows is a Sheet titled with the
+item's name; the TV opens it with a held OK.
 
 ## Copy
 
-Sentence case, short: say what happened and what to do next. Parts of a line
+Sentence case, short: say what happened and what to do next. A problem says
+"Couldn't {verb} {thing}." then what happens next or what to do, or Core's own
+sentence when it sent one; never codes, script errors or an "Error:" prefix. Parts of a line
 join with commas (`metaLine`), never middle dots. Shared strings live in
 `src/client/copy.ts`. Verbs are the same everywhere: Play, Pause, Stop, Next,
-Play next, Queue, Save, Open, Resume, From start, Remove, Hide. Couch's own words:
+Play next, Queue, Save, Open, Resume, From start, Details, Move up, Move down,
+Remove from {list} (bare Remove only where the row is in one list and has nothing
+else), Hide, Copy link. Couch's own words:
 Where it plays, Move here, Play on {name}, Remote, Share on network, Up next (the
 list), Queue (the verb), admin. Words for people follow
 [voice](product/voice.md).

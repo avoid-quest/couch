@@ -212,8 +212,13 @@ export async function browseTwitch(
   if (search && request.url)
     throw new ProviderError("Search Twitch or enter a channel URL, one at a time.", 400);
   if (search) {
+    // Categories are a search of their own (Twitch answers one target per search), asked with the first page only, so
+    // any game can be reached, not only the most watched.
+    const games = request.cursor
+      ? ""
+      : ` games: searchFor(userQuery:$q,platform:"web",options:$games) { games { edges { item { ... on Game { ${categoryFields} } } } } }`;
     const data = await query(
-      `query Search($q:String!,$options:SearchForOptions) { searchFor(userQuery:$q,platform:"web",options:$options) { channels { cursor pageInfo { hasNextPage } edges { item { ... on User { ${channelFields} stream { ${streamFields} } } } } } } }`,
+      `query Search($q:String!,$options:SearchForOptions${games ? ",$games:SearchForOptions" : ""}) { searchFor(userQuery:$q,platform:"web",options:$options) { channels { cursor pageInfo { hasNextPage } edges { item { ... on User { ${channelFields} stream { ${streamFields} } } } } } }${games} }`,
       {
         q: search,
         options: {
@@ -221,12 +226,20 @@ export async function browseTwitch(
             { index: "CHANNEL", limit: 20, ...(request.cursor ? { cursor: request.cursor } : {}) },
           ],
         },
+        ...(games ? { games: { targets: [{ index: "GAME", limit: 5 }] } } : {}),
       },
       signal,
     );
     if (!object(data.searchFor)) throw unavailable();
     const connection = data.searchFor.channels;
-    const results = items(connection, channel, "item");
+    const categories =
+      games &&
+      object(data.games) &&
+      object(data.games.games) &&
+      Array.isArray(data.games.games.edges)
+        ? items(data.games.games, category, "item")
+        : [];
+    const results = [...items(connection, channel, "item"), ...categories];
     const nextCursor =
       results.length &&
       object(connection) &&
@@ -277,7 +290,7 @@ export async function browseTwitch(
   }
   if (target.kind === "category") {
     const data = await query(
-      `query Category($slug:String!) { game(slug:$slug) { name streams(first:20) { ${streamEdges} } } }`,
+      `query Category($slug:String!) { game(slug:$slug) { name boxArtURL(width:285,height:380) viewersCount streams(first:20) { ${streamEdges} } } }`,
       { slug: target.slug },
       signal,
     );
@@ -287,7 +300,12 @@ export async function browseTwitch(
       "twitch",
       `https://www.twitch.tv/directory/category/${encodeURIComponent(target.slug)}`,
       "collection",
-      { title: text(data.game.name) || target.slug, items: items(data.game.streams, streamItem) },
+      {
+        title: text(data.game.name) || target.slug,
+        thumbnail: thumbnail(data.game.boxArtURL),
+        subtitle: viewers(data.game.viewersCount),
+        items: items(data.game.streams, streamItem),
+      },
     );
   }
   const data = await query(`{ streams(first:20) { ${streamEdges} } }`, {}, signal);

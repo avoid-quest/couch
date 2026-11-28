@@ -2,9 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { pairingCodeQuery } from "@/api/devices";
 import { QRCodeSVG } from "qrcode.react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { TryAgain } from "@/components/TryAgain";
 import { Spinner } from "@/components/ui/spinner";
-import { TRY_AGAIN } from "@/copy";
 import { groupedCode } from "@/sections/shell/TvPairing";
 
 export function SetupQr({
@@ -24,9 +23,7 @@ export function SetupQr({
       <Alert variant="destructive">
         <AlertDescription>Couldn't load the code.</AlertDescription>
         <AlertAction>
-          <Button variant="ghost" size="sm" onClick={() => void pairing.refetch()}>
-            {TRY_AGAIN}
-          </Button>
+          <TryAgain onClick={() => void pairing.refetch()} />
         </AlertAction>
       </Alert>
     );

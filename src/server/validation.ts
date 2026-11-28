@@ -9,6 +9,7 @@ import type {
   ClientMessage,
   MediaTrack,
   PlayerState,
+  PlayOn,
   QueueEntry,
 } from "../shared/protocol";
 import type { MediaCollection } from "../shared/media";
@@ -42,6 +43,22 @@ const playOptions = (value: Record<string, unknown>) =>
     (value.playNow === true && typeof value.fromStart === "boolean")) &&
   (value.placement === undefined || (value.placement === "next" && value.playNow !== true)) &&
   (value.deviceId === undefined || (value.playNow === true && id(value.deviceId)));
+const channels = (value: Record<string, unknown>) =>
+  id(value.deviceId) && typeof value.picture === "boolean" && typeof value.sound === "boolean";
+const list = (value: unknown, valid: (item: Record<string, unknown>) => boolean) =>
+  Array.isArray(value) && value.length <= 64 && value.every((item) => object(item) && valid(item));
+// Play on's chosen outputs include the Device it names.
+const playOnOutputs = (value: Record<string, unknown>) =>
+  value.outputs === undefined ||
+  (Array.isArray(value.outputs) &&
+    value.outputs.every(
+      (output) =>
+        object(output) &&
+        id(output.deviceId) &&
+        typeof output.picture === "boolean" &&
+        typeof output.sound === "boolean",
+    ) &&
+    value.outputs.some((output) => output.deviceId === value.deviceId));
 const httpUrl = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value))
     return false;
@@ -139,6 +156,22 @@ function validAction(value: unknown): value is Action {
       );
     case "askEveryDevice":
       return typeof value.enabled === "boolean";
+    case "saveGroup":
+      return (
+        object(value.group) &&
+        (value.group.id === undefined || id(value.group.id)) &&
+        typeof value.group.name === "string" &&
+        Array.isArray(value.group.members) &&
+        value.group.members.every(
+          (member) =>
+            object(member) &&
+            id(member.deviceId) &&
+            typeof member.picture === "boolean" &&
+            typeof member.sound === "boolean",
+        )
+      );
+    case "deleteGroup":
+      return id(value.id);
     case "inSync":
       return typeof value.inSync === "boolean";
     case "compressor":
@@ -163,15 +196,16 @@ function validAction(value: unknown): value is Action {
         )
       );
     case "enqueue":
-      return validEntry(value.entry) && playOptions(value);
+      return validEntry(value.entry) && playOptions(value) && playOnOutputs(value);
     case "enqueueRadio":
-      return id(value.stationId) && id(value.entryId) && playOptions(value);
+      return id(value.stationId) && id(value.entryId) && playOptions(value) && playOnOutputs(value);
     case "enqueueProvider":
       return (
         providerIds.has(String(value.provider)) &&
         mediaShapes.has(String(value.shape)) &&
         httpUrl(value.url) &&
         playOptions(value) &&
+        playOnOutputs(value) &&
         videoQuality(value.quality) &&
         (value.collection === undefined ||
           (validProviderCollection(value.collection, value.provider) &&
@@ -187,6 +221,7 @@ function validAction(value: unknown): value is Action {
         id(value.entryId) &&
         httpUrl(value.url) &&
         playOptions(value) &&
+        playOnOutputs(value) &&
         (value.title === undefined ||
           (typeof value.title === "string" &&
             value.title.length <= 200 &&
@@ -286,6 +321,31 @@ function validAction(value: unknown): value is Action {
       return value.playbackId === undefined || id(value.playbackId);
     case "undoStop":
       return id(value.stoppedId);
+    case "restoreOutputs":
+      return (
+        list(
+          value.left,
+          (left) => channels(left) && (left.playbackId === null || id(left.playbackId)),
+        ) &&
+        (value.started === undefined ||
+          (object(value.started) && id(value.started.playbackId) && id(value.started.entryId))) &&
+        (value.replaced === undefined ||
+          (object(value.replaced) &&
+            id(value.replaced.playbackId) &&
+            id(value.replaced.entryId) &&
+            id(value.replaced.newEntryId) &&
+            (value.replaced.paused === undefined || value.replaced.paused === true))) &&
+        list(
+          value.restore,
+          (restore) =>
+            id(restore.playbackId) &&
+            list(restore.outputs, channels) &&
+            (restore.held === undefined || id(restore.held)),
+        ) &&
+        Array.isArray(value.resume) &&
+        value.resume.length <= 64 &&
+        value.resume.every(id)
+      );
     case "sharing":
       return isDeviceSharing(value.sharing);
     case "solo":
@@ -295,6 +355,7 @@ function validAction(value: unknown): value is Action {
     case "output":
       return (
         id(value.deviceId) &&
+        (value.playbackId === undefined || id(value.playbackId)) &&
         (value.picture === undefined || typeof value.picture === "boolean") &&
         (value.level === undefined || number(value.level, 100)) &&
         (value.delay === undefined || number(value.delay, 5000)) &&
@@ -518,6 +579,12 @@ export function parsePlayer(message: string): PlayerState | null {
   };
 }
 
+const chosenOutput = ({ deviceId, picture, sound }: NonNullable<PlayOn["outputs"]>[number]) => ({
+  deviceId,
+  picture,
+  sound,
+});
+
 export function parseCommand(message: string): ClientMessage {
   let value: unknown;
   try {
@@ -567,6 +634,7 @@ export function parseCommand(message: string): ClientMessage {
       placement,
       collection,
       deviceId,
+      outputs,
     } = value.action;
     return {
       type: "command",
@@ -596,9 +664,43 @@ export function parseCommand(message: string): ClientMessage {
         ...(quality === undefined ? {} : { quality }),
         ...(placement === undefined ? {} : { placement }),
         ...(deviceId === undefined ? {} : { deviceId }),
+        ...(outputs === undefined ? {} : { outputs: outputs.map(chosenOutput) }),
       },
     };
   }
+  if (value.action.type === "restoreOutputs")
+    return {
+      type: "command",
+      requestId: value.requestId,
+      ...guard,
+      action: {
+        type: "restoreOutputs",
+        left: value.action.left.map((left) => ({
+          ...chosenOutput(left),
+          playbackId: left.playbackId,
+        })),
+        ...(value.action.started && {
+          started: {
+            playbackId: value.action.started.playbackId,
+            entryId: value.action.started.entryId,
+          },
+        }),
+        ...(value.action.replaced && {
+          replaced: {
+            playbackId: value.action.replaced.playbackId,
+            entryId: value.action.replaced.entryId,
+            newEntryId: value.action.replaced.newEntryId,
+            ...(value.action.replaced.paused ? { paused: true as const } : {}),
+          },
+        }),
+        restore: value.action.restore.map((restore) => ({
+          playbackId: restore.playbackId,
+          outputs: restore.outputs.map(chosenOutput),
+          ...(restore.held === undefined ? {} : { held: restore.held }),
+        })),
+        resume: value.action.resume,
+      },
+    };
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
     return {
@@ -611,6 +713,9 @@ export function parseCommand(message: string): ClientMessage {
         ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }),
         ...(value.action.placement === undefined ? {} : { placement: value.action.placement }),
         ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }),
+        ...(value.action.outputs === undefined
+          ? {}
+          : { outputs: value.action.outputs.map(chosenOutput) }),
       },
     };
   }

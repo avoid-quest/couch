@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/input-otp";
 import { Spinner } from "@/components/ui/spinner";
 import { useSessionGate } from "@/session/session-context";
-import { notice } from "@/toasts";
+import { confirmed } from "@/toasts";
 import type { Device } from "../../../shared/devices";
 import { useShell } from "./shell-context";
 import { Onboarding } from "./Onboarding";
@@ -43,7 +43,7 @@ export function ApproveTv() {
   const pair = useMutation({
     mutationFn: () => apiSend<{ device: Device }>(credentials, `/api/pair/tv/${code}`),
     onSuccess: ({ device }) => {
-      notice(`${device.name} paired`);
+      confirmed(`${device.name} paired`);
       leave();
     },
   });

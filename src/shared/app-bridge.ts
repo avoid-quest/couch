@@ -22,6 +22,19 @@ export type AppMode = {
   targets: string[];
   localSetupComplete: boolean;
 };
+/** The longest label the desktop app's tray takes from a page. */
+export const trayLabelLength = 200;
+/** What the desktop app's tray says of the Couch its window shows (app/tray.ts). */
+export type TrayStatus = {
+  couch: string;
+  connection: string;
+  network: boolean;
+  /** What this window shares and where, in the app's words; null when it shares nothing. */
+  sharing: string | null;
+  /** This device may pair others. */
+  pair: boolean;
+};
+export type TrayAction = "pair" | "settings" | "updates" | "stop-sharing";
 export type CouchApp = {
   tvPresentation: boolean;
   /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
@@ -57,10 +70,10 @@ export type CouchApp = {
   onAddresses(listener: (urls: string[]) => void): () => void;
   /** Closing hides the window, which keeps hosting and playing; the page ends its sharing. Older apps lack it. */
   onWindowClosed?(listener: () => void): () => void;
-  /** macOS HTML fullscreen resolves before the native window finishes animating. */
-  onFullscreenPending?(listener: (pending: boolean) => void): () => void;
-  /** Complete native entry before HTML fullscreen; false restores the previous native mode. */
-  playerFullscreen?(enter: boolean): Promise<void>;
+  /** Makes the window fullscreen or not when given; resolves whether it is. The TV and older apps lack it. */
+  fullScreen?(enter?: boolean): Promise<boolean>;
+  /** The window entered or left fullscreen, by Couch or by the system's own controls. */
+  onFullScreen?(listener: (fullScreen: boolean) => void): () => void;
   updates(): Promise<UpdateState>;
   update?(action: UpdateAction): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;
@@ -73,6 +86,9 @@ export type CouchApp = {
   quit?(): Promise<void>;
   // The TV's own renderer also plays in Client mode, without a local Core.
   reportPlayback?(status: PlayerState["status"]): Promise<void>;
+  /** The tray's status line, Pair a device and sharing. Older apps lack these. */
+  trayStatus?(status: TrayStatus): Promise<void>;
+  onTrayAction?(listener: (action: TrayAction) => void): () => void;
   /** Tells the app that this page's shell mounted; false when it was not this window's current page. Older apps lack it. */
   shellReady?(): Promise<boolean>;
 };

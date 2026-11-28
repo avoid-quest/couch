@@ -9,6 +9,9 @@ import { Identity } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { defaultDeviceSharing } from "../src/shared/device-sharing";
+import { applySteps, planGroup } from "../src/client/session/groups";
+import type { ClientSessionState } from "../src/client/session/session";
+import { picker } from "../src/client/session/where-it-plays";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 import { routes, withState } from "./whole-state.fixture";
 
@@ -506,6 +509,192 @@ test(
           .slice(before)
           .some((message) => message.type === "player" && message.command.type === "stop"),
         false,
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "only the host and admins save Groups, everyone sees them, and a Group grants no output",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      const host = await f.connect("h".repeat(64), "e".repeat(43));
+      const group = {
+        name: "Living room",
+        members: [
+          { deviceId: f.adminId, picture: true, sound: true },
+          { deviceId: f.deviceId, picture: false, sound: true },
+        ],
+      };
+      const refused = await f.device.command({ type: "saveGroup", group });
+      assert.equal(refused.ok, false);
+      assert.equal(refused.error, "Only an admin can do this.");
+      assert.equal(
+        (
+          await f.admin.command({
+            type: "saveGroup",
+            group: {
+              ...group,
+              members: [{ deviceId: "x".repeat(43), picture: true, sound: false }],
+            },
+          })
+        ).ok,
+        false,
+        "only paired devices",
+      );
+      assert.equal((await f.admin.command({ type: "saveGroup", group })).ok, true);
+      await until(() => f.device.state.groups?.length === 1);
+      const saved = f.device.state.groups![0]!;
+      assert.deepEqual(saved.members, group.members);
+      assert.equal(f.device.state.outputs?.length ?? 0, 0, "saving changes nothing that plays");
+      assert.equal(
+        (
+          await f.device.command({
+            type: "saveGroup",
+            group: { ...saved, name: "Lounge" },
+          })
+        ).ok,
+        false,
+      );
+      assert.equal((await f.device.command({ type: "deleteGroup", id: saved.id })).ok, false);
+      assert.equal(
+        (
+          await host.command({
+            type: "saveGroup",
+            group: { ...saved, name: "Lounge" },
+          })
+        ).ok,
+        true,
+      );
+      await until(() => f.device.state.groups?.[0]?.name === "Lounge");
+      // Applying a Group is the Mixer's own changes: one that names the admin's sound still needs the admin to lend it.
+      assert.equal(
+        (
+          await f.device.command({
+            type: "enqueue",
+            entry: {
+              id: "own",
+              title: "Own",
+              source: `${f.hub.origin}/api/health`,
+            },
+            playNow: true,
+            deviceId: f.deviceId,
+          })
+        ).ok,
+        true,
+      );
+      await until(() => f.device.state.outputs?.length === 1);
+      assert.equal(
+        (
+          await f.device.command({
+            type: "output",
+            deviceId: f.adminId,
+            level: 50,
+          })
+        ).ok,
+        false,
+      );
+      assert.equal((await f.admin.command({ type: "deleteGroup", id: saved.id })).ok, true);
+      await until(() => f.device.state.groups?.length === 0);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "a sound-only Group on radio takes out a device it leaves out, its hidden picture too",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.admin.command({
+        type: "sharing",
+        sharing: { audio: true, video: false },
+      });
+      assert.equal(
+        (
+          await f.admin.command({
+            type: "saveGroup",
+            group: {
+              name: "Admin only",
+              members: [{ deviceId: f.adminId, picture: false, sound: true }],
+            },
+          })
+        ).ok,
+        true,
+      );
+      assert.equal(
+        (
+          await f.device.command({
+            type: "enqueue",
+            entry: {
+              id: "radio",
+              title: "Radio",
+              source: `${f.hub.origin}/api/health`,
+              kind: "radio",
+            },
+            playNow: true,
+            deviceId: f.deviceId,
+          })
+        ).ok,
+        true,
+      );
+      await until(() => !!f.device.state.player.playbackId);
+      f.device.socket.send(
+        JSON.stringify({
+          type: "player",
+          state: {
+            ...f.device.state.player,
+            status: "playing",
+            buffering: false,
+            speed: 1,
+          },
+        }),
+      );
+      await until(
+        () =>
+          !!f.device.state.groups?.length &&
+          !!f.device.state.playbacks?.find((item) => item.id === f.device.state.playback)
+            ?.audioOnly,
+      );
+      // Its own output plays picture and sound; radio shows none of the picture.
+      assert.deepEqual(
+        f.device.state.outputs?.map(({ deviceId, picture, sound }) => ({
+          deviceId,
+          picture,
+          sound,
+        })),
+        [{ deviceId: f.deviceId, picture: true, sound: true }],
+      );
+      const state = f.device.state as ClientSessionState,
+        playbackId = state.player.playbackId!;
+      const rows = picker(state, { here: f.deviceId }).rows;
+      const steps = applySteps(planGroup(state.groups![0]!, rows, state), rows, playbackId);
+      assert.equal(
+        (
+          await f.device.command({
+            ...steps[0]!.actions[0]!,
+            playbackId: "another",
+          } as Action)
+        ).ok,
+        false,
+        "a step never lands on another item",
+      );
+      for (const step of steps)
+        for (const action of step.actions) assert.equal((await f.device.command(action)).ok, true);
+      await until(() => f.device.state.outputs?.length === 1);
+      assert.deepEqual(
+        f.device.state.outputs.map(({ deviceId, picture, sound }) => ({
+          deviceId,
+          picture,
+          sound,
+        })),
+        [{ deviceId: f.adminId, picture: false, sound: true }],
       );
     } finally {
       await f.close();

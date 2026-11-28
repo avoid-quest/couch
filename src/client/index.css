@@ -10,7 +10,7 @@
 @import "@fontsource-variable/mona-sans/wdth.css";
 
 @layer components {
-  /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (now-playing bar, phone tabs). */
+  /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (the capsule or the dock, phone tabs). */
   html {
     background: var(--background);
     scroll-padding-top: calc(var(--top-bar, 0px) * var(--interface-scale) + 1rem);
@@ -95,6 +95,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -112,10 +113,10 @@
 /* Couch's scales (Design → Tokens). Radius: what you press or type into is a capsule (rounded-full); a picture or a row
    inside a surface has a soft corner (sm, md); a surface that opens over the page has a larger one (lg, xl). */
 @theme {
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.7rem;
+  --radius-lg: 1.2rem;
+  --radius-xl: 1.75rem;
   /* Control heights: a small control, a control (chips too), a verb, the header's search field. Touch raises each to 44px. */
   --spacing-control-sm: 1.75rem;
   --spacing-control: 2rem;
@@ -125,7 +126,7 @@
   --spacing-caption: 0.125rem;
   --spacing-stack: 0.75rem;
   --spacing-item: 1rem;
-  --spacing-section: 3.5rem;
+  --spacing-section: 2rem;
   /* Type: caption, meta, body (titles of items, controls), title (what plays, in the bar), heading (a shelf, a section), page; the Stage's display
        sizes live with it (.display-title). Weights: 400 for everything but headings (600) and display (680 to 760, by length). */
   --text-caption: 0.75rem;
@@ -148,31 +149,35 @@
   --default-transition-timing-function: var(--ease-out);
 }
 
-/* Clock: one dark theme. Black ground, white ink, hairlines; the picture brings the colour. */
+/* One dark theme: a warm dark room, warm white ink, hairlines; what plays brings the colour (Room). Focus is white. */
 :root {
-  --background: #000;
-  --foreground: #fff;
-  --card: #000;
-  --card-foreground: #fff;
-  --popover: #0a0a0a;
-  --popover-foreground: #fff;
-  --primary: #fff;
-  --primary-foreground: #000;
+  --background: #110f13;
+  --foreground: #f6f2ec;
+  --card: #110f13;
+  --card-foreground: #f6f2ec;
+  /* What opens over the page (Surfaces): a warm dark, a little see-through over the light. */
+  --popover: rgb(29 26 32 / 92%);
+  --popover-foreground: #f6f2ec;
+  --primary: #f6f2ec;
+  --primary-foreground: #0c0a0d;
   /* A chip's or a filled control's ground, one step up under a pointer (--fill-hover). */
-  --secondary: rgb(255 255 255 / 10%);
-  --secondary-foreground: #fff;
-  --fill-hover: rgb(255 255 255 / 16%);
-  /* Toasts' ground; the same colour as the bar's glass without a tone (@property --tone). */
-  --bar: #1c1c1e;
-  --muted: #171717;
-  --muted-foreground: #bdbdbd;
+  --secondary: rgb(246 242 236 / 8%);
+  --secondary-foreground: #f6f2ec;
+  --fill-hover: rgb(246 242 236 / 15%);
+  /* A small floating surface's ground (the sharing capsule). */
+  --bar: #1d1a20;
+  --muted: #1d1a20;
+  /* Quieter ink: 70% for meta, secondary text and an unchosen tab, 48% for what only labels (a placeholder). */
+  --muted-foreground: rgb(246 242 236 / 70%);
+  --subtle-foreground: rgb(246 242 236 / 48%);
   /* A list's row under the pointer (menus, the palette, a Select): a quiet fill, the ink unchanged. Keys invert it. */
-  --accent: rgb(255 255 255 / 10%);
-  --accent-foreground: #fff;
+  --accent: rgb(246 242 236 / 8%);
+  --accent-foreground: #f6f2ec;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: rgb(255 255 255 / 14%);
-  --input: rgb(255 255 255 / 16%);
+  --border: rgb(246 242 236 / 11%);
+  --input: rgb(246 242 236 / 15%);
   --ring: #fff;
+  --ring-foreground: #000;
   --gutter: clamp(1rem, 4vw, 3rem);
   color-scheme: dark;
 }
@@ -187,8 +192,9 @@
     font-size: clamp(16px, 1.25vw, 24px);
     font-variant-numeric: tabular-nums;
   }
+  /* The page has no ground of its own: the shell's room (RoomLight.tsx) lies behind it, over html's. */
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
   button,
   [role="button"] {
@@ -218,8 +224,8 @@
 :where([data-keyboard]) :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus) {
   outline: none;
   box-shadow: none;
-  background: var(--foreground);
-  color: var(--background);
+  background: var(--ring);
+  color: var(--ring-foreground);
 }
 [data-slot="input"]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
   color-scheme: light;
@@ -228,19 +234,22 @@
     :focus-visible,
     :where([data-keyboard] .tv-presentation) :focus
   )::placeholder {
-  color: color-mix(in srgb, var(--background) 65%, transparent);
+  color: color-mix(in srgb, var(--ring-foreground) 65%, transparent);
 }
 [data-slot="button"][data-variant="default"]:is(
     :focus-visible,
     :where([data-keyboard] .tv-presentation) :focus
   ),
 [data-sonner-toast]
-  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus),
+  :is([data-button], [data-close-button]):is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ),
 :is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):is(
   :focus-visible,
   :where([data-keyboard] .tv-presentation) :focus
 ) {
-  outline: 2px solid var(--foreground);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
@@ -251,17 +260,17 @@
    and one under the pointer takes the menus' quiet fill (--accent) with its ink unchanged (HeaderSearch marks the list
    data-pointer while a pointer moves over it). */
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] {
-  background: var(--foreground);
-  color: var(--background);
+  background: var(--ring);
+  color: var(--ring-foreground);
   box-shadow: none;
 }
 :is(button, a):is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)
-  .text-muted-foreground,
+  :is(.text-muted-foreground, .text-subtle-foreground),
 :where([data-keyboard])
   :is([role="option"], [role^="menuitem"]):is(:focus-visible, :where(.tv-presentation) :focus)
   .text-muted-foreground,
 [cmdk-list]:not([data-pointer]) [cmdk-item][data-selected="true"] .text-muted-foreground {
-  color: color-mix(in srgb, var(--background) 65%, transparent);
+  color: color-mix(in srgb, var(--ring-foreground) 65%, transparent);
 }
 /* Media lights up (Design → Hover). A tile or a row is a picture, never a box: nothing tints, outlines or dims it.
    Hovered or focused, its picture glows in its own first colour (--item-light, AmbientLight.tsx's useItemLight; a
@@ -275,7 +284,7 @@
 :is([data-tile-art], [data-row-art]) {
   --glow: transparent;
   box-shadow: 0 0.75rem 2.75rem -0.5rem var(--glow);
-  outline: 0 solid var(--foreground);
+  outline: 0 solid var(--ring);
   outline-offset: 0.1875rem;
 }
 /* The ring answers as a control does (150 ms); the glow is there at once. A transitioned shadow repaints its blur on
@@ -339,8 +348,8 @@
    padding, so nothing moves. */
 [data-text-link]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
   box-shadow:
-    -0.25rem 0 0 0.125rem var(--foreground),
-    0.25rem 0 0 0.125rem var(--foreground);
+    -0.25rem 0 0 0.125rem var(--ring),
+    0.25rem 0 0 0.125rem var(--ring);
   box-decoration-break: clone;
 }
 /* A shelf's tiles keep their own heights; their captions start level under artwork of one height. */
@@ -348,9 +357,10 @@
   align-items: start;
 }
 /* An item's "…" waits for the pointer or focus, so a shelf or a long list isn't a row or column of them; touch always
-   shows it, and the TV on the focused tile, whose held OK opens it. It appears at once: a fade starts and ends an
+   shows it, and the TV on the focused tile or row, whose held OK opens it. It appears at once: a fade starts and ends an
    animation on every row a scroll passes under the pointer. */
-.tv-presentation [data-tile]:not(:focus-within) [data-tile-menu]:not([aria-expanded="true"]) {
+.tv-presentation [data-tile]:not(:focus-within) [data-tile-menu]:not([aria-expanded="true"]),
+.tv-presentation [data-nav-row]:not(:focus-within) > * [data-row-menu]:not([aria-expanded="true"]) {
   opacity: 0;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -400,21 +410,99 @@
   transition-duration: 200ms;
   transition-timing-function: var(--ease-out);
 }
-/* A toast hugs its words, its action beside them, at the toaster's right edge (the gutter), rather than a slab the
-   toaster's width. On phones, where sonner stretches both, the toaster spans the gutters and toasts still hug. */
-[data-sonner-toaster][data-x-position] {
-  width: var(--width);
+/* Every message shows in one place (sonner.tsx): centred over the content, clear of the side player at either edge
+   (--content-inset-left, --content-inset-right, 0 without one), hugging its words. Doubled to outrank sonner's centring,
+   which it injects after us. */
+[data-sonner-toaster][data-sonner-toaster][data-x-position="center"] {
+  left: calc(var(--content-inset-left, 0px) + var(--offset-left));
+  right: calc(var(--content-inset-right, 0px) + var(--offset-right));
+  width: auto;
+  transform: none;
 }
 @media (max-width: 600px) {
-  [data-sonner-toaster][data-x-position] {
-    width: auto;
+  [data-sonner-toaster][data-sonner-toaster][data-x-position="center"] {
+    left: var(--mobile-offset-left);
+    right: var(--mobile-offset-right);
   }
 }
-[data-sonner-toaster][data-x-position] [data-sonner-toast] {
-  left: auto;
+[data-sonner-toaster][data-x-position] [data-sonner-toast][data-sonner-toast] {
+  left: 0;
   right: 0;
   width: fit-content;
-  max-width: 100%;
+  max-width: min(35rem, 100%);
+  margin-inline: auto;
+}
+/* On the ink pill a focused action or Dismiss inverts to ink, so its ring is the pill's dark ink. */
+[data-sonner-toast]:not([data-type="error"])
+  :is([data-button], [data-close-button]):is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
+  outline-color: var(--primary-foreground);
+}
+/* Sonner's dark theme paints its close button; ours is the plain Dismiss × in the message's own ink (sonner.tsx).
+   Doubled to outrank sonner's, which it injects after us. */
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]
+  [data-close-button][data-close-button] {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]
+  [data-close-button][data-close-button]:hover {
+  background: color-mix(in oklab, currentColor 10%, transparent);
+}
+/* Focused, it inverts against its message as every control does: ink on the pill, the ring's white on a problem. */
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast]:not([data-type="error"])
+  [data-close-button][data-close-button]:is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
+  background: var(--primary-foreground);
+  color: var(--primary);
+}
+[data-sonner-toaster][data-sonner-toaster]
+  [data-sonner-toast][data-type="error"]
+  [data-close-button][data-close-button]:is(
+    :focus-visible,
+    :where([data-keyboard] .tv-presentation) :focus
+  ) {
+  background: var(--ring);
+  color: var(--ring-foreground);
+}
+/* An Undo drains a thin bar over its time (toasts.ts sets --message-time), held while sonner holds its timer: under a
+   pointer, except a TV's parked one. */
+[data-sonner-toast][data-sonner-toast].message-drains {
+  overflow: hidden;
+}
+[data-sonner-toast][data-sonner-toast].message-drains::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  width: 100%;
+  background: var(--primary-foreground);
+  opacity: 0.45;
+  transform-origin: left;
+  animation: message-drain var(--message-time, 10s) linear forwards;
+}
+.messages:not([data-ignore-hover])
+  [data-sonner-toaster]:is(:hover, :active)
+  .message-drains::after {
+  animation-play-state: paused;
+}
+@keyframes message-drain {
+  to {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast][data-sonner-toast].message-drains::after {
+    animation: none;
+  }
 }
 
 /* Desktop apps have no title bar (app/main.ts). As in t3code, headers drag the window
@@ -453,10 +541,11 @@
   padding-inline: var(--gutter);
 }
 
-/* Primary controls never wrap. Names yield to search; sharing has a separate, optional row.
+/* Primary controls never wrap. A name takes its own width, up to a fifth of the header, then yields to search; Share
+   stands after it, and while this device shares it is the share's pill, which takes the room it needs from the search.
    Container units follow interface zoom as well as the window's available width. */
 .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr);
+  grid-template-columns: fit-content(clamp(2.75rem, 20cqw, 12rem)) auto minmax(9rem, 1fr) auto;
 }
 .app-header-couch {
   grid-area: 1 / 1;
@@ -465,36 +554,30 @@
   grid-area: 1 / 2;
 }
 .app-header-search {
-  grid-area: 1 / 4;
+  grid-area: 1 / 3;
 }
 .app-header-share-entry {
-  grid-area: 1 / 3;
+  grid-area: 1 / 4;
+  min-width: 0;
 }
 .app-header-tools {
   grid-area: 1 / 5;
 }
-/* Keep the desktop capsule left of the search palette. Inline containment prevents
-   its contents from contributing to the primary grid's column widths. */
-.app-header-sharing {
-  grid-column: 1 / 4;
-  contain: inline-size;
-}
 @media (max-width: 959px), (pointer: coarse) {
   .app-header-controls {
-    grid-template-columns: clamp(2.75rem, 25cqw, 10rem) 2.75rem minmax(0, 1fr);
+    grid-template-columns: clamp(2.75rem, 25cqw, 10rem) minmax(0, 1fr) auto;
   }
   .app-header-search {
-    grid-column: 3;
+    grid-column: 2;
   }
   .app-header-share-entry {
-    grid-column: 2;
+    grid-column: 3;
   }
   .app-header-tools {
     display: none;
   }
-  .app-header-sharing {
-    grid-column: 1 / -1;
-  }
+}
+@media (min-width: 640px) and (max-width: 959px), (min-width: 640px) and (pointer: coarse) {
   body:not(.tv-presentation) .app-header-controls:has([data-search-open]) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -507,59 +590,49 @@
     grid-column: 1;
   }
 }
+/* A phone's header: the Couch and Share on the first line, the search field across the second; the sections are the
+   tabs at the bottom. */
 @media (max-width: 639px) {
   body:not(.tv-presentation) .app-header-controls {
-    grid-template-columns: 2.75rem 2.75rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 0.5rem;
   }
-  body:not(.tv-presentation) .app-header-couch button {
-    width: 2.75rem;
-    margin-left: 0;
-    padding-inline: 0;
+  body:not(.tv-presentation) .app-header-couch {
+    grid-area: 1 / 1;
   }
-  body:not(.tv-presentation) .app-header-couch button > span {
-    display: none;
+  body:not(.tv-presentation) .app-header-share-entry {
+    grid-area: 1 / 2;
   }
-  body:not(.tv-presentation) .app-header-controls:has([data-search-filled]) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  body:not(.tv-presentation)
-    .app-header-controls:has([data-search-filled])
-    :is(.app-header-couch, .app-header-share-entry) {
-    display: none;
-  }
-  body:not(.tv-presentation) .app-header-controls:has([data-search-filled]) .app-header-search {
-    grid-column: 1;
+  body:not(.tv-presentation) .app-header-search {
+    grid-area: 2 / 1 / auto / -1;
   }
 }
 .tv-presentation .app-header-controls {
-  grid-template-columns: clamp(2.75rem, 14cqw, 12rem) auto 2.75rem minmax(0, 1fr) auto;
+  grid-template-columns: fit-content(clamp(2.75rem, 20cqw, 12rem)) auto minmax(9rem, 1fr) auto auto;
 }
 .tv-presentation .app-header-couch {
   display: flex;
 }
 .tv-presentation .app-header-search {
-  grid-column: 4;
+  grid-column: 3;
 }
 .tv-presentation .app-header-share-entry {
-  display: block;
-  grid-column: 3;
+  display: flex;
+  grid-column: 4;
 }
 .tv-presentation .app-header-tools {
   display: flex;
 }
-.tv-presentation .app-header-sharing {
-  grid-column: 1 / -1;
-}
-@container header (width < 60rem) {
+/* Beside the side player too the TV keeps one row; only a narrower header puts the tabs on their own. */
+@container header (width < 52rem) {
   .tv-presentation .app-header-controls {
-    grid-template-columns: minmax(0, 1fr) 2.75rem minmax(0, 2fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto auto;
   }
   .tv-presentation .app-header-search {
-    grid-column: 3;
+    grid-column: 2;
   }
   .tv-presentation .app-header-share-entry {
-    grid-column: 2;
+    grid-column: 3;
   }
   .tv-presentation .app-header-tools {
     grid-column: 4;
@@ -669,7 +742,7 @@ html:has(body.tv-presentation),
   min-height: 0;
   height: calc(100dvh / var(--interface-scale));
 }
-/* The footer (now-playing bar, phone tabs) is fixed, not sticky, so the shell keeps room for it (AppShell.tsx). */
+/* The footer (the capsule or the dock, phone tabs) is fixed, not sticky, so the shell keeps room for it (AppShell.tsx). */
 .app-shell:not(:has(.player-page)) {
   padding-bottom: var(--bottom-bar, 0px);
 }
@@ -702,7 +775,7 @@ html:has(body.tv-presentation),
 :root {
   --player-surface: rgb(0 0 0 / 75%);
 }
-/* The band's and the now-playing bar's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
+/* The band's and Now playing's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
 :root {
   --player-target: max(44px, 2.25rem);
 }
@@ -735,16 +808,6 @@ html:has(body.tv-presentation),
     button:not(:disabled):active {
     scale: 0.9;
   }
-}
-/* The band's Play/Pause is the player's one large control, as Apple's and YouTube's fullscreen transports lead with
-   theirs; the bar's grows into it as the bar becomes the band. */
-.player-band button[data-play-button] {
-  width: calc(var(--player-target) * 1.3);
-  height: calc(var(--player-target) * 1.3);
-}
-.player-band button[data-play-button] svg {
-  width: 2rem;
-  height: 2rem;
 }
 .player-band.player-video-controls::before {
   bottom: 0;
@@ -779,11 +842,11 @@ html:has(body.tv-presentation),
 /* Every player timeline (the band's, the bar's) thickens under a pointer and while it is dragged, as YouTube's. Over a
    picture it is a thin line whose unplayed part is translucent white, and its thumb shows only while a pointer or focus
    is on it. The hover time sits on the panel surface. */
-:is(.player-timeline, .bar-timeline) [data-slot="slider-track"] {
+.player-timeline [data-slot="slider-track"] {
   @apply motion-safe:transition-[height];
 }
 @media (hover: hover) {
-  :is(.player-timeline, .bar-timeline):is(:hover, :has(:active))
+  .player-timeline:is(:hover, :has(:active))
     [data-slot="slider"]:not([data-disabled])
     [data-slot="slider-track"] {
     height: 0.375rem;
@@ -795,48 +858,156 @@ html:has(body.tv-presentation),
 .player-timeline [data-slot="slider-track"] {
   background: rgb(255 255 255 / 25%);
 }
-/* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
-   tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
-   before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
-   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page (Up next over the player's room is the other). */
-.bar-glass {
-  border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--tone) 80%, transparent);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  box-shadow: var(--float-shadow);
-  transition: --tone 0.6s var(--ease-out);
+/* A lit panel (docs/design.md, Surfaces): what plays, standing in the room, as the now-playing bar. Its warm dark ground
+   takes the lamps' colours as the room does, more while it plays, and throws a little of their light around it. */
+.lit-panel {
+  border-radius: var(--radius-xl);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--lamp) calc(7% + var(--light) * 21%), #18151b),
+    color-mix(in oklab, var(--spill) calc(5% + var(--light) * 15%), #121014)
+  );
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 7.5%),
+    0 1.75rem 4rem -1.75rem rgb(0 0 0 / 90%),
+    0 0 9rem -1.75rem color-mix(in oklab, var(--lamp) calc(var(--light) * 70%), transparent);
 }
-@media (max-width: 39.99rem) {
-  .bar-glass {
-    border-radius: 1rem;
+/* Now playing (NowPlaying.tsx): the side player's column stands on the room; its desk, the capsule and the phone's dock
+   are lit panels (.lit-panel). --fill is the quiet ground of its boxes and pills. */
+:root {
+  --side-player-width: 23rem;
+}
+/* Content steps aside for the side player, at the left or the right (Player side, player-side.ts).
+   --content-inset-left and --content-inset-right are the room it takes at each edge, 0 with no side player, minimised
+   or on a phone, so what floats over the content (messages) keeps clear of it and centres on the page. */
+:root {
+  --content-inset-left: 0px;
+  --content-inset-right: 0px;
+}
+.app-shell[data-side-player][data-player-side="left"] {
+  --content-inset-left: calc(var(--side-player-width) + 1.5rem);
+}
+.app-shell[data-side-player][data-player-side="right"] {
+  --content-inset-right: calc(var(--side-player-width) + 1.5rem);
+}
+.app-shell[data-side-player] {
+  padding-left: var(--content-inset-left);
+  padding-right: var(--content-inset-right);
+}
+/* At the left the side player takes the macOS window controls' corner; the header beside it starts at the gutter. */
+.app-shell[data-side-player][data-player-side="left"] .app-header-controls.window-controls-inset {
+  padding-left: var(--gutter);
+}
+.now-playing {
+  --fill: rgb(255 255 255 / 8%);
+  --fill-2: rgb(255 255 255 / 15%);
+  isolation: isolate;
+}
+/* The desk (Desk.tsx): the one glass object of Now playing, holding where it plays, Volume, the timeline and the
+   transport. Everything above it stands on the room. */
+.desk {
+  border-radius: 1.75rem;
+  -webkit-backdrop-filter: blur(1.75rem);
+  backdrop-filter: blur(1.75rem);
+}
+/* A device's row in the desk (DeskRows.tsx): Move here shows under a pointer, the chevron once its name is reached. */
+.now-playing {
+  --desk-row: 2.75rem;
+}
+@media (pointer: coarse) {
+  .now-playing {
+    --desk-row: 3rem;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .bar-glass {
-    transition: none;
+.desk-row-move {
+  display: none;
+}
+.desk-row-chevron {
+  visibility: hidden;
+}
+@media (hover: hover) {
+  .desk-row:is(:hover, :focus-within) .desk-row-move {
+    display: inline-flex;
+  }
+  .desk-row > button:hover .desk-row-chevron {
+    visibility: visible;
   }
 }
-/* The bar's timeline runs along its top edge between its corners: a rounded line whose played part glows a little,
-   that thickens and shows its handle under a pointer, with a hit area taller than the line, centred on it. */
-.bar-timeline [data-slot="slider"] {
-  padding-block: 0.5rem;
+.desk-row > button:is(:focus-visible, [aria-expanded="true"]) .desk-row-chevron {
+  visibility: visible;
 }
-.bar-timeline [data-slot="slider-track"] {
-  border-radius: 999px;
-  background: rgb(255 255 255 / 18%);
-  overflow: visible;
+/* A device's Sound and Picture keys (MixerKeys.tsx): a flat disc in a target, two fixed columns at the row's edge. */
+.mixer-key {
+  --key: 2rem;
+  --key-disc: 2rem;
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--key);
+  height: var(--key);
+  border-radius: 9999px;
+  color: var(--subtle-foreground);
 }
-.bar-timeline :is([data-slot="slider-range"], [data-slot="slider-buffered"]) {
-  border-radius: inherit;
+.mixer-key::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--key) - var(--key-disc)) / 2);
+  border-radius: 9999px;
 }
-.bar-timeline [data-slot="slider-range"] {
-  box-shadow: 0 0 0.5rem rgb(255 255 255 / 55%);
+.mixer-key > svg {
+  position: relative;
+  width: 1.0625rem;
+  height: 1.0625rem;
 }
-.bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] {
-  scale: 0;
+@media (hover: hover) {
+  button.mixer-key:not([aria-disabled="true"], [aria-pressed="true"]):hover {
+    color: var(--foreground);
+  }
+  button.mixer-key:not([aria-disabled="true"], [aria-pressed="true"]):hover::before {
+    background: var(--fill-2);
+  }
 }
-:is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] {
+.mixer-key[aria-pressed="true"] {
+  color: var(--background);
+}
+.mixer-key[aria-pressed="true"]::before {
+  background: var(--foreground);
+}
+.mixer-key[aria-disabled="true"],
+.mixer-key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Focus inverts: the key's disc turns white with black ink. */
+.mixer-key:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  background: none;
+  color: var(--ring-foreground);
+}
+.mixer-key:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus)::before {
+  background: var(--ring);
+  box-shadow: 0 0 0 0.1875rem var(--ring);
+}
+@media (pointer: coarse) {
+  .mixer-key {
+    --key: 2.75rem;
+    --key-disc: 2.25rem;
+  }
+  .mixer-key > svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+/* What scrolls in the desk and the side column fades where it is cut, rather than ending on a hard edge. */
+[data-cut="end"] {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 1.5rem), transparent);
+}
+[data-cut="right"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 1.25rem), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 1.25rem), transparent);
+}
+.player-timeline [data-slot="slider-thumb"] {
   @apply motion-safe:transition-[scale];
 }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] {
@@ -845,7 +1016,7 @@ html:has(body.tv-presentation),
 .player-video-controls [data-timeline-preview] {
   background: var(--player-surface);
 }
-/* The mixer's Sheet (phones, the TV, long lists) stays as it is: solid, since it lies over the band, whose controls would
+/* The mixer's Sheet (phones) stays as it is: solid, since it lies over the band, whose controls would
    show through a translucent one. */
 html:has(.player-page[data-osd]) [data-slot="popover-content"],
 .player-page[data-osd] :is(.player-queue, .player-next-up) {
@@ -883,14 +1054,20 @@ html:has([data-slot="popover-content"]) .player-next-up {
   pointer-events: auto;
 }
 /* It is one of the band's panels (Volume, Where it plays, the gear's menu): their surface and corner, their wide width,
-   their .75rem inset, and the same place, 8px above the band and ending at the gutter. */
+   their .75rem inset, and the same place, 8px above the band and ending at its button's right edge (--queue-end,
+   PlayerPage.tsx), kept a gutter inside the screen. */
 .player-page[data-osd][data-queue-open] .player-queue {
+  --queue-width: min(32rem, calc(100% - 2 * var(--gutter)));
   display: flex;
   position: absolute;
   z-index: 30;
-  right: var(--gutter);
+  right: clamp(
+    var(--gutter),
+    var(--queue-end, var(--gutter)),
+    calc(100% - var(--queue-width) - var(--gutter))
+  );
   bottom: calc(var(--bottom-bar, 0px) + 8px);
-  width: min(32rem, calc(100% - 2 * var(--gutter)));
+  width: var(--queue-width);
   max-height: calc(100% - var(--player-top, 0px) - var(--bottom-bar, 0px) - 1.5rem);
   padding: 0.25rem 0.75rem 0.75rem;
   border-radius: var(--radius-lg);
@@ -960,11 +1137,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
   margin-inline: -0.375rem;
   padding-inline: 0.375rem;
 }
-/* The room's light pools behind the artwork, never behind the copy. */
-.player-page > .room {
-  --room-x: 30%;
-  --room-y: 50%;
-}
 @media (max-width: 959px), (max-aspect-ratio: 5/4) {
   .player-summary {
     --art-h: calc(100cqh - 14rem);
@@ -985,10 +1157,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
   [data-player-audio-copy] {
     width: 100%;
   }
-  .player-page > .room {
-    --room-x: 50%;
-    --room-y: 32%;
-  }
   /* Stacked, Info makes room under a smaller artwork, and the whole column scrolls when it still can't fit. */
   .player-page[data-info] .player-summary {
     --art-h: max(6rem, calc(100cqh - 26rem));
@@ -1005,6 +1173,37 @@ html:has([data-slot="popover-content"]) .player-next-up {
     margin-inline: 0;
     padding-inline: 0;
   }
+}
+/* A phone's player, stacked as the prototype's (PlayerPage.tsx, data-stacked): the artwork and the title at the top,
+   then Where it plays and Up next filling the room down to the band, as the side player's panel does. */
+.player-page[data-stacked] .player-workspace {
+  inset: 5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 0.5rem);
+}
+.player-page[data-stacked]:not([data-info], [data-queue-open]) .player-summary {
+  --art-h: 34cqh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  height: 100%;
+  --title-short: 1.625rem;
+  --title-medium: 1.5rem;
+  --title-long: 1.375rem;
+  --title-xlong: 1.25rem;
+}
+.player-page[data-stacked]:not([data-info], [data-queue-open]) .player-art > :not(svg),
+.player-page[data-stacked]:not([data-info], [data-queue-open]) .player-art img {
+  border-radius: 0.875rem;
+}
+.player-page[data-stacked]:not([data-info], [data-queue-open]) [data-player-audio-copy] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-height: 0;
+  padding-bottom: 0;
+  --fill: rgb(255 255 255 / 8%);
+  --fill-2: rgb(255 255 255 / 15%);
 }
 .player-timeline:has([role="slider"]) {
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1027,12 +1226,13 @@ html:has([data-slot="popover-content"]) .player-next-up {
   grid-column: 3;
   grid-row: 1;
 }
-/* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it the transport sits
-   in the middle and the tools at the right exactly as the now-playing bar's (Volume, Where it plays, Up next, the gear,
-   then the last slot: fullscreen here, Open player there), so nothing moves as the bar grows into the band. */
+/* The timeline takes its own row above (it comes first in the DOM, so focus lands on it). Under it one quiet row, as
+   YouTube's and Twitch's players: the transport leads at the left, its glyph under the position as the last tool's is
+   under the time left, nothing sits over the middle of the picture, and the tools end at the right in the now-playing
+   bar's order (Volume, Where it plays, Up next, the gear, then the last slot: fullscreen here, Open player there). */
 .player-control-row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto auto minmax(0, 1fr);
   grid-auto-flow: dense;
   align-items: center;
   gap: 0.5rem 1rem;
@@ -1045,21 +1245,37 @@ html:has([data-slot="popover-content"]) .player-next-up {
   scrollbar-width: thin;
 }
 .player-control-row > .player-transport {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: -0.625rem;
+}
+.player-control-row > [data-player-lead] {
   grid-column: 2;
-  justify-self: center;
 }
 .player-control-row > [data-player-tools] {
-  grid-column: 3;
+  grid-column: -1;
   justify-self: end;
 }
+/* From the bar's breakpoint up the timeline runs the band's whole width, and its time sits in the row (data-player-lead). */
+@media (width >= 40rem) {
+  .player-band .player-timeline:has([role="slider"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .player-band .player-timeline:has([role="slider"]) > .relative {
+    grid-column: 1;
+  }
+  .player-band .player-timeline [data-time-labels] {
+    display: none;
+  }
+}
 @media (min-width: 960px) {
-  /* The artwork has the room; Up next, summoned from its button, is a panel over the room at the right above the band,
-     as it is over a picture. */
+  /* The artwork has the room; Up next, summoned from its button, is a panel over the room above the band ending at its
+     button, as it is over a picture. The workspace already stands a gutter in from the screen's edge. */
   .player-page[data-artwork-stage][data-queue-open] .player-queue {
     display: flex;
     position: absolute;
     z-index: 30;
-    right: 0;
+    right: max(0px, calc(var(--queue-end, var(--gutter)) - var(--gutter)));
     bottom: 0;
     width: min(28rem, 100%);
     max-height: 100%;
@@ -1091,25 +1307,15 @@ html:has([data-slot="popover-content"]) .player-next-up {
     column-gap: 0.5rem;
   }
 }
-/* Phones, at the bar's breakpoint (sm): a centred transport leaves room for two tools, so the transport leads, its glyph
-   under the position as the last tool's is under the time left, and every tool stays. Without gaps the seven 44px
-   targets fill 320px exactly, touching but never overlapping; anything narrower scrolls the row. */
+/* Phones, at the bar's breakpoint (sm): every tool stays, the targets touching but never overlapping; a screen too
+   narrow for the row scrolls it. */
 @media (width < 40rem) {
   .player-control-row {
     min-width: max-content;
-    grid-template-columns: auto minmax(0, 1fr);
     column-gap: 0;
   }
   .player-control-row > div {
     gap: 0;
-  }
-  .player-control-row > .player-transport {
-    grid-column: 1;
-    justify-self: start;
-    margin-left: -0.625rem;
-  }
-  .player-control-row > [data-player-tools] {
-    grid-column: 2;
   }
   /* The bar keeps only Open player on phones, so the band's empty last slot has no x to keep: the tools end at the gutter. */
   .player-control-row span[data-player-last] {
@@ -1131,23 +1337,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
 }
 .player-control-row:has(> [data-live-participation]) > [data-player-tools] {
   grid-column: 2;
-}
-/* Live's status can be a full error sentence. Keep it out of the bar's intrinsic-width transport column. */
-[data-now-playing]:has(> [data-live-participation]) {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-}
-@media (width < 40rem) {
-  [data-now-playing]:has(> [data-live-participation]) {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  [data-now-playing]:has(> [data-live-participation]) > [data-live-participation] {
-    grid-row: 2;
-    grid-column: 1 / -1;
-  }
-  [data-now-playing]:has(> [data-live-participation]) > [data-bar-tools] {
-    grid-row: 1;
-    grid-column: 2;
-  }
 }
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace {
@@ -1172,7 +1361,7 @@ html:has([data-slot="popover-content"]) .player-next-up {
     overflow-y: auto;
   }
   .player-page[data-artwork-stage] .display-title {
-    --glyph: 0.8;
+    --glyph: 0.89;
   }
   .player-header {
     padding-block: 0.25rem;
@@ -1242,65 +1431,155 @@ html[data-cursor-hidden] * {
     transition: none;
   }
 }
-/* The room (Stage.tsx, the player's Now playing; docs/design.md, Room): what a picture stands in, painted with its own
-   colours, sampled and dimmed so muted ink keeps 7:1 anywhere on it (artwork-light.ts, roomPeak). Its first colour pools
-   behind the picture, its second falls from the top corner, and a fine grain keeps the gradients from banding and gives
-   the dark a surface. All static: painted once, and when the picture changes its colours cross-fade (registered custom
-   properties) over 600 ms. Without colour (a white cover, a black-and-white logo) the room is a neutral graphite. */
-@property --room-a {
+/* The room (RoomLight.tsx; docs/design.md, Room): the dark every screen stands in, lit by what plays. Its lamp (the
+   picture's first colour) pools where the player stands and its spill (the second) rises from the bottom left corner.
+   --light says how lit it is: 1 playing, .3 paused, .5 for a page's lead picture while nothing plays, 0 dark. In the
+   full player the picture itself, blurred (.room-picture), lies on the wall too. The colours and
+   the level cross-fade over 600 ms (registered custom properties); a fine grain keeps the gradients from banding. The
+   header and the phone's tabs paint the same room fixed to the window (.room-ground), so it runs on under them unbroken. */
+@property --light {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --lamp {
   syntax: "<color>";
   inherits: true;
-  initial-value: #171717;
+  initial-value: #000;
 }
-@property --room-b {
+@property --spill {
   syntax: "<color>";
   inherits: true;
-  initial-value: #0b0b0b;
+  initial-value: #000;
 }
-@property --light-a {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #222;
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-@property --tone {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #1c1c1e;
-}
-.room {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-  pointer-events: none;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      55% 75% at var(--room-x, 78%) var(--room-y, 42%),
-      color-mix(in srgb, var(--light-a) 70%, var(--room-a)),
-      var(--room-a) 38%,
-      transparent 82%
-    ),
-    radial-gradient(70% 90% at 100% 0%, var(--room-b), transparent 70%),
-    linear-gradient(var(--room-b), #000);
+/* Where the lamp stands: by the player on desktops and the TV, at its side (Player side), by the dock on phones, by the lead while
+   nothing plays, by the artwork in the full player. */
+.app-shell {
+  --room-x: 12%;
+  --room-y: 26%;
   transition:
-    --room-a 0.6s var(--ease-out),
-    --room-b 0.6s var(--ease-out),
-    --light-a 0.6s var(--ease-out);
+    --light 0.6s var(--ease-out),
+    --lamp 0.6s var(--ease-out),
+    --spill 0.6s var(--ease-out);
 }
-.room::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--grain);
-  opacity: 0.06;
+.app-shell[data-player-side="right"] {
+  --room-x: 88%;
+}
+/* Minimised, it stands in the capsule's corner. */
+.app-shell:has([data-now-playing][data-size="mini"]) {
+  --room-x: 8%;
+  --room-y: 100%;
+}
+.app-shell[data-player-side="right"]:has([data-now-playing][data-size="mini"]) {
+  --room-x: 92%;
+}
+.app-shell[data-light="lead"] {
+  --room-x: 26%;
+  --room-y: 40%;
+}
+.app-shell:has(.player-page[data-artwork-stage]) {
+  --room-x: 30%;
+  --room-y: 48%;
+}
+@media (max-width: 47.99rem) {
+  .app-shell[data-player-side] {
+    --room-x: 50%;
+    --room-y: 100%;
+  }
+  .app-shell[data-light="lead"],
+  .app-shell:has(.player-page[data-artwork-stage]) {
+    --room-x: 50%;
+    --room-y: 36%;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .room {
+  .app-shell {
     transition: none;
   }
 }
-:root {
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+.room,
+.room-ground {
+  background:
+    var(--grain),
+    radial-gradient(
+      110% 95% at var(--room-x) var(--room-y),
+      color-mix(in oklab, var(--lamp) calc(var(--light) * 40%), transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      80% 80% at 0% 104%,
+      color-mix(in oklab, var(--spill) calc(var(--light) * 34%), transparent),
+      transparent 62%
+    ),
+    var(--background);
+}
+.room-ground {
+  background-attachment: fixed;
+}
+.room-light {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.room-picture {
+  display: none;
+  position: absolute;
+  z-index: -1;
+  object-fit: cover;
+  filter: blur(38px) saturate(1.7) brightness(0.6);
+  opacity: calc(var(--light) * 0.78);
+  pointer-events: none;
+}
+/* The side player's column holds its picture, blurred, on the wall behind what it shows (NowPlaying.tsx). */
+.side-player > .room-picture {
+  display: block;
+  left: -7%;
+  top: 2%;
+  width: 114%;
+  height: 118%;
+}
+/* In the full player the picture's light fills the room, its own wall; the header is hidden there, so nothing has to
+   repeat it. Dimmed, as the lamps are, so a bright sky keeps the title's ink readable. */
+.app-shell:has(.player-page[data-artwork-stage]) .room-light > .room-picture {
+  display: block;
+  inset: -10% -14%;
+  width: 128%;
+  height: 130%;
+  filter: blur(70px) saturate(1.7) brightness(0.45);
+  opacity: calc(var(--light) * 0.6);
+}
+/* Surfaces (docs/design.md): what opens over the page is a warm dark, a little see-through, blurring the light behind
+   it, with a hairline of light at its edge and a deep shadow under it. */
+:is(
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"]
+) {
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 10%),
+    0 1.5rem 4rem -0.75rem rgb(0 0 0 / 90%);
+}
+[data-slot="sheet-content"] {
+  background-color: var(--popover);
+  border: 0;
+}
+[data-slot="sheet-content"][data-side="bottom"] {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+/* A toast is ink on the room, the one light surface, so it reads at a glance; its verb is a dark capsule. */
+[data-sonner-toast]
+  [data-button]:is(:focus-visible, :where([data-keyboard] .tv-presentation) :focus) {
+  outline-color: var(--ring-foreground);
 }
 /* What stands in the room: an object casts a soft, deep shadow onto it, as a sleeve on a shelf; a mark casts none. */
 :root {
@@ -1311,16 +1590,16 @@ html[data-cursor-hidden] * {
   --float-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 9%);
 }
 
-/* Display type (docs/design.md, Type): Mona Sans at its normal width for every title, so short and long read as one
+/* Display type (docs/design.md, Type): Mona Sans, expanded, for every title, so short and long read as one
    voice. Length (titleLength in Stage.tsx) steps the size and, a little, the weight down: a long title wraps to more
    lines instead of condensing. Its size never lets its longest word (--word, in characters; --glyph is a lowercase
    character's width in em at this width, measured on real titles) overflow its column (cqi), so a word never breaks
    or clips; only a word longer than any column could hold breaks. */
 .display-title {
-  --glyph: 0.7;
+  --glyph: 0.78;
   font-family: var(--font-display);
   font-weight: var(--title-weight);
-  font-stretch: 100%;
+  font-stretch: 114%;
   line-height: 0.94;
   letter-spacing: -0.012em;
   overflow-wrap: break-word;
@@ -1386,11 +1665,17 @@ html[data-cursor-hidden] * {
   font-size: inherit;
 }
 
-/* Page titles and the headings of shelves, lists and sections are display type too, at their own sizes and normal width. */
+/* Mona Sans is always expanded (Type): page titles widest, then headings, then everything else set in it. */
+:is(.font-display, .font-heading) {
+  font-stretch: 112%;
+}
 :is(h1, h2):is(.text-heading, .text-page),
 :is(h1, h2).text-heading .text-heading {
   font-family: var(--font-display);
-  font-stretch: 100%;
+  font-stretch: 114%;
+}
+:is(h1, h2).text-page {
+  font-stretch: 120%;
 }
 
 /* Unlayered, so a page's spacing utilities (space-y) never undo the stage's reach under the header. */
@@ -1419,12 +1704,6 @@ html[data-cursor-hidden] * {
   --title-medium: 3.5rem;
   --title-long: 2.75rem;
   --title-xlong: 2.25rem;
-}
-/* The room fades into the page's black at the stage's foot (it never reaches past it, where it would paint over the
-   next section); its light pools behind the picture. */
-.stage > .room {
-  --room-x: 80%;
-  mask-image: linear-gradient(#000 50%, transparent);
 }
 /* Picture and copy share a baseline in normal flow, so long titles can grow the Stage without colliding. */
 .stage-picture {
@@ -1535,10 +1814,6 @@ html[data-cursor-hidden] * {
   .stage:not(:has(> [data-stage-picture] > *)) {
     padding-top: calc(var(--top-bar, 4rem) + 1.25rem);
   }
-  .stage > .room {
-    --room-x: 50%;
-    --room-y: 25%;
-  }
   .stage-copy {
     grid-area: 2 / 1;
     max-width: none;
@@ -1548,32 +1823,22 @@ html[data-cursor-hidden] * {
     margin-top: 1.75rem;
   }
 }
-/* Search results and a pasted list stand in the room (SearchPanel.tsx): fixed behind the page under the header, so it
-   stays the ground as the page scrolls, its light pooling behind the hero's artwork at the left. */
-.search-room {
-  position: fixed;
-  top: var(--top-bar, 4rem);
-  --room-x: 18%;
-  --room-y: 30%;
-}
-/* The query or the list's title, a step under a Details page's. */
-.search-title {
+/* The query or the list's title, a step under a Details page's; a source's room names itself the same. */
+.search-title,
+.room-title {
   --title-short: 4rem;
   --title-medium: 3.25rem;
   --title-long: 2.5rem;
   --title-xlong: 2rem;
 }
 @media (max-width: 47.99rem) {
-  .search-title {
+  .search-title,
+  .room-title {
     --title-short: 2.75rem;
     --title-medium: 2.25rem;
     --title-long: 1.875rem;
     --title-xlong: 1.625rem;
   }
-}
-/* Over a stage, while the page is at its top, the header is see-through, its ink kept by the dimmed room; scrolled, black again. */
-html[data-stage-under-header] .app-header {
-  background: transparent;
 }
 
 /* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (`--tile-ratio`,
@@ -1619,14 +1884,6 @@ html[data-stage-under-header] .app-header {
 [data-nav-rail] a[aria-current="page"] {
   font-weight: 600;
 }
-/* Personal shelves use one full-width rhythm, in the chosen Home order. */
-.home-shelves {
-  display: grid;
-  align-items: start;
-  gap: 2.5rem;
-  min-width: 0;
-}
-
 /* A missing poster keeps the same silhouette as its loaded neighbours in a mixed frame. */
 [data-tile-art][data-own="poster"] > span.media-artwork {
   width: min(100%, calc(var(--tile-art) * 2 / 3));
@@ -1634,43 +1891,16 @@ html[data-stage-under-header] .app-header {
   border-radius: var(--radius-md);
 }
 
-/* Home keeps its feature compact and its shelves in one full-width rhythm. */
+/* Home's sections stand in one full-width rhythm. */
 [data-page="Home"] {
   gap: 2.5rem;
 }
-.stage[data-stage="home"] {
-  --stage-h: min(24vw, 23rem);
-  --title-short: 3rem;
-  --title-medium: 2.75rem;
-  --title-long: 2.5rem;
-  --title-xlong: 2.25rem;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 2.5rem;
-}
-[data-stage="home"] .stage-picture {
-  grid-area: 1 / 1;
-}
-[data-stage="home"] .stage-object {
-  width: min(30vw, calc(12rem * var(--art-ratio)));
-}
-[data-stage="home"] .stage-copy {
-  grid-area: 1 / 2;
-  max-width: 42rem;
-  gap: 0.875rem;
-}
-[data-stage="home"] .stage-copy > [data-nav-row]:last-child {
-  margin-top: 0.25rem;
-}
-[data-stage="home"] > .room {
-  --room-x: 20%;
-}
 /* Whole pictures share a height; captions and progress share their visible edges. */
-.home-shelves [data-natural],
+[data-page="Home"] [data-natural],
 .home-radio-tile {
   --tile-art: clamp(8.5rem, 12.5vw, 11.5rem);
 }
-.home-shelves [data-natural][data-tile-shape="poster"] {
+[data-page="Home"] [data-natural][data-tile-shape="poster"] {
   --tile-art: clamp(11rem, 16vw, 15rem);
 }
 [data-natural] [data-tile-art] {
@@ -1678,48 +1908,6 @@ html[data-stage-under-header] .app-header {
 }
 [data-natural] [data-tile-art][data-own="poster"] > span.media-artwork {
   width: 100%;
-}
-@media (max-width: 47.99rem) {
-  .stage[data-stage="home"] {
-    grid-template-columns: minmax(0, 1fr) 7.5rem;
-    gap: 0.75rem 1rem;
-    padding-top: calc(var(--top-bar, 4rem) + 1.25rem);
-    align-items: start;
-    --title-short: 1.75rem;
-    --title-medium: 1.625rem;
-    --title-long: 1.5rem;
-    --title-xlong: 1.375rem;
-  }
-  [data-stage="home"] .stage-picture {
-    grid-area: 1 / 2 / 3 / 3;
-    margin: 0;
-    padding: 0;
-  }
-  [data-stage="home"] .stage-object {
-    width: min(100%, calc(7.5rem * var(--art-ratio)));
-  }
-  [data-stage="home"] .stage-copy {
-    display: contents;
-  }
-  [data-stage="home"] .stage-copy > * {
-    grid-column: 1 / -1;
-  }
-  [data-stage="home"]:has(.stage-object) .stage-copy > :is(h2, [data-nav-row]:first-child) {
-    grid-column: 1;
-  }
-  [data-stage="home"] .stage-copy > :first-child {
-    grid-row: 1;
-  }
-  [data-stage="home"]:has(.stage-object) .home-hero-meta {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  [data-stage="home"] .home-hero-meta {
-    margin-top: -0.25rem;
-  }
-  [data-stage="home"] .stage-copy > [data-nav-row]:last-child {
-    margin-top: 0;
-  }
 }
 
 @media (pointer: coarse) {

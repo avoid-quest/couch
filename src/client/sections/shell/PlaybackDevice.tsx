@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +37,6 @@ import {
 import { defaultDeviceName } from "../../../shared/devices";
 import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { TRY_AGAIN } from "@/copy";
 import { Onboarding } from "./Onboarding";
 import { NetworkSettings, sharingMutationKey } from "@/sections/settings/couch/NetworkSettings";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
@@ -112,13 +112,13 @@ export function NativeModeGate({ children }: PropsWithChildren) {
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
               <AlertAction>
-                <Button variant="ghost" size="sm" onClick={() => location.reload()}>
-                  {TRY_AGAIN}
-                </Button>
+                <TryAgain onClick={() => location.reload()} />
               </AlertAction>
             </Alert>
           ) : (
-            <StatusLine busy>Loading…</StatusLine>
+            <StatusLine busy dismissible={false}>
+              Loading…
+            </StatusLine>
           )}
         </Onboarding>
       </main>

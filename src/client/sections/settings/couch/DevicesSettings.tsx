@@ -1,6 +1,6 @@
 import { SettingsRowsSkeleton } from "@/components/LoadingMedia";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, devicesQuery } from "@/api/devices";
@@ -8,6 +8,7 @@ import { PairingDialog } from "@/components/PairingDialog";
 import { RowOptions } from "@/components/RowMenu";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,9 +21,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TRY_AGAIN } from "@/copy";
 import { formatSeen } from "@/time-format";
-import { Laptop, MonitorSmartphone, Smartphone, Tv } from "lucide-react";
+import { ChevronDown, Laptop, MonitorSmartphone, Smartphone, Tv } from "lucide-react";
 import { staleDuplicates, type Device, type DeviceIdentity } from "../../../../shared/devices";
 import { cn } from "@/lib/utils";
 import { RenameCouch } from "./RenameCouch";
@@ -51,7 +51,7 @@ function DeviceName({
         aria-hidden="true"
         className={cn("size-4 shrink-0", !online && "text-muted-foreground")}
       />
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </span>
   );
 }
@@ -67,6 +67,9 @@ export function DevicesSettings({
   online = new Set(),
   tvs = new Set(),
   hostTv = false,
+  children,
+  pairing,
+  onPairingShown,
 }: {
   credentials: ApiCredentials;
   connected: boolean;
@@ -80,6 +83,11 @@ export function DevicesSettings({
   /** Devices known to be TVs, and whether the host is one. */
   tvs?: ReadonlySet<string>;
   hostTv?: boolean;
+  /** The Couch's network settings, between pairing and the devices. */
+  children?: ReactNode;
+  /** Asked to show the pairing code, once. */
+  pairing: boolean;
+  onPairingShown: () => void;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.device?.id;
@@ -95,8 +103,14 @@ export function DevicesSettings({
   const [code, setCode] = useState("");
   const [pairingOpen, setPairingOpen] = useState(false);
   const [removing, setRemoving] = useState<Device[]>([]);
+  const [showOld, setShowOld] = useState(false);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
+  useEffect(() => {
+    if (!pairing) return;
+    setPairingOpen(true);
+    onPairingShown();
+  }, [pairing]);
   const refreshDevices = () =>
     queryClient.invalidateQueries({ queryKey: devicesQuery(credentials).queryKey });
   const claiming = useMutation({
@@ -137,11 +151,89 @@ export function DevicesSettings({
     if (!claiming.isPending) claiming.mutate(code.trim());
   }
 
-  // Pairing, then the paired Devices (like Bluetooth), then the rare admin handover. Pairing heads the list's rows:
-  // an untitled section of its own would leave a gap that reads as an empty row.
+  // This device and the host lead, then what's online, then the rest by when each was last seen. A device not seen for a
+  // week folds under "Not seen lately", so old pairings never push the list past the page.
+  const now = Date.now();
+  const rank = (device: Device) =>
+    device.id === selfId || device.role === "host" ? 0 : isOnline(device) ? 1 : 2;
+  const sorted = [...(devices.data ?? [])].sort(
+    (a, b) => rank(a) - rank(b) || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0),
+  );
+  const old = (device: Device) =>
+    rank(device) === 2 && (!device.lastSeenAt || now - device.lastSeenAt > 7 * 86_400_000);
+  const recent = sorted.filter((device) => !old(device));
+  const folded = sorted.filter(old);
+  // One quiet line in plain words: "This device, admin", "Hosts Couch", "Admin, online", "Seen yesterday".
+  const status = (device: Device) => {
+    const line =
+      device.role === "host"
+        ? [device.id === selfId ? "This device, hosts Couch" : "Hosts Couch"]
+        : device.id === selfId
+          ? ["This device", device.role === "administrator" && "admin"]
+          : [
+              device.role === "administrator" && "admin",
+              isOnline(device)
+                ? "online"
+                : device.lastSeenAt
+                  ? `seen ${formatSeen(device.lastSeenAt, now)}`
+                  : "never seen",
+              stale.includes(device) && "older duplicate",
+            ];
+    const text = line.filter(Boolean).join(", ");
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+  const row = (device: Device) => (
+    <SettingsRow
+      key={device.id}
+      data-device={device.id}
+      data-stale={stale.includes(device) || undefined}
+      label={
+        <DeviceName kind={kind(device)} online={device.role === "host" || isOnline(device)}>
+          {device.name}
+        </DeviceName>
+      }
+      description={status(device)}
+    >
+      {/* A left-behind duplicate offers only Forget. */}
+      {manager && device.role !== "host" && device.id !== selfId && (
+        <RowOptions
+          title={device.name}
+          disabled={pending}
+          actions={[
+            ...(stale.includes(device)
+              ? []
+              : [
+                  {
+                    label: device.role === "administrator" ? "Remove admin" : "Make admin",
+                    group: "role",
+                    run: () => act([device], "role"),
+                  },
+                ]),
+            // Destructive, so last and apart; it confirms.
+            { label: "Forget", group: "forget", run: () => setRemoving([device]) },
+          ]}
+        />
+      )}
+    </SettingsRow>
+  );
+
+  // The Couch's own settings lead: its name, pairing, the network, the rare admin handover; its Devices close the page.
   return (
     <>
       <SettingsSection data-devices>
+        {!host && manager && (
+          <SettingsRow label="Name" description="This Couch's name on every device.">
+            <span className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {hostName}
+            </span>
+            <RenameCouch
+              credentials={credentials}
+              connected={connected}
+              name={hostName}
+              onRenamed={refreshDevices}
+            />
+          </SettingsRow>
+        )}
         <SettingsRow
           label="New device"
           description={
@@ -174,132 +266,8 @@ export function DevicesSettings({
             openerRef={pairingRef}
           />
         )}
-        {devices.isSuccess &&
-          !host &&
-          manager &&
-          !devices.data.some((device) => device.role === "host") && (
-            <SettingsRow
-              label={
-                <DeviceName kind={hostTv ? "tv" : "computer"} online>
-                  {hostName}
-                </DeviceName>
-              }
-              description="Runs this Couch"
-            >
-              <RenameCouch
-                credentials={credentials}
-                connected={connected}
-                name={hostName}
-                onRenamed={refreshDevices}
-              />
-            </SettingsRow>
-          )}
-        {devices.isPending ? (
-          <SettingsRowsSkeleton />
-        ) : devices.isError ? (
-          <Alert variant="destructive">
-            <AlertDescription>Couldn't load devices.</AlertDescription>
-            <AlertAction>
-              <Button variant="outline" size="sm" onClick={() => void devices.refetch()}>
-                {TRY_AGAIN}
-              </Button>
-            </AlertAction>
-          </Alert>
-        ) : !devices.data.length ? (
-          <Empty className="py-0">
-            <EmptyHeader>
-              <EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <>
-            {devices.data.map((device) => (
-              <SettingsRow
-                key={device.id}
-                data-device={device.id}
-                data-stale={stale.includes(device) || undefined}
-                label={
-                  <DeviceName
-                    kind={kind(device)}
-                    online={device.role === "host" || isOnline(device)}
-                  >
-                    {device.name}
-                    {device.id === selfId && (
-                      <span className="text-muted-foreground"> (this device)</span>
-                    )}
-                  </DeviceName>
-                }
-                description={
-                  device.role === "host"
-                    ? "Runs this Couch"
-                    : [
-                        device.role === "administrator" && "Admin",
-                        isOnline(device)
-                          ? "Online"
-                          : device.lastSeenAt
-                            ? `Seen ${formatSeen(device.lastSeenAt)}`
-                            : "Never seen",
-                        stale.includes(device) && "Older duplicate",
-                      ]
-                        .filter(Boolean)
-                        .join(", ")
-                }
-              >
-                {!host && manager && device.role === "host" && (
-                  <RenameCouch
-                    credentials={credentials}
-                    connected={connected}
-                    name={device.name}
-                    onRenamed={refreshDevices}
-                  />
-                )}
-                {/* A left-behind duplicate offers only Forget. */}
-                {manager &&
-                  device.role !== "host" &&
-                  device.id !== selfId &&
-                  (stale.includes(device) ? (
-                    <Button
-                      variant="outline"
-                      disabled={pending}
-                      onClick={() => setRemoving([device])}
-                    >
-                      Forget
-                    </Button>
-                  ) : (
-                    <RowOptions
-                      title={device.name}
-                      disabled={pending}
-                      actions={[
-                        {
-                          label: device.role === "administrator" ? "Remove admin" : "Make admin",
-                          run: () => act([device], "role"),
-                        },
-                        { label: "Forget", run: () => setRemoving([device]) },
-                      ]}
-                    />
-                  ))}
-              </SettingsRow>
-            ))}
-            {manager && stale.length > 1 && (
-              <SettingsRow
-                label="Older duplicates"
-                description={`${stale.length} offline devices share a name with a newer one.`}
-              >
-                <Button variant="outline" disabled={pending} onClick={() => setRemoving(stale)}>
-                  Forget all
-                </Button>
-              </SettingsRow>
-            )}
-          </>
-        )}
-        {deviceChange.error && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {message(deviceChange.error, "Couldn't update the device. Try again.")}
-            </AlertDescription>
-          </Alert>
-        )}
       </SettingsSection>
+      {children}
       {host && remoteControlEnabled && !administratorClaimed && paired && (
         <SettingsSection
           title="Make a device the admin"
@@ -313,14 +281,10 @@ export function DevicesSettings({
               <Alert variant="destructive">
                 <AlertDescription>Couldn't load the admin code.</AlertDescription>
                 <AlertAction>
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <TryAgain
                     disabled={!connected || setupCode.isFetching}
                     onClick={() => void setupCode.refetch()}
-                  >
-                    Try again
-                  </Button>
+                  />
                 </AlertAction>
               </Alert>
             ) : (
@@ -378,6 +342,61 @@ export function DevicesSettings({
           )}
         </SettingsSection>
       )}
+      <SettingsSection title="Devices">
+        {devices.isPending ? (
+          <SettingsRowsSkeleton />
+        ) : devices.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>Couldn't load devices.</AlertDescription>
+            <AlertAction>
+              <TryAgain onClick={() => void devices.refetch()} />
+            </AlertAction>
+          </Alert>
+        ) : !devices.data.length ? (
+          <Empty className="py-0">
+            <EmptyHeader>
+              <EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <>
+            {recent.map(row)}
+            {folded.length > 0 && (
+              <SettingsRow
+                label={`Not seen lately (${folded.length})`}
+                description="Offline for more than a week."
+              >
+                <Button
+                  variant="ghost"
+                  aria-expanded={showOld}
+                  onClick={() => setShowOld(!showOld)}
+                >
+                  {showOld ? "Hide" : "Show"}
+                  <ChevronDown aria-hidden="true" className={cn(showOld && "rotate-180")} />
+                </Button>
+              </SettingsRow>
+            )}
+            {showOld && folded.map(row)}
+            {manager && stale.length > 1 && (
+              <SettingsRow
+                label="Older duplicates"
+                description={`${stale.length} offline devices share a name with a newer one.`}
+              >
+                <Button variant="outline" disabled={pending} onClick={() => setRemoving(stale)}>
+                  Forget all
+                </Button>
+              </SettingsRow>
+            )}
+          </>
+        )}
+        {deviceChange.error && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {message(deviceChange.error, "Couldn't update the device. Try again.")}
+            </AlertDescription>
+          </Alert>
+        )}
+      </SettingsSection>
       <AlertDialog
         open={removing.length > 0}
         onOpenChange={(open) => {

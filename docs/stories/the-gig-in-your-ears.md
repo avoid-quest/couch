@@ -3,13 +3,13 @@
 Status: preview
 
 At a small gig, the sound desk feeds the Couch computer. Rita, the organiser,
-chooses the desk's **Audio input**, gives it a **Title** and taps **Start
-sharing**. People in the crowd join on their phones, tap **Join** in **Shared
+chooses the desk's **Audio input**, sees its level move, gives it a **Title**
+and taps **Start sharing**. People in the crowd tap **Join** in **Shared
 sources** and hear the mix in their headphones, close to live, each at **Your
-volume**. Rita sees the **Listeners**, updates **Now playing** between sets,
-and taps **Stop sharing** at the end.
+volume**; a phone that needs it asks to **Tap to hear**. Rita's player is the
+console: she sees **Who listens**, changes **Now playing** with **Edit
+details…** in its **…** between sets, and taps **Stop** on the **Live** pill at the end.
 
 ## Good to know
 
 - Sharing live sound starts only from the Couch app on the Couch computer.
-- There's no input level meter.

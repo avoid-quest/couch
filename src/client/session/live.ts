@@ -38,6 +38,9 @@ type Publication = {
   frameRate: LiveVideoFrameRate;
   pictureWork?: Promise<void>;
   preview: MediaStream;
+  // An audio input's sound alone, for its level meter; for a native input, its device as the browser names it.
+  input?: MediaStream;
+  meterId?: string;
   surface?: LiveSelection["surface"];
   since: number;
   uploadId?: string;
@@ -56,12 +59,15 @@ type Peer = {
 };
 /**
  * What this device shares, while it does, and what can change without restarting it. stream: its picture only, for a
- * silent preview; relay: a TURN relay is offered to its connections.
+ * silent preview; input: an audio input's sound, for its level meter (meterId: a native input's device, to read its
+ * level from); relay: a TURN relay is offered to its connections.
  */
 export type LiveSharing = {
   captureFormat?: AudioCaptureFormat;
   source: LiveSource;
   stream: MediaStream;
+  input?: MediaStream;
+  meterId?: string;
   quality: LiveVideoQuality;
   frameRate: LiveVideoFrameRate;
   muted: boolean;
@@ -130,6 +136,8 @@ export function createLiveSession(options: {
   uploadUrl?: (sourceId: string, key: string, uploadId: string) => string;
   failed: (error: Error) => void;
   published: (source: LiveSource | null) => void;
+  /** The system ended the capture (or closed its window): the share ends here, and says so. */
+  ended?: (source: LiveSource, surface?: LiveSelection["surface"]) => void;
 }) {
   let generation = 0;
   let closed = false;
@@ -665,13 +673,25 @@ export function createLiveSession(options: {
           if (!native.length) throw error;
         }
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
+        // A device the desktop app reads natively is listed once, as its native input.
         return [
           ...native.map((input) => ({
             deviceId: `native:${input.uid}`,
-            label: `${input.name} · Native`,
+            label: input.name,
             nativeChannels: input.channels,
+            meterId: inputs.find(
+              (item) =>
+                item.kind === "audioinput" &&
+                item.deviceId !== "default" &&
+                item.label.includes(input.name),
+            )?.deviceId,
           })),
-          ...inputs.filter((input) => input.kind === "audioinput" && input.deviceId),
+          ...inputs.filter(
+            (input) =>
+              input.kind === "audioinput" &&
+              input.deviceId &&
+              !native.some((item) => input.label.includes(item.name)),
+          ),
         ];
       } finally {
         if (probe) stopTracks(probe);
@@ -796,16 +816,24 @@ export function createLiveSession(options: {
         }
         if (selection.intent === "live" && !audioFrames && !nativeAudioId)
           throw new Error("Live audio needs timestamped stereo capture on the Couch computer.");
+        // Named as people say it: "Studio Mac screen", "Chess on Studio Mac", "Studio Mac sound".
+        const name = localDeviceName();
         const label =
           selection.kind === "microphone"
-            ? "Audio input"
+            ? "audio input"
             : selection.kind === "system-audio"
-              ? "System audio"
-              : "Screen";
+              ? "sound"
+              : selection.surface === "window"
+                ? "window"
+                : "screen";
         const source: LiveSource = {
           id: sourceId,
           deviceId: deviceId(),
-          name: `${localDeviceName() ?? "This device"} · ${label}`,
+          name: !name
+            ? label[0]!.toUpperCase() + label.slice(1)
+            : selection.windowName
+              ? `${selection.windowName} on ${name}`
+              : `${name} ${label}`,
           kind: selection.kind,
           audio: !!nativeAudioId || !!audioTracks.length,
           video: !!videoTracks.length,
@@ -829,6 +857,10 @@ export function createLiveSession(options: {
           quality,
           frameRate,
           preview: new MediaStream(videoTracks),
+          ...(selection.kind === "microphone" && audioTracks.length
+            ? { input: new MediaStream(audioTracks) }
+            : {}),
+          ...(nativeAudioId && selection.meterId ? { meterId: selection.meterId } : {}),
           surface: selection.surface,
           since: Date.now(),
         };
@@ -839,7 +871,9 @@ export function createLiveSession(options: {
           track.addEventListener(
             "ended",
             () => {
-              if (publication === current) void end().catch(() => {});
+              if (publication !== current) return;
+              if (current.published) options.ended?.(current.source, current.surface);
+              void end().catch(() => {});
             },
             { once: true },
           );
@@ -885,6 +919,8 @@ export function createLiveSession(options: {
         quality: current.quality,
         frameRate: current.frameRate,
         stream: current.preview,
+        input: current.input,
+        meterId: current.meterId,
         surface: current.surface,
         since: current.since,
         relay: options.iceServers.some((server) =>

@@ -53,16 +53,21 @@ function relatedLinks({ collection, creator, radio, source }: Related) {
 }
 
 /**
- * A tile's or a row's relationships, as the last verbs in its menu ("Go to Phony"): a shelf or a list is pictures and
- * titles, and the item's own page and its menu hold where it leads.
+ * A tile's or a row's relationships, the Go verbs in its menu ("Go to Phony"): at most two, nearest first (its season
+ * or series, then its channel or station), never its source, which its page and the Browse line already lead to.
  */
 export function useRelatedMenu(related: Related | undefined): MenuAction[] {
   const navigation = useDetailNavigation();
   if (!related) return [];
-  return relatedLinks(related).links.map((link) => ({
-    label: `Go to ${link.title}`,
-    run: () => navigation.open(link.href),
-  }));
+  const { links } = relatedLinks({ ...related, source: undefined });
+  const [creator] = related.creator && providerForUrl(related.creator.url) ? links : [];
+  return [...links.filter((link) => link !== creator).reverse(), ...(creator ? [creator] : [])]
+    .slice(0, 2)
+    .map((link) => ({
+      label: `Go to ${link.title}`,
+      group: "go",
+      run: () => navigation.open(link.href),
+    }));
 }
 
 /** Named relationships as visible links, where an item has the room (a Stage, the player, the now-playing bar). */

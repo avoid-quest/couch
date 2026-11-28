@@ -1,3 +1,4 @@
+import { SharedPlate } from "@/sections/shell/NowPlaying";
 import { Description } from "@/components/DetailHeader";
 import { listeningLive, livePlayback, playbackControls } from "@/session/playback-controls";
 import { usePictureMapping } from "@/session/picture-mapping";
@@ -15,30 +16,42 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronRight, Info, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  Info,
+  Maximize,
+  Minimize,
+  Music2,
+  Settings,
+  SlidersVertical,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
+import { useArtworkPicture } from "@/components/AmbientLight";
+import { Level } from "@/components/Level";
 import { mediaSubtitle } from "@/components/MediaContext";
+import { PlayingMenu } from "./PlayingMenu";
 import {
+  PlaybackTime,
   PlaybackTimeline,
   PlaybackTransport,
+  PlaybackVolume,
   VolumeButton,
   playbackCapabilities,
-  toolPanel,
   useEndTime,
 } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
 import { sourceLabel } from "@/source-label";
-import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
+import { PlaybackMenu } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { useBottomBar } from "@/sections/shell/NowPlayingBar";
+import { PlaybackStrip, UpNext, whereWords } from "@/sections/shell/NowPlayingParts";
+import { useBottomBar } from "@/sections/shell/bottom-bar";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
 import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
 import { useCouchPlayer } from "@/components/CouchPlayer";
@@ -54,11 +67,10 @@ import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { WhereItPlays } from "@/sections/shell/Outputs";
-import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
+import { SharingPill } from "@/sections/share/ShareControl";
 import { cn } from "@/lib/utils";
-import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { titleFit, titleLength } from "@/components/Stage";
-import { Link, useLocation } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { RadioRecognition } from "@/components/RadioRecognition";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioStationQuery } from "@/api/radio";
@@ -80,6 +92,15 @@ const subscribeWide = (onChange: () => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 const isWide = () => window.matchMedia(wideQuery).matches;
+// Below the band's breakpoint (max-sm) a phone's player is one column, as the prototype's: the artwork and the title at
+// the top, then Where it plays and Up next, the band under them.
+const narrowQuery = "(max-width: 39.99rem)";
+const subscribeNarrow = (onChange: () => void) => {
+  const media = window.matchMedia(narrowQuery);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isNarrow = () => window.matchMedia(narrowQuery).matches;
 // The band's controls that open something to take focus (Popovers, Up next); Info shows its part in place.
 const opened = '[aria-expanded="true"]:not([data-info-toggle])';
 // Info over a picture opens on its first button, as the controls it hides would have held focus.
@@ -92,6 +113,9 @@ export function PlayerPage({
   onQueueOpenChange,
 }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
+  // Leaving the player, by any route, leaves fullscreen too.
+  const exitFullscreen = fullscreen.exit;
+  useEffect(() => () => void exitFullscreen(), [exitFullscreen]);
   const shell = useShell();
   const { credentials, available, active, current } = shell;
   const currentProgramme = useStationShow();
@@ -197,8 +221,10 @@ export function PlayerPage({
     [picture],
   );
   const artworkStage = audioOnly || !picture;
-  const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending;
+  const canFullscreen = !tvPresentation && fullscreen.supported;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false);
+  const stacked = narrow && artworkStage && !!current && !!state;
   // Now playing is calm: artwork, title and where it comes from. Info shows the rest in place (a show's genres and host,
   // its broadcast, synopsis and the next show; an item's trail and end). It belongs to what this Playback shows, so
   // another entry or Playback starts calm, while a new programme on the same station keeps it open.
@@ -239,7 +265,7 @@ export function PlayerPage({
     setInfoFor(infoKey);
   }, [infoRequest, infoKey]);
   const sharing = !!localLiveSourceId;
-  // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
+  // While this device shares, the bands stay up, so the top band's pill and its Stop stay on screen.
   const autoHide = connected && playing && !artworkStage && !sharing;
   useBottomBar(band, !!current && shown);
   useEffect(() => {
@@ -279,11 +305,11 @@ export function PlayerPage({
   const retry =
     state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   // The controls stay up on a toast's action, which Back returns to them, or while one of their Popovers or Sheets is
-  // open (Volume, Where it plays), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
+  // open (Volume, Where it plays, the TV's playback picker), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
   // them. On the TV they hide wherever focus is, and the next key brings them back on Pause.
   const idle = () => {
     const opened = document.querySelector(
-      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]',
+      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"], [data-slot="dropdown-menu-content"][data-state="open"]',
     );
     if (
       opened ||
@@ -449,10 +475,11 @@ export function PlayerPage({
     window.addEventListener("couch-info", toggleInfo);
     return () => window.removeEventListener("couch-info", toggleInfo);
   });
-  // Beside the artwork the room takes its colours, and the artwork stands at its own shape (docs/design.md, Room).
-  const roomArt = currentProgramme?.artworkUrl || current?.thumbnail;
-  const roomLight = useArtworkLight(artworkStage ? roomArt : undefined);
-  const [artFrame, artRatio] = useArtRatio(roomArt, 1);
+  // The artwork stands at its own shape in the room its picture lights (docs/design.md, Room).
+  // Through Core, so a phone refused the host's picture (RaiPlay's) still shows it.
+  const artSrc = currentProgramme?.artworkUrl || current?.thumbnail;
+  const shownArt = useArtworkPicture(artSrc, true);
+  const [artFrame, artRatio] = useArtRatio(shownArt, 1);
   const radio = isRadio(current);
   const osd = !!current && !artworkStage;
   // iPhone Safari fills the window with the Player but has no document fullscreen.
@@ -549,37 +576,19 @@ export function PlayerPage({
   if (!current && !queueOpen && !playerTarget) return null;
 
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
-  const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      !detailHref ||
-      event.button ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    // Back returns the TV and a keyboard to the gear they opened Details from; a pointer's Back returns to the picture.
-    event.preventDefault();
-    detailNavigation.open(
-      detailHref,
-      panel === "settings" && (tvPresentation || !event.detail)
-        ? '.player-page button[aria-label="Playback"]'
-        : undefined,
-    );
-  };
-  // Back leads the top line on every screen: a pointer has no Back key, and on the TV a controller reaches it too.
-  const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
+  // Back leads the top line on every screen, naming where it goes: a pointer has no Back key, and on the TV a
+  // controller reaches it too. It never stops anything.
+  const backTo = playerTarget ? "Remote" : shell.playerBackLabel;
   const back = (
     <Button
       variant="ghost"
-      size="icon-lg"
-      className="-ml-2.5 size-(--player-target) shrink-0"
-      aria-label={backLabel}
-      title={backLabel}
+      className="-ml-1 h-(--player-target) shrink-0 gap-1.5 rounded-full bg-black/35 pr-4 pl-3 hover:bg-black/50"
+      aria-label={`Back to ${backTo}`}
+      title={`Back to ${backTo}. It keeps playing.`}
       onClick={shell.leavePlayer}
     >
-      <ArrowLeft aria-hidden="true" />
+      <ChevronDown aria-hidden="true" />
+      {backTo}
     </Button>
   );
   const infoButton = (
@@ -601,10 +610,14 @@ export function PlayerPage({
       <Info aria-hidden="true" />
     </Button>
   );
-  const artwork = currentProgramme?.artworkUrl ? (
-    <MediaArtwork priority thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} />
-  ) : current?.thumbnail ? (
-    <MediaArtwork priority thumbnail={current.thumbnail} title={current.title} />
+  // Nothing until Core's copy arrives, rather than the title's cover for a moment.
+  const artwork = artSrc ? (
+    <MediaArtwork
+      priority
+      bare={!shownArt}
+      thumbnail={shownArt}
+      title={(currentProgramme?.artworkUrl && currentProgramme.title) || current?.title || ""}
+    />
   ) : undefined;
   const setPanel = (value: Panel | null) => {
     if (!value) setPanelState(null);
@@ -639,14 +652,17 @@ export function PlayerPage({
   // A station's link names it under its show; without a show the title is the station, and already opens it. The
   // collections holding what plays are its trail, above the title as on a Stage.
   const context = current && (
-    <MediaContext
-      creator={current.creator}
-      radio={
-        radio && currentProgramme && current.source.startsWith("radio:")
-          ? { id: current.source.slice(6), title: current.title }
-          : undefined
-      }
-    />
+    <>
+      <MediaContext
+        creator={current.creator}
+        collection={current.collection}
+        radio={
+          radio && currentProgramme && current.source.startsWith("radio:")
+            ? { id: current.source.slice(6), title: current.title }
+            : undefined
+        }
+      />
+    </>
   );
   // A station's tags wait for Info; its link stays the same element either way, so focus on it survives Info.
   const copyContext =
@@ -662,6 +678,15 @@ export function PlayerPage({
       className="[&_[data-slot=breadcrumb-list]]:text-base"
     />
   );
+  // What plays has its own "…" at the top right of the player, beside Identify song and Info; the gear keeps the settings.
+  const playingMenu = state && current && (
+    <PlayingMenu
+      state={state}
+      connected={connected}
+      run={run}
+      back=".player-page [data-playing-menu]"
+    />
+  );
   // A show's title searches for the show; its station's link is under it.
   const titleHref = currentProgramme?.title
     ? searchLocation({ query: currentProgramme.title, source: "All" })
@@ -673,10 +698,14 @@ export function PlayerPage({
   ) : (
     title
   );
-  // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
-  const queueOrigin = queueOpen
-    ? `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`
-    : undefined;
+  // Up next hangs from its button, as the band's Popovers do (toolPanel): it ends at the button's right edge and grows
+  // from it.
+  const queueAnchor = queueOpen &&
+    root.current &&
+    queueTrigger.current?.offsetWidth && {
+      end: rightGap(root.current, queueTrigger.current),
+      origin: `calc(100% - ${queueTrigger.current.offsetWidth / 2}px) 100%`,
+    };
   const settings =
     player && state?.preferences && playbackControls(state).programme
       ? {
@@ -742,18 +771,15 @@ export function PlayerPage({
   return (
     <section
       ref={root}
-      style={
-        artworkStage
-          ? ({ ...roomStyle(roomLight), "--art-ratio": artRatio } as CSSProperties)
-          : undefined
-      }
+      style={artworkStage ? ({ "--art-ratio": artRatio } as CSSProperties) : undefined}
       className={cn(
-        "player-page fixed inset-0 isolate overflow-hidden bg-background",
+        "player-page fixed inset-0 isolate overflow-hidden bg-black data-artwork-stage:bg-transparent",
         !shown && "cursor-none [&_*]:cursor-none",
       )}
       data-page="Now"
       data-osd={osd || undefined}
       data-artwork-stage={artworkStage || undefined}
+      data-stacked={stacked || undefined}
       data-info={info || undefined}
       data-queue-open={queueOpen || undefined}
       data-player-idle={!current || undefined}
@@ -762,8 +788,7 @@ export function PlayerPage({
       onFocus={wake}
       onBlur={wake}
     >
-      {/* Video keeps black letterbox bars in every view. Artwork stands in its room. */}
-      {current && artworkStage && <div aria-hidden="true" className="room" />}
+      {/* Video keeps black letterbox bars in every view. Artwork stands in the shell's room (RoomLight.tsx). */}
       <Container
         ref={showPicture}
         data-player-surface
@@ -890,39 +915,42 @@ export function PlayerPage({
             )}
 
             <div className="ml-auto flex shrink-0 items-center gap-3">
-              <LiveSharingStatus />
+              <SharingPill onShow={shell.leavePlayer} />
               <div ref={setRecognitionControls} className="empty:hidden" />
+              {playingMenu}
               {current && artworkStage && infoButton}
             </div>
           </div>
         )}
+        {/* Over a picture one quiet line: Back, the title (opening Details) and where it comes from; the TV adds its
+          clock and Info at the right. */}
         {osd && (
           <div
             data-player-heading
-            className="drag-region window-controls-inset grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-(--gutter)"
+            className="drag-region window-controls-inset flex min-h-11 items-center gap-3.5 px-(--gutter)"
           >
-            {trail && <div className="col-start-2 col-end-4 min-w-0">{trail}</div>}
-            <div className="row-start-2">{back}</div>
+            {back}
             <h1
               title={title}
-              className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl"
+              className="min-w-0 shrink-0 basis-auto truncate text-sm font-semibold max-w-[50%]"
             >
               {linkedTitle}
             </h1>
-            <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
-              {sharing && <LiveSharingStatus />}
-              {!radio && <PlayerEndTime state={state} />}
-              {tvPresentation && <DigitalClock />}
-              {tvPresentation && <span className="self-center">{infoButton}</span>}
-            </div>
             {(byline || context) && (
-              <div className="col-start-2 col-end-4 flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
+              <div className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden text-sm whitespace-nowrap text-muted-foreground [&_[data-media-context]]:text-sm">
                 <PlaysOnLine at={at} overPicture>
                   {byline && <p className="min-w-0 truncate">{byline}</p>}
                   {context}
                 </PlaysOnLine>
               </div>
             )}
+            <div className="ml-auto flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
+              {sharing && <SharingPill className="self-center" onShow={shell.leavePlayer} />}
+              {tvPresentation && !radio && <PlayerEndTime state={state} />}
+              {tvPresentation && <DigitalClock />}
+              {playingMenu && <span className="self-center">{playingMenu}</span>}
+              {tvPresentation && <span className="self-center">{infoButton}</span>}
+            </div>
           </div>
         )}
       </div>
@@ -931,7 +959,12 @@ export function PlayerPage({
           {current && artworkStage && (
             <div data-player-summary className="player-summary">
               <div ref={artFrame} data-player-art aria-hidden="true" className="player-art">
-                {artwork || <Music2 className="size-12 text-muted-foreground" />}
+                {artwork ||
+                  (current.liveSourceId && state ? (
+                    <SharedPlate state={state} entry={current} />
+                  ) : (
+                    <Music2 className="size-12 text-muted-foreground" />
+                  ))}
               </div>
               {/* The media title leads, then where it comes from; Info adds the rest under them in place. Then what's wrong, if anything. */}
               <div
@@ -949,7 +982,7 @@ export function PlayerPage({
                     {linkedTitle}
                   </h1>
                 )}
-                <PlaysOnLine at={at}>
+                <PlaysOnLine at={stacked ? null : at}>
                   {livePlayback(state) && current.subtitle && (
                     <p className="text-base text-pretty text-muted-foreground [overflow-wrap:anywhere]">
                       {current.subtitle}
@@ -959,6 +992,12 @@ export function PlayerPage({
                 </PlaysOnLine>
                 {separateWindow && (
                   <p className="text-sm text-muted-foreground">In a separate window</p>
+                )}
+                {radio && (
+                  <p className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                    <Level moving={player?.status === "playing"} />
+                    On air now
+                  </p>
                 )}
                 {radio && player?.playbackId && (
                   <RadioRecognition
@@ -979,8 +1018,12 @@ export function PlayerPage({
                 <div
                   ref={infoRegion}
                   id="player-info"
-                  hidden={!info}
-                  className="grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0"
+                  // A station's notes always show, under On air now, as the side player's do.
+                  hidden={!info && !radio}
+                  className={cn(
+                    "grid gap-3 duration-200 motion-safe:animate-in motion-safe:fade-in-0",
+                    radio && "border-t border-border pt-3",
+                  )}
                 >
                   {byline && !livePlayback(state) && (
                     <p className="text-sm text-pretty text-muted-foreground">{byline}</p>
@@ -1007,6 +1050,33 @@ export function PlayerPage({
                   </p>
                 )}
                 {statusView}
+                {stacked && (
+                  <>
+                    <span className="flex empty:hidden">
+                      <PlaybackStrip state={state} />
+                    </span>
+                    {!livePlayback(state) && (
+                      <WhereItPlays
+                        state={state}
+                        connected={connected}
+                        run={run}
+                        className="h-auto min-h-11 w-full justify-between gap-3 rounded-2xl bg-white/8 px-3.5 py-2 text-left font-normal whitespace-normal hover:bg-white/15"
+                      >
+                        <span className="grid min-w-0">
+                          <span className="text-meta text-subtle-foreground">Where it plays</span>
+                          <span className="truncate text-sm font-medium">{whereWords(state)}</span>
+                        </span>
+                        <SlidersVertical aria-hidden="true" className="size-4" />
+                      </WhereItPlays>
+                    )}
+                    <UpNext
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      onOpen={() => setQueueOpen(true)}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1024,7 +1094,14 @@ export function PlayerPage({
               (osd || queueBeside) &&
                 "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90",
             )}
-            style={osd || queueBeside ? { transformOrigin: queueOrigin } : undefined}
+            style={
+              (osd || queueBeside) && queueAnchor
+                ? ({
+                    transformOrigin: queueAnchor.origin,
+                    "--queue-end": `${queueAnchor.end}px`,
+                  } as CSSProperties)
+                : undefined
+            }
           >
             <QueuePanel
               state={state}
@@ -1103,11 +1180,12 @@ export function PlayerPage({
             !shown && "opacity-0",
           )}
         >
-          {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
-            bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
-            gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
-            each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
-            at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
+          {/* The timeline, then one quiet row along the bottom, as YouTube's and Twitch's players: at the left Play/Pause,
+            Next and a labelled Stop, nothing over the middle of the picture, and at the right the bar's tools in its
+            order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback gear, then the
+            last slot: fullscreen here, bottom right as on every player, where the bar has Open player. Every control is a
+            ghost at the band's target (--player-target); those at the row's ends pull back (-2.5) so their glyphs line
+            up with the timeline's times. */}
           <div className="grid gap-1">
             {state && <PlaybackTimeline state={state} connected={connected} pageFirst compact />}
             <div
@@ -1123,29 +1201,48 @@ export function PlayerPage({
                     connected={connected}
                     run={run}
                     pageFirst
+                    quiet
+                    onLeft={shell.leavePlayer}
                     className="player-transport"
                   />
                 )}
-                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-                  {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
-                    with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-                  {state && (
-                    <VolumeButton
+                {/* Volume's level and the time follow the transport, as YouTube's do. A phone has its own volume keys,
+                  as YouTube's and Netflix's phone players assume, and Where it plays leads with the same Volume, so
+                  the narrowest row leaves it out and keeps one line. */}
+                {state && !livePlayback(state) && (
+                  <div data-player-lead className="flex min-w-0 items-center gap-2 max-sm:hidden">
+                    <PlaybackVolume
                       state={state}
                       connected={connected}
                       run={run}
-                      className={livePlayback(state) ? undefined : "max-sm:hidden"}
+                      showValue={false}
+                      className="w-32 min-w-0 flex-none gap-0"
                     />
+                    <PlaybackTime state={state} className="text-muted-foreground" />
+                  </div>
+                )}
+                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                  {state && livePlayback(state) && (
+                    <VolumeButton state={state} connected={connected} run={run} />
                   )}
-                  {state && !livePlayback(state) && (
-                    <WhereItPlays state={state} connected={connected} run={run} />
+                  {/* Where it plays, said as the devices it plays on, or its icon on a phone: the Mixer opens from it. One
+                    instance, so a request to choose opens one Mixer; stacked, the Where it plays box above is it. */}
+                  {state && !livePlayback(state) && !stacked && (
+                    <WhereItPlays
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className={
+                        narrow
+                          ? undefined
+                          : "mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 px-3.5 font-medium hover:bg-white/20"
+                      }
+                    >
+                      {!narrow && (
+                        <span className="min-w-0 truncate text-sm">{whereWords(state)}</span>
+                      )}
+                    </WhereItPlays>
                   )}
-                  <UpNextButton
-                    ref={queueTrigger}
-                    state={state}
-                    aria-expanded={queueOpen}
-                    onClick={() => setQueueOpen(!queueOpen)}
-                  />
                   {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                     turns subtitles on and off. It opens over the picture above the gear. */}
                   {!livePlayback(state) && (
@@ -1167,34 +1264,26 @@ export function PlayerPage({
                         </Button>
                       </PopoverTrigger>
                       {panel === "settings" && settings && (
-                        <PlaybackMenu
-                          {...settings}
-                          tracks={!audioOnly}
-                          trigger={gear.current}
-                          details={
-                            detailHref && (
-                              <Button asChild variant="ghost" className={playbackMenuRow}>
-                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
-                                  Details
-                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                                </Link>
-                              </Button>
-                            )
-                          }
-                        />
+                        <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} />
                       )}
                     </Popover>
                   )}
                   {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                     already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
+                  <UpNextButton
+                    ref={queueTrigger}
+                    state={state}
+                    aria-expanded={queueOpen}
+                    onClick={() => setQueueOpen(!queueOpen)}
+                  />
                   {!tvPresentation ? (
                     <Button
                       data-player-last
                       variant="ghost"
                       size="icon-lg"
                       disabled={!canFullscreen}
-                      aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      aria-label={fullscreen.fullscreen ? "Exit full screen" : "Full screen"}
+                      title={fullscreen.fullscreen ? "Exit full screen" : "Full screen"}
                       onClick={() => void fullscreen.toggle()}
                     >
                       {fullscreen.fullscreen ? (
@@ -1220,6 +1309,12 @@ export function PlayerPage({
       )}
     </section>
   );
+}
+
+/** The gap from a box's right edge to the page's, in CSS pixels: rects are zoomed (--interface-scale), offsets aren't. */
+function rightGap(page: HTMLElement, box: HTMLElement) {
+  const outer = page.getBoundingClientRect();
+  return ((outer.right - box.getBoundingClientRect().right) * page.offsetWidth) / outer.width;
 }
 
 // The station's next show by the guide's own clock, so a broadcast boundary moves it on without re-rendering the player.

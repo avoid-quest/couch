@@ -1,4 +1,5 @@
 import { browserActions } from "@/original-page";
+import { saveLabel } from "@/copy";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -20,6 +21,7 @@ import {
   type SearchHit,
 } from "./SearchOnlineResults";
 import { failed } from "@/toasts";
+import type { PlayOn } from "../../../shared/protocol";
 
 type Props = SearchPlaybackProps & {
   query: string;
@@ -98,8 +100,7 @@ function RadioResults(props: Props) {
       if (!signal.aborted) setBusy(false);
     }
   }
-  function play(station: RadioStation, playNow: boolean, deviceId?: string) {
-    const on = deviceId ? { deviceId } : {};
+  function play(station: RadioStation, playNow: boolean, on?: PlayOn) {
     void action(
       `Couldn't ${playNow ? "play" : "queue"} ${station.name}.`,
       async () =>
@@ -192,22 +193,35 @@ function RadioResults(props: Props) {
           ...(props.browse
             ? []
             : [
-                { label: "Details", run: () => navigation.open(itemLocation("radio", station.id)) },
+                {
+                  label: "Details",
+                  group: "go",
+                  run: () => navigation.open(itemLocation("radio", station.id)),
+                },
               ]),
           {
             label: "Play",
+            group: "play",
             disabled: !props.canPlay || busy || !props.onCommand,
             run: () => play(station, true),
           },
           {
             label: "Play on",
+            group: "play",
             disabled: !props.canPlay || busy || !props.onCommand,
-            playOn: (deviceId: string) => play(station, true, deviceId),
+            audioOnly: true,
+            playOn: (on: PlayOn) => play(station, true, on),
           },
-          { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
-          ...browserActions(station.homepage),
           {
-            label: saved ? "Saved" : "Save",
+            label: "Queue",
+            group: "play",
+            disabled: busy || !props.onCommand,
+            run: () => play(station, false),
+          },
+          ...browserActions(station.homepage, station.name),
+          {
+            label: saveLabel(saved, "Saved"),
+            group: "keep",
             pressed: saved,
             disabled: !props.connected || busy || favorites === null,
             run: () => save(station, saved),

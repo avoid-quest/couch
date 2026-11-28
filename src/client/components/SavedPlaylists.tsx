@@ -11,13 +11,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, playOnQuery, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, playOnQuery, usePlayOn } from "@/components/PlayOn";
+import { RowOptions } from "@/components/RowMenu";
 import { PageHeader } from "@/components/PageHeader";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
 import { ApiError, apiSend } from "@/api/client";
@@ -27,6 +27,7 @@ import { formatDuration } from "@/time-format";
 import { metaLine } from "@/media-caption";
 import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
+import type { PlayOn } from "../../shared/protocol";
 import { providerNames } from "../../shared/providers";
 
 const summary = (list: SavedPlaylistSummary) =>
@@ -59,6 +60,7 @@ export function SavedPlaylists({
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rename, setRename] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const section = useRef<HTMLElement>(null);
   const sensors = useDndSensors();
   // The server bumps the playlists revision after every change, from any remote.
@@ -129,12 +131,12 @@ export function SavedPlaylists({
   const load = async (
     target: { id: string; name: string; revision: number },
     mode: PlaylistLoadMode,
-    deviceId?: string,
+    on?: PlayOn,
   ) => {
-    const send = (on?: string) =>
+    const send = (on?: PlayOn) =>
       write(`${listPath(target.id)}/load${playOnQuery(on)}`, { revision: target.revision, mode });
-    await (mode === "play"
-      ? play(async (on) => (await send(on)) ?? false, deviceId)
+    return await (mode === "play"
+      ? play(async (on) => (await send(on)) ?? false, on)
       : session
         ? session.queue(target.name, send)
         : send());
@@ -202,16 +204,19 @@ export function SavedPlaylists({
                   menu={[
                     {
                       label: "Play",
+                      group: "play",
                       disabled: disabled || !canPlay || !item.entryCount,
                       run: () => void load(item, "play"),
                     },
                     {
                       label: "Play on",
+                      group: "play",
                       disabled: disabled || !canPlay || !item.entryCount,
-                      playOn: (deviceId) => void load(item, "play", deviceId),
+                      playOn: (on) => load(item, "play", on),
                     },
                     {
                       label: "Queue",
+                      group: "play",
                       disabled: disabled || !item.entryCount,
                       run: () => void load(item, "append"),
                     },
@@ -229,36 +234,43 @@ export function SavedPlaylists({
             actions={
               playlist && (
                 <>
-                  <Button
-                    disabled={disabled || !canPlay || !playlist.entries.length}
-                    onClick={() => void load(playlist, "play")}
-                  >
-                    {on("Play")}
-                  </Button>
-                  <PlayOnMenu
+                  <PlayPill
+                    label="Play"
+                    aria-label={on(`Play ${playlist.name}`)}
                     title={playlist.name}
                     disabled={disabled || !canPlay || !playlist.entries.length}
-                    onPlay={(deviceId) => void load(playlist, "play", deviceId)}
+                    onClick={() => void load(playlist, "play")}
+                    playOn={(on) => load(playlist, "play", on)}
                   />
-                  <Button
-                    variant="outline"
-                    disabled={disabled || !playlist.entries.length}
-                    onClick={() => void load(playlist, "append")}
-                  >
-                    Queue
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" disabled={disabled || !upNextCount}>
-                        Update from Up next
-                      </Button>
-                    </AlertDialogTrigger>
+                  <RowOptions
+                    title={playlist.name}
+                    actions={[
+                      {
+                        label: "Queue",
+                        group: "play",
+                        disabled: disabled || !playlist.entries.length,
+                        run: () => void load(playlist, "append"),
+                      },
+                      {
+                        label: "Update from Up next…",
+                        group: "list",
+                        disabled: disabled || !upNextCount,
+                        run: () => setUpdating(true),
+                      },
+                      {
+                        label: "Delete list",
+                        group: "list",
+                        disabled,
+                        run: () => void deleteList(playlist),
+                      },
+                    ]}
+                  />
+                  <AlertDialog open={updating} onOpenChange={setUpdating}>
+                    {/* Opened from the list's "…", which takes the focus back as it closes. */}
                     <AlertDialogContent
                       onCloseAutoFocus={(event) => {
-                        if (disabled || !upNextCount) {
-                          event.preventDefault();
-                          focus("[data-back]");
-                        }
+                        event.preventDefault();
+                        focus("[data-row-options]", "[data-back]");
                       }}
                     >
                       <AlertDialogHeader>
@@ -284,13 +296,6 @@ export function SavedPlaylists({
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  <Button
-                    variant="ghost"
-                    disabled={disabled}
-                    onClick={() => void deleteList(playlist)}
-                  >
-                    Delete
-                  </Button>
                 </>
               )
             }
@@ -306,7 +311,9 @@ export function SavedPlaylists({
             <SavedError message={mutation.error.message || "Couldn't change this list."} />
           )}
           {playlist && !playlist.entries.length && (
-            <SavedEmpty>This list is empty. Use Update from Up next to fill it.</SavedEmpty>
+            <SavedEmpty>
+              This list is empty. Use Update from Up next in its "…" to fill it.
+            </SavedEmpty>
           )}
           {!!playlist?.entries.length && (
             <DndContext

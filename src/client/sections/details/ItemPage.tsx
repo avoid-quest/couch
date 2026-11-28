@@ -9,25 +9,28 @@ import { searchLocation } from "@/search";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
-import { forLaterQuery, loadForLater } from "@/api/for-later";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, apiJson, apiSend, coreSentence, type ApiCredentials } from "@/api/client";
+import { historyReference, useDetailAction, useForLaterToggle } from "./save";
+import { forLaterQuery, loadForLater, removeForLater, restoreForLater } from "@/api/for-later";
 import { radioProgrammesQuery } from "@/api/radio";
 import { useStationSave } from "@/sections/home/on-air";
-import { removeFromContinue, undoProgressAction } from "@/api/progress";
+import { markWatched, removeFromContinue, undoProgressAction } from "@/api/progress";
+import { itemTarget, useHomeAction } from "@/sections/home/AddToHome";
+import { marksWatched } from "@/sections/home/history-menu";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
 import { PageHeader } from "@/components/PageHeader";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { TryAgain } from "@/components/TryAgain";
 import { Button } from "@/components/ui/button";
 import { savedSourceLabel } from "@/saved-source";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
 import { useSessionGate } from "@/session/session-context";
-import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
-import type { ForLaterItem, ForLaterReference } from "../../../shared/for-later";
+import type { ForLaterItem } from "../../../shared/for-later";
 import type { HistoryItem } from "../../../shared/viewing";
 import {
   isRadio,
@@ -36,14 +39,14 @@ import {
   radioShowNames,
   type RadioStation,
 } from "../../../shared/radio";
-import type { PlaybackCollection } from "../../../shared/protocol";
+import type { PlaybackCollection, PlayOn } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
 import { usePlayOn } from "@/components/PlayOn";
 import { useDetailNavigation, useOwnSearch } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
-import { deviceName, savedNotice } from "@/copy";
+import { savedNotice } from "@/copy";
 
 const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = (typeof kinds)[number];
@@ -187,11 +190,11 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
         )}
         {query.error && !gone ? (
           <Alert variant="destructive">
-            <AlertDescription>{query.error.message}</AlertDescription>
+            <AlertDescription>
+              {coreSentence(query.error) ?? "Couldn't load this item."}
+            </AlertDescription>
             <AlertAction>
-              <Button variant="ghost" onClick={() => void query.refetch()}>
-                Try again
-              </Button>
+              <TryAgain onClick={() => void query.refetch()} />
             </AlertAction>
           </Alert>
         ) : (
@@ -226,15 +229,6 @@ function DetailLayout({
       trail={<ContentBreadcrumb title={header.title} collection={collection} radio={radio} />}
     />
   );
-}
-
-// Core says why a verb failed; without its answer, Couch wasn't reached.
-function useDetailAction() {
-  const name = useSessionGate().state?.installationName;
-  return useMutation({
-    mutationFn: (run: () => Promise<unknown>) => run(),
-    onError: (error: Error) => failed(`Couldn't reach ${deviceName(name)}.`, error),
-  });
 }
 
 function QueueDetails({ id }: { id: string }) {
@@ -275,7 +269,7 @@ function QueueDetails({ id }: { id: string }) {
           run: () => action.mutate(() => run({ type: "play", entryId: item.id })),
         }}
         save={save}
-        more={browserActions(queuePageUrl(item))}
+        more={browserActions(queuePageUrl(item), item.title)}
       />
       {radio ? (
         <RelatedRadio
@@ -293,35 +287,6 @@ function QueueDetails({ id }: { id: string }) {
   );
 }
 
-/** Save and Saved for an item kept in For later, matched by its page URL; without one, Save only adds it. */
-function useForLaterToggle(
-  url: string | undefined,
-  reference: () => ForLaterReference,
-  action: ReturnType<typeof useDetailAction>,
-) {
-  const shell = useShell();
-  const { connected } = useSessionGate();
-  const client = useQueryClient();
-  const later = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected });
-  const saved = url ? later.data?.items.find((item) => item.url === url) : undefined;
-  return {
-    saved: !!saved,
-    disabled: !connected || !later.data || action.isPending,
-    run: () =>
-      action.mutate(async () => {
-        await (saved
-          ? apiSend(
-              shell.credentials,
-              `/api/for-later/${encodeURIComponent(saved.id)}`,
-              undefined,
-              "DELETE",
-            )
-          : apiSend(shell.credentials, "/api/for-later", { reference: reference() }));
-        await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
-      }),
-  };
-}
-
 function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => void }) {
   const shell = useShell();
   const session = useSessionGate();
@@ -330,20 +295,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
   const blocked = !session.connected || action.isPending;
   const playable = shell.available && !!(item.playable || item.queueEntryId);
   // A provider page can be kept in For later; its saved copy plays the same page.
-  const save = useForLaterToggle(
-    item.url,
-    () => ({
-      kind: "web",
-      url: item.url!,
-      title: item.title,
-      ...(/^https?:/.test(item.thumbnail ?? "") ? { thumbnail: item.thumbnail } : {}),
-      ...(item.duration != null && item.duration <= 86_400 ? { duration: item.duration } : {}),
-      ...(item.collection
-        ? { collection: { url: item.collection.url, index: item.collection.index } }
-        : {}),
-    }),
-    action,
-  );
+  const save = useForLaterToggle(item.url, () => historyReference(item), action);
   const remove = async () => {
     const result = await removeFromContinue(shell.credentials, item.mediaId);
     refresh();
@@ -357,7 +309,17 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         result.expiresAt - Date.now(),
       );
   };
-  const start = (on?: string) => shell.playHistory(item, { fromStart: item.position === 0, on });
+  // An episode marked as watched, its series' Play goes on to the next one.
+  const mark = async (watched: boolean) => {
+    await markWatched(shell.credentials, item.mediaId, watched);
+    refresh();
+    session.offerUndo(`Marked ${item.title} as ${watched ? "watched" : "unwatched"}.`, async () => {
+      await markWatched(shell.credentials, item.mediaId, !watched);
+      refresh();
+    });
+  };
+  const homeAction = useHomeAction();
+  const start = (on?: PlayOn) => shell.playHistory(item, { fromStart: item.position === 0, on });
   return (
     <>
       <DetailLayout
@@ -402,14 +364,26 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         save={item.url ? save : undefined}
         playOn={{
           disabled: blocked || !playable || !item.playable,
-          run: (deviceId) => action.mutate(() => play(start, deviceId)),
+          run: (on) => action.mutateAsync(() => play(start, on)).catch(() => false),
         }}
         more={[
-          ...browserActions(item.url),
+          ...homeAction(itemTarget(item)),
+          ...browserActions(item.url, item.title),
+          ...(marksWatched(item)
+            ? [
+                {
+                  label: item.watched ? "Mark as unwatched" : "Mark as watched",
+                  group: "list",
+                  disabled: blocked,
+                  run: () => action.mutate(() => mark(!item.watched)),
+                },
+              ]
+            : []),
           ...(item.position && !item.watched
             ? [
                 {
                   label: "Remove from Continue",
+                  group: "list",
                   disabled: blocked,
                   run: () => action.mutate(remove),
                 },
@@ -433,27 +407,17 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
   const client = useQueryClient();
   const action = useDetailAction();
   const { play } = usePlayOn();
+  const homeAction = useHomeAction();
   const list = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected });
   const items = list.data?.items ?? [];
   const index = items.findIndex((saved) => saved.id === item.id);
   const refresh = () =>
     client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   const remove = async () => {
-    const result = await apiSend<{ undoToken?: string }>(
-      shell.credentials,
-      `/api/for-later/${encodeURIComponent(item.id)}`,
-      undefined,
-      "DELETE",
-    );
+    const result = await removeForLater(shell.credentials, item.id);
     if (result?.undoToken)
       offerUndo(savedNotice(item.title, false), async () => {
-        await apiSend(
-          shell.credentials,
-          "/api/for-later/restore",
-          { token: result.undoToken },
-          "POST",
-          10_000,
-        );
+        await restoreForLater(shell.credentials, result.undoToken!);
         await refresh();
       });
     await refresh();
@@ -472,7 +436,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     );
     await refresh();
   };
-  const load = async (mode: "play" | "append", on?: string) => {
+  const load = async (mode: "play" | "append", on?: PlayOn) => {
     const send = () => loadForLater(shell.credentials, item.id, mode, on);
     await (mode === "append" ? queue(item.title, send) : send());
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
@@ -501,33 +465,32 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
         }}
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
-          run: (deviceId) => action.mutate(() => play((on) => load("play", on), deviceId)),
+          run: (on) =>
+            action.mutateAsync(() => play((on) => load("play", on), on)).catch(() => false),
         }}
         more={[
-          ...browserActions(item.url),
+          ...homeAction(itemTarget(item)),
+          ...browserActions(item.url, item.title),
           {
             label: "Move up",
+            group: "list",
             disabled: !connected || action.isPending || index <= 0,
             run: () => action.mutate(() => move(-1)),
           },
           {
             label: "Move down",
+            group: "list",
             disabled: !connected || action.isPending || index < 0 || index >= items.length - 1,
             run: () => action.mutate(() => move(1)),
           },
           {
-            label: "Remove",
+            label: "Remove from For later",
+            group: "list",
             disabled: !connected || action.isPending,
             run: () => action.mutate(remove),
           },
         ]}
-      >
-        {action.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {action.error.message}
-          </p>
-        )}
-      </DetailLayout>
+      />
       <RelatedCollection
         collection={item.collection}
         creator={item.creator}
@@ -603,10 +566,16 @@ function RadioDetails({ item }: { item: RadioStation }) {
         save={{ ...save, disabled: save.disabled || action.isPending }}
         playOn={{
           disabled: !connected || !shell.available || action.isPending,
-          run: (deviceId) =>
-            action.mutate(() => play((on) => shell.enqueueRadio(item, true, on), deviceId)),
+          audioOnly: true,
+          run: (on) =>
+            action
+              .mutateAsync(() => play((on) => shell.enqueueRadio(item, true, on), on))
+              .catch(() => false),
         }}
-        more={browserActions(programme?.programmeUrl ?? item.homepage)}
+        more={browserActions(
+          programme?.programmeUrl ?? item.homepage,
+          programme?.title || item.name,
+        )}
       >
         <RadioNext show={next} className="mt-2" />
       </DetailLayout>

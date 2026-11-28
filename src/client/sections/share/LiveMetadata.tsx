@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorText, useSessionGate } from "@/session/session-context";
+import { failed } from "@/toasts";
 import type { LiveMetadata, LiveSource } from "../../../shared/live-input";
 
 export function LiveMetadataFields({
@@ -43,11 +44,11 @@ export function LiveMetadataFields({
   );
 }
 
-export function LiveMetadataEditor({ source }: { source: LiveSource }) {
+/** The Title and Now playing of a running Live share, opened in place by Edit details; Save details or Cancel closes them. */
+export function LiveMetadataEditor({ source, onDone }: { source: LiveSource; onDone: () => void }) {
   const { connected, command } = useSessionGate();
   const [draft, setDraft] = useState<LiveMetadata>(source.metadata ?? {});
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
   const dirty =
     (draft.title?.trim() || "") !== (source.metadata?.title ?? "") ||
@@ -57,18 +58,19 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
       className="grid min-w-0 gap-3"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (!connected || busy.current || !dirty) return;
+        if (!connected || busy.current) return;
+        if (!dirty) return onDone();
         busy.current = true;
         setPending(true);
-        setError(null);
         try {
           await command({
             type: "updateLiveMetadata",
             sourceId: source.id,
             metadata: { title: draft.title ?? "", description: draft.description ?? "" },
           });
+          onDone();
         } catch (reason) {
-          setError(errorText(reason));
+          failed(errorText(reason));
         } finally {
           busy.current = false;
           setPending(false);
@@ -81,21 +83,21 @@ export function LiveMetadataEditor({ source }: { source: LiveSource }) {
         disabled={!connected}
         readOnly={pending}
       />
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <Button
-        type="submit"
-        variant="secondary"
-        className="justify-self-end"
-        disabled={!connected || !dirty}
-        aria-disabled={pending || undefined}
-        aria-busy={pending || undefined}
-      >
-        {pending ? "Saving…" : "Save details"}
-      </Button>
+      <div className="flex gap-1">
+        <Button
+          type="submit"
+          size="sm"
+          className="rounded-full"
+          disabled={!connected}
+          aria-disabled={pending || undefined}
+          aria-busy={pending || undefined}
+        >
+          {pending ? "Saving…" : "Save details"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 }

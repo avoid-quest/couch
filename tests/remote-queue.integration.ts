@@ -384,7 +384,7 @@ test("captured queue/Undo actions reject a target switch, offline TV and revoked
     await choose(f);
     const before = f.phone.state;
     await f.phone.command({ type: "remove", entryId: "waiting" }, tvId);
-    const plan = undoPlan({ type: "remove", entryId: "waiting" }, before, f.phone.state);
+    const plan = undoPlan({ type: "remove", entryId: "waiting" }, before, f.phone.state, phoneId);
     assert.ok(plan?.removed);
     const actions: Action[] = [
       { type: "restoreRemoved", token: plan.removed.token },

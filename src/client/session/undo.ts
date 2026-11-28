@@ -1,4 +1,5 @@
 import type { Action, SessionState } from "../../shared/protocol";
+import { keepsProgress } from "../../shared/viewing";
 
 type Resume = {
   entryId: string;
@@ -30,15 +31,38 @@ function resume(state: SessionState): Resume {
     : null;
 }
 
+const names = new Intl.ListFormat("en", { type: "conjunction" });
+
+/**
+ * Stop says where it stopped, This device included, and that the item waits in Continue when Core kept its place: media
+ * it keeps progress for (keepsProgress), started, and seekable, as Core saves no place it couldn't return to
+ * (server/progress.ts). Stopping never marks it watched.
+ */
+function stopped(before: SessionState, here: string) {
+  const ids = [...new Set(before.outputs?.map((output) => output.deviceId) ?? [])];
+  const where = ids
+    .map((id) =>
+      id === here ? "This device" : before.devices?.find((device) => device.id === id)?.name,
+    )
+    .filter((name): name is string => !!name);
+  const entry = before.queue.find((item) => item.id === before.currentEntryId);
+  const kept =
+    !!entry && keepsProgress(entry) && before.player.seekable && before.player.position > 0;
+  // A share stopped here goes on for everyone else.
+  const shared = before.liveSources?.some((source) => source.id === entry?.liveSourceId);
+  return `Stopped${where.length ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : shared ? " It's still in Shared sources." : ""}`;
+}
+
 export function undoPlan(
   action: Action,
   before: SessionState,
   after: SessionState,
+  here: string,
 ): UndoPlan | null {
   if (action.type === "stop") {
     const stoppedId = resume(before)?.playbackId;
     return stoppedId && (!action.playbackId || action.playbackId === stoppedId)
-      ? { text: "Stopped.", stoppedId }
+      ? { text: stopped(before, here), stoppedId }
       : null;
   }
   if (action.type === "remove") {
@@ -123,12 +147,30 @@ function reorderedForPlay(state: SessionState, entryId: string) {
     : queue;
 }
 
+// An Undo of Stop brings its Playback back where it was, so the next picture to return within a moment is that one, and
+// the shell doesn't open the full player for it as it does for a picture just started (AppShell). Core answers well
+// within the moment.
+let restoringUntil = 0;
+const restoreWindow = 5_000;
+/** An Undo is bringing a picture back: the next one to return isn't a new one to open the full player for. */
+export function restoringByUndo() {
+  restoringUntil = performance.now() + restoreWindow;
+}
+export function restoredByUndo() {
+  const restored = performance.now() < restoringUntil;
+  restoringUntil = 0;
+  return restored;
+}
+
 export async function applyUndo(
   plan: UndoPlan,
   command: (action: Action) => Promise<void>,
   current: () => SessionState | null,
 ) {
-  if ("stoppedId" in plan) return command({ type: "undoStop", stoppedId: plan.stoppedId });
+  if ("stoppedId" in plan) {
+    restoringByUndo();
+    return command({ type: "undoStop", stoppedId: plan.stoppedId });
+  }
   let state = current();
   if (
     !state ||

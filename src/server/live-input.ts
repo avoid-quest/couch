@@ -153,14 +153,14 @@ export function createLiveInputs<Socket>(options: {
       const deviceId = options.deviceOf(socket);
       const label =
         action.kind === "microphone"
-          ? "Audio input"
+          ? "audio input"
           : action.kind === "system-audio"
-            ? "System audio"
-            : "Screen";
+            ? "sound"
+            : "screen";
       const source: LiveSource = {
         id: action.sourceId,
         deviceId,
-        name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`,
+        name: action.name?.trim() || `${options.nameOf(deviceId)} ${label}`,
         kind: action.kind,
         audio: action.audio,
         video: action.video,

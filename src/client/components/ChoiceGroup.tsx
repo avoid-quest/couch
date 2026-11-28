@@ -13,6 +13,9 @@ export type Choice<T extends string> = {
 /**
  * Inline choices where the selected option carries a check (Clock). Focus
  * inversion stays unambiguous because selection never fills the background.
+ * `segmented` (a setting's row) sets the choices on one track and fills the
+ * selected one; its check stays, so a focused choice still reads apart from the
+ * selected one.
  */
 export function ChoiceGroup<T extends string>({
   label,
@@ -20,6 +23,7 @@ export function ChoiceGroup<T extends string>({
   onValueChange,
   options,
   orientation = "horizontal",
+  variant = "checks",
   disabled,
   className,
 }: {
@@ -28,6 +32,7 @@ export function ChoiceGroup<T extends string>({
   onValueChange: (value: T) => void;
   options: Choice<T>[];
   orientation?: "horizontal" | "vertical";
+  variant?: "checks" | "segmented";
   disabled?: boolean;
   className?: string;
 }) {
@@ -45,6 +50,7 @@ export function ChoiceGroup<T extends string>({
       className={cn(
         "flex-wrap",
         orientation === "vertical" && "w-full flex-col items-stretch",
+        variant === "segmented" && "gap-0 rounded-[1.25rem] bg-secondary p-0.5",
         className,
       )}
     >
@@ -53,9 +59,15 @@ export function ChoiceGroup<T extends string>({
           key={option.value}
           value={option.value}
           disabled={option.disabled}
-          className="justify-start gap-2 font-normal data-[state=on]:bg-transparent"
+          className={
+            variant === "segmented"
+              ? "h-8 gap-1.5 font-medium group-data-[spacing=0]/toggle-group:px-3 text-muted-foreground touch:h-10 data-[state=on]:bg-foreground data-[state=on]:text-background"
+              : "justify-start gap-2 font-normal data-[state=on]:bg-transparent"
+          }
         >
-          <Check aria-hidden="true" className={option.value === value ? "" : "invisible"} />
+          {(variant === "checks" || option.value === value) && (
+            <Check aria-hidden="true" className={option.value === value ? "" : "invisible"} />
+          )}
           {option.label}
           {option.count != null && (
             <span className="ml-auto pl-3 text-muted-foreground">{option.count}</span>

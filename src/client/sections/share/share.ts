@@ -5,6 +5,7 @@ import type { CaptureKind, CaptureSource } from "../../../shared/capture";
 import {
   defaultLiveFrameRate,
   type LiveSelection,
+  type LiveSource,
   type LiveVideoFrameRate,
   type LiveVideoQuality,
 } from "../../../shared/live-input";
@@ -92,6 +93,16 @@ export const shareKindOf = (
           (!kind.pictures || kind.pictures === (surface === "window" ? "window" : "screen")),
       ) ?? shareKinds[0]!);
 
+/** What a running share sends, for "Sharing screen". */
+export const sharedWhat = (source: LiveSource) =>
+  source.intent === "live"
+    ? "live audio"
+    : source.kind === "system-audio"
+      ? "system audio"
+      : source.kind === "screen"
+        ? "screen"
+        : "an audio input";
+
 export const qualityLabels: Record<LiveVideoQuality, string> = {
   "720p": "720p, less bandwidth",
   "1080p": "1080p, balanced",
@@ -139,6 +150,7 @@ export function selectionOf(
           videoFrameRate: choice.frameRate ?? defaultLiveFrameRate,
           includeAudio: choice.sound,
           surface: kind.pictures === "screen" ? ("monitor" as const) : ("window" as const),
+          ...(kind.pictures === "window" && source ? { windowName: source.name } : {}),
         }
       : {}),
     ...(kind.inputs && choice.audioDeviceId && choice.audioDeviceId !== "default"
@@ -203,10 +215,10 @@ const receiverWords: Partial<Record<ReceiverState, string>> = {
 };
 /**
  * What a viewer's row says under its name: its channels and its route on the sharer's own panel, where every row names
- * it (docs/live-inputs.md); its state and Can't play as Where it plays says them.
+ * it (docs/live-inputs.md); its state and Core's reason it can't play, as Where it plays says them.
  */
 export function viewerLine(viewer: Viewer, route: LiveRoute | undefined) {
-  if (viewer.error) return `Can't play: ${viewer.error}`;
+  if (viewer.error) return viewer.error;
   const channels =
     viewer.picture && viewer.sound ? "Picture and sound" : viewer.picture ? "Picture" : "Sound";
   const state = viewer.state && receiverWords[viewer.state];

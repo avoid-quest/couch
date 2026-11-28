@@ -1,5 +1,6 @@
 import { playbackStatus } from "@/playback-status";
 import { browserActions } from "@/original-page";
+import { saveLabel } from "@/copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
@@ -109,8 +110,8 @@ export function useStationSave() {
 }
 
 /**
- * A station tile's menu, its Details' verbs: Details itself (the tile's press plays), Queue, Save or Saved, and Play
- * on. A station played from a link may be in no list, so its tile is where it can be saved.
+ * A station tile's menu, its Details' verbs: Queue and Play on, Save or Remove from Saved, Details itself (the tile's
+ * press plays) and its homepage. A station played from a link may be in no list, so its tile is where it can be saved.
  */
 export function useStationMenu() {
   const { available, enqueueRadio } = useShell();
@@ -121,27 +122,39 @@ export function useStationMenu() {
   return (station: RadioStation): MenuAction[] => {
     const favorite = save(station);
     return [
-      { label: "Details", run: () => details.open(itemLocation("radio", station.id)) },
-      { label: "Queue", disabled: !connected, run: () => void enqueueRadio(station, false) },
       {
-        label: favorite.saved ? "Saved" : "Save",
+        label: "Queue",
+        group: "play",
+        disabled: !connected,
+        run: () => void enqueueRadio(station, false),
+      },
+      {
+        label: "Play on",
+        group: "play",
+        disabled: !available,
+        audioOnly: true,
+        playOn: (on) => play((on) => enqueueRadio(station, true, on), on),
+      },
+      {
+        label: saveLabel(favorite.saved, "Saved"),
+        group: "keep",
         pressed: favorite.saved,
         disabled: favorite.disabled,
         run: favorite.run,
       },
-      ...browserActions(station.homepage),
       {
-        label: "Play on",
-        disabled: !available,
-        playOn: (deviceId) => void play((on) => enqueueRadio(station, true, on), deviceId),
+        label: "Details",
+        group: "go",
+        run: () => details.open(itemLocation("radio", station.id)),
       },
+      ...browserActions(station.homepage, station.name),
     ];
   };
 }
 
 /**
  * A playing station's show: Core's programme for the playback, else the show its tile shows, so its title and artwork
- * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar, Home's hero and the player,
+ * (the show's photo, else the station's logo) are the same on the tile, the now-playing bar and the player,
  * while it loads as while it plays. Null for anything but a station on air.
  */
 export function useStationShow(): RadioProgrammeDetails | null {

@@ -50,12 +50,25 @@ export type ProviderPage = {
   /** How many items the whole list holds, when the source says (a paged list shows only its first). */
   count?: number;
   nextCursor?: string;
+  /** A list in pages oldest first (a long anime's episodes): the page before this one, and the last, newest page. */
+  previousCursor?: string;
+  lastCursor?: string;
   title?: string;
   thumbnail?: string;
   description?: string;
   subtitle?: string;
   parent?: CollectionLink;
+  /** A source's own front page or a section of it, as a room (RaiPlay's): see ProviderRoom. */
+  room?: ProviderRoom;
+  /** A list a source files by letter (RaiPlay's A to Z), whole: each letter in order, with how many of `items` it holds. */
+  letters?: { letter: string; count: number }[];
 };
+/**
+ * What a source shows on its own front page: its navigation (`doors`, each a page to open), the item it leads with, and
+ * its lists. The lead and each list are the first page their own address (`item.url`) answers, so they open without
+ * another request.
+ */
+type ProviderRoom = { doors: ProviderItem[]; lead?: ProviderPage; shelves: ProviderPage[] };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
 /** A section of a page (RaiPlay's "In Diretta" on its front page): that page's row, not a programme to save. */
@@ -213,6 +226,97 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       return `https://www.twitch.tv${path}`;
   } catch {
     /* Optional public metadata. */
+  }
+}
+
+/**
+ * The public page a link plays, less a YouTube share's or start time's extras (`si`, `t`): only YouTube's are known to be
+ * harmless, so any other provider's link stays as its own page or none (a SoundCloud `secret_token` is never dropped).
+ */
+export function providerMediaPage(value: string): string | undefined {
+  const page = publicProviderMediaUrl(value);
+  if (page || providerForUrl(value) !== "youtube") return page;
+  try {
+    const url = new URL(value);
+    for (const name of [...url.searchParams.keys()])
+      if (name !== "v") url.searchParams.delete(name);
+    url.hash = "";
+    return publicProviderMediaUrl(url.href);
+  } catch {
+    return;
+  }
+}
+
+/**
+ * A known source's public page in its canonical form, fit to hand to someone else (Copy link, Share…): what plays, or a
+ * public list, channel, show or station of it. Anything else is never a public page: a stream, a signed or private link,
+ * an address with a port or a fragment, a host no source of Couch's publishes on.
+ */
+export function publicPageUrl(value: string): string | undefined {
+  if (value.length > 2048 || /[\u0000- \u007f\\]/.test(value)) return;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash
+  )
+    return;
+  // A YouTube share's extras (`si`, `t`) go; any other source's query stays its own page or none.
+  const media = providerMediaPage(value);
+  if (media) return media;
+  const path = url.pathname.replace(/\/$/, "");
+  const youtube = ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"];
+  if (youtube.includes(url.hostname) && path === "/playlist" && isYouTubePlaylistUrl(value))
+    return `https://www.youtube.com/playlist?list=${url.searchParams.get("list")}`;
+  if (url.search) return;
+  if (isStationSite(url.hostname) && !path) return `https://${url.hostname}/`;
+  switch (providerForUrl(value)) {
+    case "youtube":
+      return youtube.includes(url.hostname) &&
+        /^\/(?:@[\w.-]{1,100}|channel\/UC[\w-]{22})$/.test(path)
+        ? `https://www.youtube.com${path}`
+        : undefined;
+    case "soundcloud":
+      return soundCloudListUrl(value);
+    case "spotify":
+      return spotifyLink(value)?.url;
+    case "mixcloud":
+      return mixcloudLink(value)?.url;
+    case "archives":
+      return archiveLink(value)?.url;
+    case "bandcamp":
+      return /^[a-z0-9-]+\.bandcamp\.com$/.test(url.hostname) &&
+        /^(?:\/album\/[a-z0-9_-]+)?$/.test(path)
+        ? `https://${url.hostname}${path || "/"}`
+        : bandcampFanUrl(value)?.url;
+    case "twitch":
+      return ["twitch.tv", "www.twitch.tv"].includes(url.hostname) &&
+        /^\/(?:[a-z0-9_]{3,25}|directory\/category\/[a-z0-9-]{1,100})$/i.test(path) &&
+        !/^\/(?:directory|videos|settings|search|downloads|jobs|p|subscriptions|inventory|wallet|drops)$/i.test(
+          path,
+        )
+        ? `https://www.twitch.tv${path}`
+        : undefined;
+    case "raiplay":
+      return ["raiplay.it", "www.raiplay.it"].includes(url.hostname) &&
+        /^\/programmi\/[a-z0-9-]{1,200}$/i.test(path)
+        ? `https://www.raiplay.it${path}`
+        : undefined;
+    case "animeunity":
+      return animeUnityPageUrl(value)?.href;
+    case "animesaturn":
+      return animeSaturnPageUrl(value)?.href;
+    case "movies123": {
+      const page = movies123PageUrl(value);
+      return page && `${movies123Origin}${page.pathname}`;
+    }
   }
 }
 

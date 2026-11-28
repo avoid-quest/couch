@@ -141,7 +141,8 @@ test(
         2,
         "local zero volume keeps audience membership",
       );
-      assert.equal((await f.receiver.command({ type: "leave", playbackId })).ok, true);
+      // Home's Shared sources leaves by the Playback's own id (the player by its item's, live-lifecycle).
+      assert.equal((await f.receiver.command({ type: "leave", playbackId: playback! })).ok, true);
       await until(() => other.state.outputs?.length === 1);
       assert.equal(other.state.playback, playback);
       assert.equal(
@@ -337,6 +338,62 @@ test(
         assert.match(denied.error ?? "", /Live audio listeners/);
       }
       assert.equal(f.receiver.state.outputs?.length, 2, "the other listener stays in the audience");
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "an Undo never takes a lending speaker out of another operator's Live audience",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      const host = await f.connect(-1),
+        other = await f.connect(2);
+      await other.command({ type: "sharing", sharing: { audio: true, video: false } });
+      await f.receiver.command({
+        type: "enqueue",
+        entry: { id: "saved", title: "Saved programme", source: `${f.hub.origin}/api/health` },
+        playNow: true,
+        deviceId: f.receiver.id,
+      });
+      await until(() => f.receiver.state.currentEntryId === "saved");
+      const own = f.receiver.state.playback!;
+      assert.equal((await host.command(publication)).ok, true);
+      assert.equal(
+        (
+          await other.command({
+            type: "playLive",
+            sourceId: "concert",
+            deviceId: other.id,
+            picture: false,
+            sound: true,
+          })
+        ).ok,
+        true,
+      );
+      await until(() => !!other.state.playback && other.state.playback !== own);
+      const concert = other.state.playback!;
+      const denied = await f.receiver.command({
+        type: "restoreOutputs",
+        left: [{ deviceId: other.id, playbackId: concert, picture: false, sound: true }],
+        restore: [
+          { playbackId: own, outputs: [{ deviceId: other.id, picture: false, sound: true }] },
+        ],
+        resume: [],
+      });
+      assert.equal(denied.ok, false);
+      assert.match(denied.error ?? "", /Live audio listeners/);
+      assert.ok(
+        f.receiver.state.playbacks!.some(
+          (playback) =>
+            playback.id === concert &&
+            playback.outputs.some((output) => output.deviceId === other.id),
+        ),
+        "the speaker stays in the audience",
+      );
     } finally {
       await f.close();
     }
