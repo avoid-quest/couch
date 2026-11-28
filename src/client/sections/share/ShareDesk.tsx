@@ -164,14 +164,17 @@ export function LiveListeners({
   sharing,
   viewers,
   routes,
+  open,
+  onOpen: setOpen,
 }: {
   state: ClientSessionState;
   sharing: LiveSharing;
   viewers: Viewer[];
   routes: Record<string, LiveRoute>;
+  open: boolean;
+  onOpen: (open: boolean) => void;
 }) {
   const { run, connected } = useSessionGate();
-  const [open, setOpen] = useState(false);
   const [details, setDetails] = useState<string | null>(null);
   const here = deviceId();
   const lends = (id: string) =>

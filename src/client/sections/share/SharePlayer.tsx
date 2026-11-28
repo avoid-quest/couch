@@ -10,7 +10,7 @@ import { useSessionGate } from "@/session/session-context";
 import { DeckClock, DeskPanel } from "@/sections/shell/Deck";
 import { WhereList } from "@/sections/shell/Desk";
 import { PlaybackStrip, whereWords } from "@/sections/shell/NowPlayingParts";
-import type { PlayerSize } from "@/sections/shell/NowPlaying";
+import { useCrowded, type PlayerSize } from "@/sections/shell/NowPlaying";
 import type { PlayerSide } from "@/sections/shell/player-side";
 import { formatClock } from "@/time-format";
 import { liveTitle } from "../../../shared/live-input";
@@ -66,6 +66,9 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       });
   }, []);
   const details = useItemMenu([{ label: "Edit details…", run: () => setEditing(true) }]);
+  // As the side player does, the plate steps beside its title when the column is crowded (an opened desk, say).
+  const column = useRef<HTMLDivElement>(null);
+  const crowded = useCrowded(column, `${state.playback}:${open}:${editing}`);
   if (!sharing || !source) return null;
   const parts = shareParts(state, sharing, changed, size === "full" || !full);
   const selected = playback?.id === state.playback;
@@ -74,7 +77,14 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
   const desk = (
     <DeskPanel className={size === "full" ? "max-h-[70dvh]" : undefined}>
       {parts.live ? (
-        <LiveListeners state={state} sharing={sharing} viewers={parts.viewers} routes={routes} />
+        <LiveListeners
+          state={state}
+          sharing={sharing}
+          viewers={parts.viewers}
+          routes={routes}
+          open={open}
+          onOpen={setOpen}
+        />
       ) : selected && playback ? (
         <WhereList
           state={state}
@@ -181,18 +191,23 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
           side === "left" ? "left-3" : "right-3",
         )}
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div ref={column} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {tools(() => onSize("mini"))}
-          <button
-            type="button"
-            data-player-last
-            aria-label={`Open player: ${parts.title}`}
-            onClick={() => openShareFull(true)}
-            className="group/open block shrink-0 rounded-[0.875rem] text-left outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground"
-          >
-            <What sharing={sharing} live={parts.live} />
-          </button>
-          <div className="shrink-0 px-3.5 pt-4">{heading}</div>
+          <div className={cn("shrink-0", crowded && "flex items-center gap-3.5 py-1 pr-2 pl-1")}>
+            <button
+              type="button"
+              data-player-last
+              aria-label={`Open player: ${parts.title}`}
+              onClick={() => openShareFull(true)}
+              className={cn(
+                "group/open block shrink-0 rounded-[0.875rem] text-left outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground",
+                crowded && "w-26 rounded-lg",
+              )}
+            >
+              <What sharing={sharing} live={parts.live} small={crowded} />
+            </button>
+            <div className={cn("min-w-0", crowded ? "flex-1" : "px-3.5 pt-4")}>{heading}</div>
+          </div>
           <span className="min-h-4 flex-1" />
           {desk}
         </div>

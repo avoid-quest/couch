@@ -80,6 +80,8 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
   const choosing = !!useChooseRequest();
   const current = state.queue.find((entry) => entry.id === state.currentEntryId);
   const thumbnail = programme?.artworkUrl || current?.thumbnail;
+  // The side player throws its picture, blurred, on the wall behind its column (index.css, .side-player).
+  const wall = useArtworkPicture(size === "side" ? thumbnail : undefined);
   if (!current) return null;
   const title = programme?.title || current.title;
   const live = livePlayback(state);
@@ -130,11 +132,12 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
       <aside
         {...shell}
         className={cn(
-          "now-playing fixed top-3 bottom-3 z-30 flex w-(--side-player-width) flex-col",
+          "now-playing side-player fixed top-3 bottom-3 z-30 flex w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]",
           side === "left" ? "left-3" : "right-3",
           choosing && "invisible",
         )}
       >
+        {wall && <img src={wall} alt="" aria-hidden="true" className="room-picture" />}
         <SideColumn {...parts} side={side} open={open} onOpen={onOpen} resize={resize}>
           {desk()}
         </SideColumn>
@@ -320,7 +323,7 @@ function SideColumn({
  * Whether the column is crowded: its content overflows, or the open list scrolls. Measured again whenever what it
  * shows (`key`) changes or the window resizes, from the whole picture.
  */
-function useCrowded(column: React.RefObject<HTMLDivElement | null>, key: string) {
+export function useCrowded(column: React.RefObject<HTMLDivElement | null>, key: string) {
   const [small, setSmall] = useState(false);
   const [measured, setMeasured] = useState(key);
   if (measured !== key) {

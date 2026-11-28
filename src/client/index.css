@@ -1535,6 +1535,14 @@ html[data-cursor-hidden] * {
   opacity: calc(var(--light) * 0.78);
   pointer-events: none;
 }
+/* The side player's column holds its picture, blurred, on the wall behind what it shows (NowPlaying.tsx). */
+.side-player > .room-picture {
+  display: block;
+  left: -7%;
+  top: 2%;
+  width: 114%;
+  height: 118%;
+}
 /* In the full player the picture's light fills the room, its own wall; the header is hidden there, so nothing has to
    repeat it. Dimmed, as the lamps are, so a bright sky keeps the title's ink readable. */
 .app-shell:has(.player-page[data-artwork-stage]) .room-light > .room-picture {
