@@ -722,8 +722,11 @@ function ShellChrome({ children }: PropsWithChildren) {
   const sharing = paired && !!localLiveSourceId && shareView.shown && !remoteVisible;
   // The full share is modal: what it covers is out of reach of focus and screen readers; messages stay reachable.
   const shareFull = !!state && sharing && shareView.full;
-  // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again.
-  const outside = livePlayback(state) && !playbackControls(state).leave;
+  const phone =
+    useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
+  // Live audio shows in the player while this device listens: leaving closes it, and Home offers Join again. A phone's
+  // dock shows the selected Live source before it joins too, with Join where Play would be.
+  const outside = livePlayback(state) && !playbackControls(state).leave && !phone;
   const nowPlaying =
     (sharing ||
       (!!current &&
@@ -733,8 +736,6 @@ function ShellChrome({ children }: PropsWithChildren) {
     !remoteVisible;
   // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and
   // is the dock above a phone's tabs.
-  const phone =
-    useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
   const [minimised, setMinimised] = useState(false);
   const { side: playerSide } = usePlayerSide();
   const playerSize: PlayerSize = phone ? "dock" : minimised ? "mini" : "side";
