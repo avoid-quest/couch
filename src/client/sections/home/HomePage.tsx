@@ -547,20 +547,6 @@ export function HomePage() {
       ]),
     ),
     sources: <BrowseLine />,
-    ...Object.fromEntries(
-      follows.map((follow) => {
-        const index = layout.rows.findIndex((row) => row.id === follow.id);
-        return [
-          follow.id,
-          <FollowShelf
-            follow={follow}
-            first={index === 0}
-            last={index === layout.rows.length - 1}
-            layout={layout}
-          />,
-        ];
-      }),
-    ),
   };
   // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
   const pending = (id: HomeSectionId) =>
@@ -572,6 +558,22 @@ export function HomePage() {
         : id === "radio"
           ? onAirPending
           : false);
+  // What Home shows, in order: a followed section's moves pass over sections hidden or empty here, so each is seen.
+  const rendered = onHome
+    .map((row) => row.id)
+    .filter((id) => isFollowId(id) || lists[id] || pending(id));
+  for (const follow of follows) {
+    const index = rendered.indexOf(follow.id);
+    lists[follow.id] = (
+      <FollowShelf
+        follow={follow}
+        lead={hero?.kind === "continue" ? hero.item : undefined}
+        first={index === 0}
+        last={index === rendered.length - 1}
+        move={(by) => layout.move(follow.id, by, (id) => rendered.includes(id))}
+      />
+    );
+  }
   const section = (id: HomeSectionId) =>
     lists[id] ||
     (!isFollowId(id) &&

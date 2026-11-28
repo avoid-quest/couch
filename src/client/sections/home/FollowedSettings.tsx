@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { undoable } from "@/toasts";
+import { controlBox, undoable } from "@/toasts";
 import { providerNames } from "../../../shared/providers";
 import { useHomeFollows, type FollowId, type HomeFollow } from "./home-follows";
 import { removeHomeFollow, type HomeSectionId } from "./home-rows";
@@ -24,7 +24,7 @@ export function useFollowedRows() {
 }
 
 function FollowedActions({ follow }: { follow: HomeFollow }) {
-  const [renaming, setRenaming] = useState(false);
+  const [renaming, setRenaming] = useState<HTMLElement | null>(null);
   return (
     <>
       <Button
@@ -32,7 +32,7 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
         size="icon"
         aria-label={`Rename ${follow.name}`}
         title="Rename"
-        onClick={() => setRenaming(true)}
+        onClick={(event) => setRenaming(event.currentTarget)}
       >
         <Pencil aria-hidden="true" />
       </Button>
@@ -41,11 +41,14 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
         size="icon"
         aria-label={`Remove ${follow.name} from Home`}
         title="Remove from Home"
-        onClick={() => undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id))}
+        onClick={(event) => {
+          const box = controlBox(event.currentTarget);
+          undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id), undefined, box);
+        }}
       >
         <X aria-hidden="true" />
       </Button>
-      <RenameSection follow={follow} open={renaming} onOpenChange={setRenaming} />
+      <RenameSection follow={follow} anchor={renaming} onClose={() => setRenaming(null)} />
     </>
   );
 }

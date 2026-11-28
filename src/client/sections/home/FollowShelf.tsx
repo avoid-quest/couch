@@ -1,94 +1,159 @@
-import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { RowOptions, type MenuAction } from "@/components/RowMenu";
 import { Shelf, ShelfHeading } from "@/components/Shelf";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PopoverDescription, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
 import { majorityShape, providerItemShape } from "@/art-shape";
 import { collectionLocation } from "@/detail-navigation";
 import { metaLine } from "@/media-caption";
 import { TRY_AGAIN } from "@/copy";
-import { undoable } from "@/toasts";
+import { controlBox, undoable } from "@/toasts";
+import { progressFor } from "@/sections/find/provider-progress";
 import { SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
+import type { HistoryItem } from "../../../shared/viewing";
 import { providerNames, type ProviderId } from "../../../shared/providers";
 import { renameHomeFollow, type HomeFollow } from "./home-follows";
-import { removeHomeFollow } from "./home-rows";
+import { removeHomeFollow, setHomeSectionShown } from "./home-rows";
+import { FollowPanel, panelAnchor, revealFollow } from "./AddToHome";
 
 // A shelf scrolls, so it holds more than fits; its heading opens the whole list.
 const shelfLength = 12;
 // The catalogues that list a series' episodes oldest first; their section shows the newest first.
 const oldestFirst: ProviderId[] = ["streamingcommunity", "movies123", "animesaturn", "animeunity"];
+const control = ":is(button, a[href]):not(:disabled):not([tabindex='-1'])";
 
 /**
- * A Home section that follows a list a source publishes: its latest items, read again each
- * time Home opens (a Twitch channel's live state every 20 seconds, as its page does). Its "…" holds what Home's settings
- * do to it. A source that can't be reached is said quietly in the section's place.
+ * Where the focus goes when a followed section leaves Home (Hide, Remove): the next section's first control, else
+ * the previous one's, so a remote stays on Home. Taken before the section goes; given once it has.
  */
-export function FollowShelf({
-  follow,
-  first,
-  last,
-  layout,
-}: {
-  follow: HomeFollow;
-  first: boolean;
-  last: boolean;
-  layout: {
-    toggle: (id: HomeFollow["id"], shown: boolean) => void;
-    move: (id: HomeFollow["id"], by: -1 | 1) => void;
-  };
-}) {
-  const { credentials, available, openProvider, playHistory } = useShell();
-  const { connected, run, videoQualityPreference } = useSessionGate();
-  const [summary, setSummary] = useState<SearchResultSummary>();
-  const report = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
-  const [renaming, setRenaming] = useState(false);
-  const source = providerNames[follow.provider];
-  const href = collectionLocation({ provider: follow.provider, url: follow.url });
-  const options: MenuAction[] = [
-    { label: "Rename", run: () => setRenaming(true) },
-    { label: "Move up", disabled: first, run: () => layout.move(follow.id, -1) },
-    { label: "Move down", disabled: last, run: () => layout.move(follow.id, 1) },
-    {
-      label: "Hide",
-      run: () => {
-        layout.toggle(follow.id, false);
-        undoable(`${follow.name} is hidden.`, () => layout.toggle(follow.id, true));
-      },
-    },
-    {
-      label: "Remove from Home",
-      run: () => undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id)),
-    },
-  ];
-  const menu = <RowOptions title={follow.name} actions={options} />;
+function focusAfter(section: HTMLElement | null) {
+  const page = section?.closest("[data-page]");
+  if (!section || !page) return;
+  const sections = [...page.querySelectorAll<HTMLElement>("section")].filter(
+    (other) => other.parentElement?.closest("section, [data-page]") === page,
+  );
+  const at = sections.findIndex((other) => section.contains(other));
+  const next = [...sections.slice(at + 1), ...sections.slice(0, at).reverse()]
+    .map((other) => other.querySelector<HTMLElement>(control))
+    .find(Boolean);
+  // Home draws the change on a later frame, a few on the TV: wait for the section to go, a third of a second at most.
+  const give = (frames: number) =>
+    requestAnimationFrame(() => {
+      if (!next?.isConnected) return;
+      if (!section.isConnected) next.focus();
+      else if (frames) give(frames - 1);
+    });
+  give(20);
+}
+
+/** The hits a followed list's page holds that are its items, each with what it is. */
+function entries(summary: SearchResultSummary | undefined, url: string) {
   // The list's own page (a Twitch channel offline) isn't one of its items; live, it leads them.
-  const items = (summary?.hits ?? []).flatMap((hit) => {
+  return (summary?.hits ?? []).flatMap((hit) => {
     // The hit's id as SearchOnlineResults makes it, from the item and its place in a list.
     const item = summary?.page?.items.find(
       (item) =>
         hit.id ===
         `${item.provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`,
     );
-    return item && !(item.url === follow.url && !item.live) ? [{ hit, item }] : [];
+    return item && !(item.url === url && !item.live) ? [{ hit, item }] : [];
   });
+}
+
+/**
+ * A Home section that follows a list a source publishes: its latest items, read again each
+ * time Home opens (a Twitch channel's live state every 20 seconds, as its page does). Its "…" holds what Home's settings
+ * do to it. A list that can't be read is said quietly in the section's place.
+ */
+export function FollowShelf({
+  follow,
+  lead,
+  first,
+  last,
+  move,
+}: {
+  follow: HomeFollow;
+  /** What leads Home from Continue, which this section leaves out as Home's shelves do. */
+  lead?: HistoryItem;
+  first: boolean;
+  last: boolean;
+  move: (by: -1 | 1) => void;
+}) {
+  const { credentials, available, openProvider, playHistory } = useShell();
+  const { connected, run, videoQualityPreference } = useSessionGate();
+  // A long list in pages oldest first (an anime's episodes) is read from its last page, and the one before it when
+  // that holds too few to fill the shelf.
+  const [opening, setOpening] = useState<SearchResultSummary>();
+  const [newest, setNewest] = useState<SearchResultSummary>();
+  const [before, setBefore] = useState<SearchResultSummary>();
+  const reportOpening = useCallback((_: string, next: SearchResultSummary) => setOpening(next), []);
+  const reportNewest = useCallback((_: string, next: SearchResultSummary) => setNewest(next), []);
+  const reportBefore = useCallback((_: string, next: SearchResultSummary) => setBefore(next), []);
+  const lastCursor = opening?.page?.lastCursor;
+  const previousCursor =
+    newest?.page && newest.page.items.length < shelfLength ? newest.page.previousCursor : undefined;
+  const summary = lastCursor ? newest : opening;
+  const loading = !summary || summary.loading || (!!previousCursor && (!before || before.loading));
+  const [renaming, setRenaming] = useState<HTMLElement | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => revealFollow(follow.id), [follow.id]);
+  const source = providerNames[follow.provider];
+  const href = collectionLocation({ provider: follow.provider, url: follow.url });
+  const leave = (text: string, go: () => void, undo: () => void) => {
+    const box = controlBox();
+    focusAfter(root.current);
+    go();
+    undoable(text, undo, undefined, box);
+  };
+  const options: MenuAction[] = [
+    {
+      label: "Rename",
+      run: () =>
+        setRenaming(
+          panelAnchor() ?? root.current?.querySelector<HTMLElement>("[data-row-options]") ?? null,
+        ),
+    },
+    { label: "Move up", disabled: first, run: () => move(-1) },
+    { label: "Move down", disabled: last, run: () => move(1) },
+    {
+      label: "Hide",
+      run: () =>
+        leave(
+          `${follow.name} is hidden.`,
+          () => setHomeSectionShown(follow.id, false),
+          () => setHomeSectionShown(follow.id, true),
+        ),
+    },
+    {
+      label: "Remove from Home",
+      run: () => {
+        let undo = () => {};
+        leave(
+          `${follow.name} is off Home.`,
+          () => (undo = removeHomeFollow(follow.id)),
+          () => undo(),
+        );
+      },
+    },
+  ];
+  const menu = <RowOptions title={follow.name} actions={options} />;
+  const items = lastCursor
+    ? [...entries(newest, follow.url).reverse(), ...entries(before, follow.url).reverse()]
+    : entries(opening, follow.url);
   // Only a whole list can be turned round: a list in pages starts with its oldest page.
-  if (oldestFirst.includes(follow.provider) && !summary?.page?.nextCursor) items.reverse();
+  if (!lastCursor && oldestFirst.includes(follow.provider) && !opening?.page?.nextCursor)
+    items.reverse();
+  // What leads Home is never in a shelf too.
+  const shelved = items.filter(({ item }) => !lead || !progressFor(item, [lead]));
   const shape = (item: (typeof items)[number]["item"]) => providerItemShape(source, item);
-  const frame = majorityShape(items.slice(0, shelfLength).map(({ item }) => shape(item)));
+  const frame = majorityShape(shelved.slice(0, shelfLength).map(({ item }) => shape(item)));
   const quiet = (text: string, retry?: () => void) => (
     <section aria-label={follow.name} className="grid min-w-0 gap-2">
       <div className="flex min-w-0 items-center gap-1">
@@ -108,38 +173,47 @@ export function FollowShelf({
       </p>
     </section>
   );
+  const read = (
+    cursor: string | undefined,
+    onResults: (source: string, summary: SearchResultSummary) => void,
+  ) => (
+    <SearchOnlineResults
+      provider={follow.provider}
+      query=""
+      url={follow.url}
+      paged
+      cursor={cursor}
+      onOpenCollection={openProvider}
+      onResults={onResults}
+      onPlayHistory={playHistory}
+      origin={credentials.origin}
+      token={credentials.token}
+      connected={connected}
+      canPlay={available}
+      active
+      onCommand={run}
+      quality={videoQualityPreference.quality}
+      onEnqueued={() => {}}
+    />
+  );
   return (
-    <>
-      <SearchOnlineResults
-        provider={follow.provider}
-        query=""
-        url={follow.url}
-        paged
-        onOpenCollection={openProvider}
-        onResults={report}
-        onPlayHistory={playHistory}
-        origin={credentials.origin}
-        token={credentials.token}
-        connected={connected}
-        canPlay={available}
-        active
-        onCommand={run}
-        quality={videoQualityPreference.quality}
-        onEnqueued={() => {}}
-      />
-      {summary?.error && !items.length ? (
+    <div ref={root} data-follow-section={follow.id} className="grid min-w-0">
+      {read(undefined, reportOpening)}
+      {lastCursor && read(lastCursor, reportNewest)}
+      {previousCursor && read(previousCursor, reportBefore)}
+      {(opening?.error || summary?.error) && !items.length ? (
         quiet(
-          `Couldn't reach ${source}. ${follow.name} shows again once it answers.`,
-          summary.retry,
+          `Couldn't load ${follow.list} from ${source}.`,
+          opening?.error ? opening.retry : summary?.retry,
         )
-      ) : summary && !summary.loading && !items.length ? (
+      ) : !loading && !shelved.length ? (
         quiet(`${source} lists nothing here right now.`)
       ) : (
-        <Shelf title={follow.name} href={href} loading={!summary || summary.loading} options={menu}>
-          {!summary || summary.loading ? (
+        <Shelf title={follow.name} href={href} loading={loading} options={menu}>
+          {loading ? (
             <MediaTilesSkeleton shape={frame} />
           ) : (
-            items.slice(0, shelfLength).map(({ hit, item }) => (
+            shelved.slice(0, shelfLength).map(({ hit, item }) => (
               <li key={hit.id} className="flex shrink-0">
                 <MediaTile
                   natural
@@ -160,39 +234,25 @@ export function FollowShelf({
           )}
         </Shelf>
       )}
-      <RenameSection follow={follow} open={renaming} onOpenChange={setRenaming} />
-    </>
+      <RenameSection follow={follow} anchor={renaming} onClose={() => setRenaming(null)} />
+    </div>
   );
 }
 
-/** Renames a followed section on this device; its list stays the same. */
+/** Renames a followed section on this device, from the control `anchor`; its list stays the same. */
 export function RenameSection({
   follow,
-  open,
-  onOpenChange,
+  anchor,
+  onClose,
 }: {
   follow: HomeFollow;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  anchor: HTMLElement | null;
+  onClose: () => void;
 }) {
-  // Opened from a menu or a button, it gives the focus back to that control as it closes.
-  const opener = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (open)
-      opener.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  }, [open]);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          if (opener.current?.isConnected) opener.current.focus();
-        }}
-      >
-        {open && <RenameForm follow={follow} done={() => onOpenChange(false)} />}
-      </DialogContent>
-    </Dialog>
+    <FollowPanel open={!!anchor} anchor={anchor} title={`Rename ${follow.name}`} onClose={onClose}>
+      {anchor && <RenameForm follow={follow} done={onClose} />}
+    </FollowPanel>
   );
 }
 
@@ -205,12 +265,14 @@ function RenameForm({ follow, done }: { follow: HomeFollow; done: () => void }) 
   }
   return (
     <form className="grid gap-4" onSubmit={submit}>
-      <DialogHeader>
-        <DialogTitle>Rename {follow.name}</DialogTitle>
-        <DialogDescription>
+      <PopoverHeader>
+        <PopoverTitle className="font-heading text-base font-semibold">
+          Rename {follow.name}
+        </PopoverTitle>
+        <PopoverDescription>
           It follows {follow.list} on {providerNames[follow.provider]}.
-        </DialogDescription>
-      </DialogHeader>
+        </PopoverDescription>
+      </PopoverHeader>
       <Field>
         <FieldLabel htmlFor={`rename-${follow.id}`}>Name</FieldLabel>
         <Input
@@ -223,14 +285,14 @@ function RenameForm({ follow, done }: { follow: HomeFollow; done: () => void }) 
           required
         />
       </Field>
-      <DialogFooter>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="ghost" onClick={done}>
           Cancel
         </Button>
         <Button type="submit" disabled={!draft.trim() || draft.trim() === follow.name}>
           Save
         </Button>
-      </DialogFooter>
+      </div>
     </form>
   );
 }

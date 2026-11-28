@@ -80,10 +80,6 @@ const homeLayout = () => ({
   follows: readHomeFollows(),
   rows: readSectionRows<HomeSectionId>("couch.home-rows", withFollows(readHomeFollows())),
 });
-const restore = (layout: ReturnType<typeof homeLayout>) => () => {
-  writeHomeFollows(layout.follows);
-  saveSectionRows("couch.home-rows", layout.rows);
-};
 
 /** Adds a section that follows `follow`'s list right after Continue, where it is seen; returns its undo. */
 export function addHomeFollow(follow: HomeFollow) {
@@ -96,18 +92,39 @@ export function addHomeFollow(follow: HomeFollow) {
   });
   writeHomeFollows(follows);
   saveSectionRows("couch.home-rows", rows);
-  return restore(before);
+  return () => void removeHomeFollow(follow.id);
 }
 
-/** Takes a followed section off Home; what was saved or played from it stays. Returns its undo. */
+/**
+ * Takes a followed section off Home; what was saved or played from it stays. Its undo puts back only that section,
+ * after the row it followed, into Home as it is then, so other changes made since stay.
+ */
 export function removeHomeFollow(id: FollowId) {
   const before = homeLayout();
-  writeHomeFollows(before.follows.filter((follow) => follow.id !== id));
+  const follow = before.follows.find((other) => other.id === id);
+  const at = before.rows.findIndex((row) => row.id === id);
+  writeHomeFollows(before.follows.filter((other) => other.id !== id));
   saveSectionRows(
     "couch.home-rows",
     before.rows.filter((row) => row.id !== id),
   );
-  return restore(before);
+  return () => {
+    if (!follow || at < 0) return;
+    const now = homeLayout();
+    const rows = now.rows.filter((row) => row.id !== id);
+    const after = rows.findIndex((row) => row.id === before.rows[at - 1]?.id);
+    rows.splice(after >= 0 ? after + 1 : Math.min(at, rows.length), 0, before.rows[at]!);
+    writeHomeFollows([...now.follows.filter((other) => other.id !== id), follow]);
+    saveSectionRows("couch.home-rows", rows);
+  };
+}
+
+/** Shows or hides one of Home's sections in Home as it is now, so an Undo changes only that section. */
+export function setHomeSectionShown(id: HomeSectionId, shown: boolean) {
+  saveSectionRows(
+    "couch.home-rows",
+    homeLayout().rows.map((row) => (row.id === id ? { ...row, shown } : row)),
+  );
 }
 
 /** Items in the order Home first showed them: known ones keep their place, new ones follow in their own order. */

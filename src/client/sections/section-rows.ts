@@ -67,12 +67,14 @@ export function useSectionRows<Id extends string>(storageKey: string, defaults: 
       rows,
       toggle: (id: Id, shown: boolean) =>
         save(rows.map((row) => (row.id === id ? { ...row, shown } : row))),
-      move: (id: Id, by: -1 | 1) => {
-        const from = rows.findIndex((row) => row.id === id),
-          to = from + by;
+      /** Moves a row past the next one `over` (Home: the next section it shows), so the move is seen. */
+      move: (id: Id, by: -1 | 1, over: (id: Id) => boolean = () => true) => {
+        const from = rows.findIndex((row) => row.id === id);
+        let to = from + by;
+        while (to >= 0 && to < rows.length && !over(rows[to]!.id)) to += by;
         if (from < 0 || to < 0 || to >= rows.length) return;
-        const next = [...rows];
-        [next[from], next[to]] = [next[to]!, next[from]!];
+        const next = rows.filter((row) => row.id !== id);
+        next.splice(to, 0, rows[from]!);
         save(next);
       },
       reset: () => save(defaults),

@@ -24,7 +24,13 @@ import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { TRY_AGAIN } from "@/copy";
 import type { GuideRow } from "../../../shared/iptv";
-import { pageSection, type ProviderId, type ProviderItem } from "../../../shared/providers";
+import {
+  pageSection,
+  type BrowseRequest,
+  type ProviderId,
+  type ProviderItem,
+} from "../../../shared/providers";
+import { useHomeFollows } from "./home-follows";
 import { channelMeta, useChannelActions, useChannelLogo } from "./LiveTvPage";
 
 // Live TV samples the guide; its heading opens the rest.
@@ -174,16 +180,24 @@ export function SharedSources({ hits }: { hits: SearchHit[] }) {
 
 /**
  * The sources whose latest answer here was a failure (their home, a page or a search), by their catalogue queries'
- * state, so the Browse line can say so before it is opened again.
+ * state, so the Browse line can say so before it is opened again. A list Home follows is left out: one that is gone
+ * says so in its own section, and the source can still answer.
  */
 function useFailingSources() {
   const client = useQueryClient();
+  const follows = useHomeFollows();
   const read = () => {
     const latest = new Map<string, { at: number; failed: boolean }>();
     for (const query of client.getQueryCache().findAll({ queryKey: ["search"] })) {
-      const [, kind, provider] = query.queryKey as [string, string, string];
+      const [, kind, provider, request] = query.queryKey as [
+        string,
+        string,
+        string,
+        BrowseRequest?,
+      ];
       if ((kind !== "provider-page" && kind !== "providers") || typeof provider !== "string")
         continue;
+      if (follows.some((follow) => follow.url === request?.url)) continue;
       const { dataUpdatedAt, errorUpdatedAt, status } = query.state;
       const at = Math.max(dataUpdatedAt, errorUpdatedAt);
       if (at && at >= (latest.get(provider)?.at ?? 0))
