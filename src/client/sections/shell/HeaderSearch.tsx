@@ -565,7 +565,7 @@ export function HeaderSearch({ className }: { className?: string }) {
                   })),
                 ]}
                 onMore={(label) => setSelected(`chip:${label}`)}
-                className="px-0.5 pb-2 tv:pb-6"
+                className="px-0.5 pb-2 touch:sticky touch:-top-4 touch:z-10 touch:-mt-4 touch:bg-background touch:pt-4 tv:pb-6"
               />
             )}
             {text ? (
