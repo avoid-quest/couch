@@ -57,11 +57,13 @@ const lampPeak = 0.24,
 
 /**
  * The two colours of a picture's pixels (RGBA, as getImageData gives them): the strongest hue, by how vivid its pixels
- * are, and the strongest hue at least 60° from it (else the first again). Near-black, near-white and transparent
- * pixels carry no light; a picture of only those gives none, and one under a tenth coloured lights in its grey.
+ * are, and the strongest hue at least 60° from it. Without one, the hue beside the first whose pixels are most vivid,
+ * so an orange with a red beside it lights orange and red, not orange and the cream beside it; else the first again.
+ * Near-black, near-white and transparent pixels carry no light; a picture of only those gives none, and one under a
+ * tenth coloured lights in its grey.
  */
 function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
-  const bins = Array.from({ length: 12 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+  const bins = Array.from({ length: 12 }, () => ({ weight: 0, count: 0, r: 0, g: 0, b: 0 }));
   let grey = { weight: 0, r: 0, g: 0, b: 0 },
     coloured = 0;
   for (let index = 0; index + 3 < pixels.length; index += 4) {
@@ -88,6 +90,7 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
       weight = chroma * value;
     coloured++;
     bin.weight += weight;
+    bin.count++;
     bin.r += r * weight;
     bin.g += g * weight;
     bin.b += b * weight;
@@ -105,10 +108,16 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
   // A picture with hardly any colour (a black-and-white photo, a white cover) lights in its own grey.
   if (!first || coloured < (coloured + grey.weight) * 0.1)
     return grey.weight ? [mean(grey), mean(grey)] : null;
-  const apart = (index: number) =>
-    Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)) >= 2;
+  const steps = (index: number) =>
+      Math.min(Math.abs(index - first.index), 12 - Math.abs(index - first.index)),
+    strong = ranked.filter(({ bin }) => bin.weight >= first.bin.weight * 0.15),
+    vividness = ({ bin }: (typeof ranked)[number]) => bin.weight / bin.count;
   const second =
-    ranked.find(({ bin, index }) => apart(index) && bin.weight >= first.bin.weight * 0.15) ?? first;
+    strong.find(({ index }) => steps(index) >= 2) ??
+    strong
+      .filter(({ index }) => steps(index) === 1)
+      .sort((x, y) => vividness(y) - vividness(x))[0] ??
+    first;
   return [mean(first.bin), mean(second.bin)];
 }
 
