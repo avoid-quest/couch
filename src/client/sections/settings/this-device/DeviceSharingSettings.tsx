@@ -29,7 +29,11 @@ export function DeviceSharingSettings() {
   ];
   // Consent belongs to this device: Core accepts it only from this device's own connection, never from an admin.
   return (
-    <SettingsSection title="Let other devices use" data-tv-local-only>
+    <SettingsSection
+      title="Let other devices use"
+      description="Where it plays shows these to everyone else. Only this device can change them."
+      data-tv-local-only
+    >
       {choices.map(({ capability, label, description }) => (
         <SettingsRow key={capability} label={label} description={description}>
           <Switch

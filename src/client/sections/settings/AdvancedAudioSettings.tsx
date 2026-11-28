@@ -1,5 +1,5 @@
 import { useCaptureRatePreference } from "@/audio-settings";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
@@ -14,7 +14,7 @@ export function ClientAudioSettings({ capture = false }: { capture?: boolean }) 
   const rate = useCaptureRatePreference();
   if (!capture) return null;
   return (
-    <SettingsSection title="Advanced audio">
+    <>
       <SettingsRow
         label="Live audio capture sample rate"
         htmlFor="live-capture-rate"
@@ -38,6 +38,6 @@ export function ClientAudioSettings({ capture = false }: { capture?: boolean }) 
           <AlertDescription>{rate.error}</AlertDescription>
         </Alert>
       )}
-    </SettingsSection>
+    </>
   );
 }

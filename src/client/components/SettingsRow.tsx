@@ -11,9 +11,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * A label on the left and its control on the right, divided from the next row. Side by side, a one-line label centres on
- * its control's line; every control starts on the column's edge: a ghost button's text, and a choice's label with its
- * check hung in the gutter.
+ * A label with its one-line description on the left and its control at the right, divided from the next row. A control too
+ * wide to sit beside the label wraps under it.
  */
 export function SettingsRow({
   label,
@@ -31,12 +30,12 @@ export function SettingsRow({
   return (
     <Field
       className={cn(
-        "grid items-start gap-x-8 gap-y-3 border-b border-border/60 py-5 *:w-auto @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]",
+        "flex-row flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-border/60 py-4 *:w-auto",
         className,
       )}
       {...props}
     >
-      <FieldContent className="min-w-0 gap-1">
+      <FieldContent className="min-w-0 basis-60 gap-1">
         {htmlFor ? (
           <FieldLabel htmlFor={htmlFor} className={cn("items-center", labelLine)}>
             {label}
@@ -51,7 +50,7 @@ export function SettingsRow({
         )}
       </FieldContent>
       {Children.toArray(children).length > 0 && (
-        <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-2 @2xl:-mt-[0.3125rem] @2xl:touch:mt-0 [&>[data-slot=toggle-group]]:-ml-2 @2xl:[&>[data-slot=toggle-group]]:-ml-8 [&>[data-variant=ghost]:first-child]:-ml-2.5">
+        <div className="flex min-h-8 max-w-full min-w-0 flex-wrap items-center gap-2">
           {children}
         </div>
       )}
@@ -59,9 +58,7 @@ export function SettingsRow({
   );
 }
 
-// A label's line is 1.375rem and a control's 2rem: the control rises by half the difference. Touch controls are taller,
-// so there the label's line grows to theirs instead.
-const labelLine = "text-body font-medium @2xl:touch:min-h-11";
+const labelLine = "text-body font-medium";
 
 /**
  * A titled group of settings. Rows sit flush and divided; anything else

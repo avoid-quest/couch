@@ -76,7 +76,7 @@ import { PairForm } from "./PairForm";
 import { TvPairing } from "./TvPairing";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
-import { UpdateCue } from "@/sections/updates/UpdateCue";
+import { UpdateCue, useUpdatesReady } from "@/sections/updates/UpdateCue";
 import { ShareControl } from "@/sections/share/ShareControl";
 import { AddToHomePanel } from "@/sections/home/AddToHome";
 import { useNativeWindowTitle } from "@/native-window-title";
@@ -946,40 +946,56 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   const { tvPresentation, state } = useSessionGate();
   // A TV that's off still has its Remote.
   const remote = !tvPresentation && !!state?.devices?.some((device) => device.tv);
+  // A ready update is a dot on Settings, where its Updates says "Update ready".
+  const updateReady = useUpdatesReady() > 0;
   return (
     <nav data-app-nav aria-label="Main navigation" className={className}>
       {sections
         .filter(([name]) => name !== "Remote" || remote)
-        .map(([name, Icon]) => (
-          <Button
-            key={name}
-            asChild
-            variant="ghost"
-            className={cn(
-              "relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
-              bar
-                ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
-                : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",
-            )}
-          >
-            <Link
-              to={sectionUrl(name)}
-              aria-current={section === name ? "page" : undefined}
-              aria-label={name}
-              title={name}
+        .map(([name, Icon]) => {
+          const dot = name === "Settings" && updateReady;
+          return (
+            <Button
+              key={name}
+              asChild
+              variant="ghost"
+              className={cn(
+                "relative border-0 font-normal text-muted-foreground aria-[current=page]:text-foreground after:absolute after:left-1/2 after:h-0.5 after:-translate-x-1/2 after:bg-current after:opacity-0 aria-[current=page]:after:opacity-100",
+                bar
+                  ? "h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 px-1 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] rounded-none text-caption after:top-0 after:w-6"
+                  : "min-h-11 min-w-11 px-3 text-base after:bottom-1 after:w-4",
+              )}
             >
-              <Icon
-                aria-hidden="true"
-                className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")}
-              />
-              <span
-                className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}
+              <Link
+                to={sectionUrl(name)}
+                aria-current={section === name ? "page" : undefined}
+                aria-label={dot ? `${name}, update ready` : name}
+                title={dot ? `${name}: update ready` : name}
               >
-                {name}
-              </span>
-            </Link>
-          </Button>
-        ))}
+                <Icon
+                  aria-hidden="true"
+                  className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")}
+                />
+                <span
+                  className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}
+                >
+                  {name}
+                </span>
+                {dot && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full bg-foreground",
+                      bar
+                        ? "absolute top-2.5 left-[calc(50%+0.625rem)]"
+                        : "absolute top-2 right-2 @min-[60rem]/header:static tv:static",
+                    )}
+                  />
+                )}
+              </Link>
+            </Button>
+          );
+        })}
     </nav>
   );
 }

@@ -64,6 +64,7 @@ export function PlaybackPreferences({
     <SettingsRow label={label}>
       <ChoiceGroup
         label={label}
+        variant="segmented"
         value={value}
         options={choices}
         disabled={disabled}
@@ -127,6 +128,7 @@ export function PlaybackPreferences({
         <SettingsRow label="Speed">
           <ChoiceGroup
             label="Speed"
+            variant="segmented"
             value={String(values.speed)}
             options={speeds}
             disabled={disabled}

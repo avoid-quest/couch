@@ -13,6 +13,8 @@ import { ShareButton } from "@/sections/share/ShareControl";
 import { useShowShare } from "@/sections/share/show-share";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
+import { couchApp } from "@/session/native-context";
+import { canSetReporting } from "@/error-reporting";
 import { videoQualityOptions } from "@/video-quality";
 import { settingsPages } from "../../../shared/settings-pages";
 import { SettingsLayout } from "./SettingsLayout";
@@ -25,7 +27,8 @@ import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
 import { DeviceTextSize } from "./this-device/DeviceTextSize";
 import { QuitAppSettings } from "./this-device/QuitAppSettings";
 
-// What changes only on the device in hand, and what it lets others do.
+// What changes only on the device in hand, and what it lets others do, by intent: who it is, what you play from here, the
+// Couch it shows, what others may use, and the rest.
 
 export function ThisDevicePage() {
   const { credentials } = useShell();
@@ -40,11 +43,11 @@ export function ThisDevicePage() {
   } = useSessionGate();
   const { host, couch, administrator } = useSettingsScope();
   const share = useShowShare();
+  const shareable = !!navigator.mediaDevices?.getUserMedia;
   return (
     <SettingsLayout section="device">
       <SettingsSection>
         <DeviceNameSettings />
-        <ErrorReportingSetting />
         {/* A TV shows the Couch's shared text size, which its TV page changes. */}
         {!tvPresentation ? (
           <DeviceTextSize />
@@ -87,51 +90,57 @@ export function ThisDevicePage() {
             )}
           </SettingsRow>
         )}
+        {!nativeHost && screenWakeLock.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{screenWakeLock.error}</AlertDescription>
+          </Alert>
+        )}
+      </SettingsSection>
+      <SettingsSection title="What you play from here">
         <SettingsRow
           label="Online video quality"
           description="For video you start here, wherever it plays."
         >
           <ChoiceGroup
             label="Online video quality"
+            variant="segmented"
             value={videoQualityPreference.quality}
             options={videoQualityOptions}
             onValueChange={videoQualityPreference.save}
           />
         </SettingsRow>
+        {videoQualityPreference.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{videoQualityPreference.error}</AlertDescription>
+          </Alert>
+        )}
         {/* Hidden from the header (a TV's default), Share starts here. */}
-        {!!navigator.mediaDevices?.getUserMedia && (
+        {shareable && (
           <SettingsRow label="Show Share in the header" htmlFor="show-share">
             <Switch id="show-share" checked={share.shown} onCheckedChange={share.save} />
             {!share.shown && <ShareButton tv={tvPresentation}>Share screen or sound</ShareButton>}
           </SettingsRow>
         )}
       </SettingsSection>
-      {videoQualityPreference.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{videoQualityPreference.error}</AlertDescription>
-        </Alert>
-      )}
-      {!nativeHost && screenWakeLock.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{screenWakeLock.error}</AlertDescription>
-        </Alert>
-      )}
-      <ClientAudioSettings capture={nativeHost} />
       <CouchChoice
         credentials={credentials}
         installationName={state?.installationName ?? details?.name}
       />
       {host ? (
-        <SettingsSection>
-          <SettingsRow
-            label="Let other devices use"
-            description={`${couch}'s speakers and screen are shared while Share on network is on.`}
-          />
-        </SettingsSection>
+        <SettingsSection
+          title="Let other devices use"
+          description={`${couch}'s speakers and screen are shared while Share on network is on.`}
+        />
       ) : (
         <DeviceSharingSettings />
       )}
-      <QuitAppSettings host={host} couch={couch} />
+      {(nativeHost || canSetReporting || !!couchApp?.quit) && (
+        <SettingsSection title="Advanced">
+          <ClientAudioSettings capture={nativeHost} />
+          <ErrorReportingSetting />
+          <QuitAppSettings host={host} couch={couch} />
+        </SettingsSection>
+      )}
     </SettingsLayout>
   );
 }

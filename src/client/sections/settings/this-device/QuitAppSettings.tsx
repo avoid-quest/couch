@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { couchApp } from "@/session/native-context";
@@ -8,8 +8,9 @@ export function QuitAppSettings({ host, couch }: { host: boolean; couch: string 
   const quitting = useMutation({ mutationFn: () => couchApp!.quit!() });
   if (!couchApp?.quit) return null;
   return (
-    <SettingsSection data-tv-local-only>
+    <>
       <SettingsRow
+        data-tv-local-only
         label="Quit Couch"
         description={
           host
@@ -26,6 +27,6 @@ export function QuitAppSettings({ host, couch }: { host: boolean; couch: string 
           <AlertDescription>{quitting.error.message}</AlertDescription>
         </Alert>
       )}
-    </SettingsSection>
+    </>
   );
 }

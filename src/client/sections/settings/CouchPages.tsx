@@ -20,7 +20,7 @@ import { TvInterfaceSize } from "./couch/TvInterfaceSize";
 import { TvModeSettings } from "./couch/TvModeSettings";
 
 // The shared Couch's pages. Every paired device opens each one; rows say when only an
-// admin can change them, and the server enforces it. The Couch's name is its host's row in Devices
+// admin can change them, and the server enforces it. The Couch's name is the Name atop Devices & network
 // (or This device's Name on the host itself).
 
 export function DevicesPage() {
@@ -28,6 +28,20 @@ export function DevicesPage() {
   const { connected, details, host, identity, remoteControlEnabled, state } = useSessionGate();
   const scope = useSettingsScope();
   const urls = host?.urls ?? details?.urls ?? (credentials ? [credentials.origin] : []);
+  const network = credentials && (
+    <NetworkSettings
+      credentials={credentials}
+      connected={connected}
+      urls={urls}
+      remoteControlEnabled={remoteControlEnabled}
+      managedLan={details?.lanError !== undefined}
+      lanError={details?.lanError}
+      device={scope.device}
+      couch={scope.couch}
+      host={scope.host}
+      administrator={scope.administrator}
+    />
+  );
   return (
     <SettingsLayout section="devices">
       {identity && credentials && (
@@ -44,22 +58,11 @@ export function DevicesPage() {
           }
           tvs={new Set(state?.devices?.filter((device) => device.tv).map((device) => device.id))}
           hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)}
-        />
+        >
+          {network}
+        </DevicesSettings>
       )}
-      {credentials && (
-        <NetworkSettings
-          credentials={credentials}
-          connected={connected}
-          urls={urls}
-          remoteControlEnabled={remoteControlEnabled}
-          managedLan={details?.lanError !== undefined}
-          lanError={details?.lanError}
-          device={scope.device}
-          couch={scope.couch}
-          host={scope.host}
-          administrator={scope.administrator}
-        />
-      )}
+      {!(identity && credentials) && network}
     </SettingsLayout>
   );
 }

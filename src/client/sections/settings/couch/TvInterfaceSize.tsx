@@ -66,6 +66,7 @@ export function TvInterfaceSize({
           <>
             <ChoiceGroup
               label="TV interface size"
+              variant="segmented"
               value={String(
                 seconds || !appearance.preview ? appearance.size : appearance.confirmedSize,
               )}
