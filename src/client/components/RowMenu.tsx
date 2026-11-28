@@ -443,7 +443,7 @@ export function ItemMenu({
         sharingDeviceId={choosing.sharingDeviceId}
         liveAudio={choosing.liveAudio}
         onPlay={(deviceId) => choosing.playOn?.({ deviceId })}
-        onOpenChange={(open) => !open && setChoosing(null)}
+        onClose={() => setChoosing(null)}
         anchor={from}
       />
     ) : (
