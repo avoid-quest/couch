@@ -87,7 +87,9 @@ export function useMediaSession() {
           state.playbacks?.find((playback) => playback.id === state.playback)?.liveSourceId,
       )
     : undefined;
+  // Disconnected, Couch can't run a command or know what plays, so Now Playing lets go until it reconnects.
   const playbackId =
+    connected &&
     player?.playbackId &&
     (listening || (current && ["playing", "paused", "loading"].includes(player.status)))
       ? player.playbackId
