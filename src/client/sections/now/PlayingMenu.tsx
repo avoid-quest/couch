@@ -20,8 +20,8 @@ import type { Action } from "../../../shared/protocol";
 const fromStartAfter = 60;
 
 /**
- * What plays, its "…" beside the gear (docs/design.md "Menus"): From start, Save, Add to Home, Details and where it
- * belongs, and its page beyond Couch. The gear keeps the settings; Details opens from here.
+ * What plays, its "…" at the top right of the full player and in the side player (docs/design.md "Menus"): From start,
+ * Save, Add to Home, Details and where it belongs, and its page beyond Couch. The gear keeps the settings.
  */
 export function PlayingMenu({
   state,

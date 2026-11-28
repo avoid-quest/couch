@@ -677,6 +677,15 @@ export function PlayerPage({
       className="[&_[data-slot=breadcrumb-list]]:text-base"
     />
   );
+  // What plays has its own "…" at the top right of the player, beside Identify song and Info; the gear keeps the settings.
+  const playingMenu = state && current && (
+    <PlayingMenu
+      state={state}
+      connected={connected}
+      run={run}
+      back=".player-page [data-playing-menu]"
+    />
+  );
   // A show's title searches for the show; its station's link is under it.
   const titleHref = currentProgramme?.title
     ? searchLocation({ query: currentProgramme.title, source: "All" })
@@ -907,6 +916,7 @@ export function PlayerPage({
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <LiveSharingStatus />
               <div ref={setRecognitionControls} className="empty:hidden" />
+              {playingMenu}
               {current && artworkStage && infoButton}
             </div>
           </div>
@@ -937,6 +947,7 @@ export function PlayerPage({
               {sharing && <LiveSharingStatus />}
               {tvPresentation && !radio && <PlayerEndTime state={state} />}
               {tvPresentation && <DigitalClock />}
+              {playingMenu && <span className="self-center">{playingMenu}</span>}
               {tvPresentation && <span className="self-center">{infoButton}</span>}
             </div>
           </div>
@@ -1241,15 +1252,6 @@ export function PlayerPage({
                         <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} />
                       )}
                     </Popover>
-                  )}
-                  {/* What plays has its own "…" beside the gear, which keeps the settings. */}
-                  {state && (
-                    <PlayingMenu
-                      state={state}
-                      connected={connected}
-                      run={run}
-                      back=".player-page [data-playing-menu]"
-                    />
                   )}
                   {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                     already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
