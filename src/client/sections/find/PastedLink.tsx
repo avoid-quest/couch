@@ -161,8 +161,9 @@ export function PastedLink({
           },
         ]
       : [];
+  // A page Couch only opens (Mixcloud's playlists) never plays, as direct media either.
   const options: MenuAction[] = [
-    ...(!isStation
+    ...(linkPlays(target)
       ? [
           {
             label: direct ? "Open as webpage" : "Open as direct media",
