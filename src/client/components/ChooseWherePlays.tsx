@@ -210,19 +210,18 @@ function ChoiceDevice({
   onOnly: () => void;
 }) {
   const { device, picture, sound } = row;
-  // One channel it can't play here says why on the row, where touch and remote users see it; the item's own
-  // lack (No picture, No sound) is every row's, so it says nothing.
-  const lockedOne = (
-    [
-      ["Picture", picture],
-      ["Sound", sound],
-    ] as const
-  ).filter(
-    ([, control]) =>
-      control.reason && control.reason !== "No picture" && control.reason !== "No sound",
-  );
+  // Where it can play only one channel, the other says why on the row, where touch and remote users see it; the
+  // item's own lack (No picture, No sound) is every row's, so it says nothing.
+  const [lockedName, locked] =
+    picture.enabled === sound.enabled
+      ? []
+      : picture.enabled
+        ? (["Sound", sound] as const)
+        : (["Picture", picture] as const);
   const note =
-    lockedOne.length === 1 ? `${lockedOne[0]![0]}: ${lockedOne[0]![1].reason}` : undefined;
+    locked?.reason && locked.reason !== "No picture" && locked.reason !== "No sound"
+      ? `${lockedName}: ${locked.reason}`
+      : undefined;
   const detail = [row.status, note].filter(Boolean).join(" · ");
   const toggle = (
     channel: "picture" | "sound",

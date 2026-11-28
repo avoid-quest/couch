@@ -448,14 +448,19 @@ const current = (rows: ChoiceRow[], choice: Choice): Choice =>
  */
 export function playOnOf(rows: ChoiceRow[], choice: Choice): PlayOn | undefined {
   const now = current(rows, choice),
-    ids = Object.keys(now);
-  const lead =
-    ids.find((id) => rows.find((row) => row.device.id === id)?.mine) ??
-    ids.find((id) => now[id]!.picture) ??
-    ids[0];
+    ids = Object.keys(now),
+    lead = leadOf(rows, now);
   if (!lead) return undefined;
   return { deviceId: lead, outputs: ids.map((deviceId) => ({ deviceId, ...now[deviceId]! })) };
 }
+const leadOf = (rows: ChoiceRow[], choice: Choice) => {
+  const ids = Object.keys(choice);
+  return (
+    ids.find((id) => rows.find((row) => row.device.id === id)?.mine) ??
+    ids.find((id) => choice[id]!.picture) ??
+    ids[0]
+  );
+};
 
 const names = (ids: string[], rows: ChoiceRow[]) =>
   new Intl.ListFormat("en", { type: "conjunction" }).format(
@@ -465,7 +470,7 @@ const names = (ids: string[], rows: ChoiceRow[]) =>
 /**
  * The line beside Play: what it changes first ("Blob pauses on Kitchen laptop and waits for a device", "Blob keeps
  * playing on Living room TV"), then where it plays. A device that leaves another playback leaves it whole, picture
- * and sound.
+ * and sound. Where the lead device plays alone, Core starts the item in that playback instead, so what played stops.
  */
 export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], chosen: Choice) {
   const choice = current(rows, chosen),
@@ -489,11 +494,16 @@ export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], chos
     const rest = playback.outputs
       .map((output) => output.deviceId)
       .filter((id) => !taken.includes(id));
+    const live =
+      state.liveSources?.find((source) => source.id === playback.liveSourceId)?.intent === "live";
+    const replaced = !rest.length && !playback.held && !live && taken[0] === leadOf(rows, choice);
     return rest.length
       ? [`${title} keeps playing on ${names(rest, rows)}.`]
-      : [
-          `${title} pauses${taken.length === 1 ? ` on ${names(taken, rows)}` : ""} and waits for a device.`,
-        ];
+      : replaced
+        ? [`${title} stops on ${names(taken, rows)}.`]
+        : [
+            `${title} pauses${taken.length === 1 ? ` on ${names(taken, rows)}` : ""} and waits for a device.`,
+          ];
   });
   return { ready: true, lines: changes.length ? [changes.join(" "), where] : [where] };
 }
