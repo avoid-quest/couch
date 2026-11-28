@@ -97,13 +97,21 @@ const stations: Record<
 export const isArchiveHost = (host: string) =>
   Object.values(stations).some((station) => station.hosts.includes(host));
 
+// Each station's site: an archive's hosts, and Radio Alhara's, whose archive is on Mixcloud.
+const stationSites = [
+  ...Object.values(stations).map((station) => station.hosts),
+  ["radioalhara.net", "www.radioalhara.net"],
+];
+/** Whether a host is one of the stations' own sites, whose pages besides episodes and shows play the station live. */
+export const isStationSite = (host: string) => stationSites.some((hosts) => hosts.includes(host));
+
 /** Whether `address` is on the same station's site as the page `link`: its hosts, or under them (icecast.lyl.live). */
-export function onArchiveSite(link: string, address: string) {
+export function onStationSite(link: string, address: string) {
   try {
     const page = new URL(link).hostname;
     const host = new URL(address).hostname;
-    const site = Object.values(stations).find((station) => station.hosts.includes(page));
-    return !!site?.hosts.some((own) => host === own || host.endsWith(`.${own}`));
+    const site = stationSites.find((hosts) => hosts.includes(page));
+    return !!site?.some((own) => host === own || host.endsWith(`.${own}`));
   } catch {
     return false;
   }

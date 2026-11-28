@@ -1,4 +1,4 @@
-import { providerForUrl } from "../shared/providers";
+import { linkTarget, providerForUrl } from "../shared/providers";
 import { searchWords } from "../shared/search-text";
 import type { SearchHit } from "./sections/find/SearchOnlineResults";
 
@@ -143,7 +143,7 @@ export function linkOf(value: string) {
   }
   if (/\s/.test(value)) return;
   const url = `https://${value}`;
-  return providerForUrl(url) ? url : undefined;
+  return providerForUrl(url) || linkTarget(url) ? url : undefined;
 }
 export const isLink = (value: string) => !!linkOf(value);
 

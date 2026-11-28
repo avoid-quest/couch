@@ -7,7 +7,7 @@ import { createId } from "@/session/session";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { dismiss, notice, pendingNotice } from "@/toasts";
 import type { Action, VideoQuality } from "../shared/protocol";
-import { onArchiveSite } from "../shared/archives";
+import { onStationSite } from "../shared/archives";
 import type { LinkTarget, ProviderId } from "../shared/providers";
 
 // Couch's queue limit: a longer list queues its first 500.
@@ -46,7 +46,10 @@ export function usePastedList(
   return { title: page?.title, count, queued };
 }
 
-/** The avoid radio station a pasted station's page plays, as Home does: the one whose stream or logo is on its site. */
+/**
+ * The avoid radio station a pasted station's page plays, as Home does: the one whose stream or logo is on its site; null
+ * once the list holds none or can't be read.
+ */
 export function useLinkStation(
   credentials: ApiCredentials | null | undefined,
   url: string,
@@ -56,10 +59,12 @@ export function useLinkStation(
   const stations = useQuery({
     ...radioSearchQuery(credentials ?? { origin: "", token: "" }, "avoid radio", ""),
     enabled: !!credentials && station,
-  }).data?.stations;
-  if (!station) return;
-  return stations?.find((radio) =>
-    [radio.url, radio.logoUrl].some((address) => address && onArchiveSite(url, address)),
+  });
+  if (!station || (!stations.data && !stations.isError)) return;
+  return (
+    stations.data?.stations.find((radio) =>
+      [radio.url, radio.logoUrl].some((address) => address && onStationSite(url, address)),
+    ) ?? null
   );
 }
 

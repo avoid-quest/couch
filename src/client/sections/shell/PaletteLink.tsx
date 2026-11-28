@@ -78,7 +78,8 @@ export function PaletteLink({
       Choose how to play
     </CommandItem>
   );
-  // A station's page plays its station live, once Couch finds it; nothing here plays the page itself.
+  // A station's page plays its station live, once Couch finds it, else opens in the browser; nothing here plays the
+  // page itself.
   if (shape === "station")
     return (
       <CommandGroup>
@@ -93,6 +94,16 @@ export function PaletteLink({
             <span className="min-w-0 truncate font-normal text-muted-foreground">
               {station.name}
             </span>
+          </CommandItem>
+        )}
+        {station === null && (
+          <CommandItem
+            value="link:play"
+            onSelect={() => window.open(url, "_blank", "noopener,noreferrer")}
+            className={lead}
+          >
+            <span className="shrink-0">Open in browser</span>
+            <span className="min-w-0 truncate font-normal text-muted-foreground">{where}</span>
           </CommandItem>
         )}
         {choose}

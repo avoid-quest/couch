@@ -3,7 +3,7 @@ import { isStreamingCommunityHost } from "./streamingcommunity";
 import { isAnimeSaturnHost, animeSaturnPageUrl } from "./animesaturn";
 import { isAnimeUnityHost, animeUnityPageUrl } from "./animeunity";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
-import { archiveLink, isArchiveHost } from "./archives";
+import { archiveLink, isArchiveHost, isStationSite } from "./archives";
 import { isMixcloudHost, mixcloudLink } from "./mixcloud";
 
 export type ProviderId =
@@ -332,8 +332,6 @@ function builtInLink(value: string): LinkTarget | undefined {
   const provider = providerForUrl(value);
   if (!provider) return;
   const path = new URL(value).pathname.replace(/\/$/, "");
-  // A station's pages other than its episodes and shows (archiveLink), its home page first, play the station live.
-  if (provider === "archives") return { provider, shape: "station" };
   // Twitch pages list only channels and categories; a VOD or a clip plays as a webpage.
   if (provider === "twitch")
     return path.startsWith("/videos/") ||
@@ -373,6 +371,9 @@ const linkClassifiers: LinkClassifier[] = [
     const link = archiveLink(value) ?? mixcloudLink(value);
     return link && { provider: link.provider, shape: link.shape };
   },
+  // A station's pages other than its episodes and shows, its home page first, play the station live.
+  (value) =>
+    isStationSite(new URL(value).hostname) ? { provider: "archives", shape: "station" } : undefined,
   builtInLink,
 ];
 

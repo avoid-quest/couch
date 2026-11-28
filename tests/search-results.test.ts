@@ -159,6 +159,7 @@ test("a known host pasted without its scheme is its https link, and words never 
     "lyl.live/shows/residents?styles=Baile%20Funk",
     "open.spotify.com/intl-it/artist/2enCZC6FjkZDdEW7rKBfw0",
     "twitch.tv/monstercat/clip/SassyObliquePandaChefFrank",
+    "radioalhara.net",
   ])
     expect(linkOf(link)).toBe(`https://${link}`);
   expect(linkOf("https://example.com/a")).toBe("https://example.com/a");
