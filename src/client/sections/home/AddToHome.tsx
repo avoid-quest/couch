@@ -7,11 +7,12 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, House, HousePlus, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { forLaterQuery } from "@/api/for-later";
 import { historyQuery } from "@/api/progress";
 import { providerPageQuery } from "@/api/providers";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import type { MenuAction } from "@/components/RowMenu";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -42,17 +43,15 @@ import {
   type ProviderPage,
 } from "../../../shared/providers";
 import { followId, useHomeFollows, type HomeFollow } from "./home-follows";
-import { addHomeFollow, setHomeSectionShown, useHomeRows } from "./home-rows";
+import { addHomeFollow, setHomeSectionShown } from "./home-rows";
 
 /** A series, show or channel that Home can follow: its page, whose lists are offered. */
 export type AddTarget = { provider: ProviderId; url: string; title: string };
 const opened = "couch.add-to-home";
 
-/** Opens Add to Home for `target` from the control `from` (by default the one holding focus), from any menu or page. */
-export const addToHome = (target: AddTarget, from?: HTMLElement) =>
-  window.dispatchEvent(
-    new CustomEvent<AddTarget & { from?: HTMLElement }>(opened, { detail: { ...target, from } }),
-  );
+/** Opens Add to Home for `target` from the control holding focus, where a closed menu returns it. */
+const addToHome = (target: AddTarget) =>
+  window.dispatchEvent(new CustomEvent<AddTarget>(opened, { detail: target }));
 
 /** The control a panel opens from: the one given, else the one holding focus, where a closed menu returns it. */
 export const panelAnchor = (from?: HTMLElement) =>
@@ -177,8 +176,7 @@ export function AddToHomePanel() {
   const [open, setOpen] = useState<{ target: AddTarget; anchor: HTMLElement | null } | null>(null);
   useEffect(() => {
     const show = (event: Event) => {
-      const { from, ...target } = (event as CustomEvent<AddTarget & { from?: HTMLElement }>).detail;
-      setOpen({ target, anchor: panelAnchor(from) });
+      setOpen({ target: (event as CustomEvent<AddTarget>).detail, anchor: panelAnchor() });
     };
     window.addEventListener(opened, show);
     return () => window.removeEventListener(opened, show);
@@ -254,7 +252,9 @@ export function AddSectionPanel({
 }
 
 /** What a played or saved item belongs to that Home can follow: its series or programme, else its channel. */
-function itemTarget(item: Pick<QueueEntry, "collection" | "creator">): AddTarget | undefined {
+export function itemTarget(
+  item: Pick<QueueEntry, "collection" | "creator">,
+): AddTarget | undefined {
   const [outer] = collectionLinks(item.collection);
   if (outer) return { provider: outer.provider, url: outer.url, title: outer.title };
   const provider = item.creator && providerForUrl(item.creator.url);
@@ -333,7 +333,7 @@ function SectionPicks({
       )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
         <p className="min-w-0 flex-1 basis-52 text-meta text-muted-foreground">
-          Anything else: find it with Search, then use Add to Home in its menu or on its page.
+          Anything else: find it with Search, then add it to Home from its "…".
         </p>
         <Button variant="ghost" onClick={search}>
           <Search aria-hidden="true" />
@@ -449,68 +449,52 @@ function AddToHomeForm({ target, done }: { target: AddTarget; done: () => void }
   );
 }
 
+// A YouTube channel's tabs Home can follow, in the order a playing video belongs to them: a live one to Live streams.
+const channelTabs = (live: boolean) =>
+  live ? ["streams", "videos", "shorts"] : ["videos", "shorts", "streams"];
+
+/**
+ * The followed section a list is: the list itself, or for a YouTube channel the tab its item plays from (a live
+ * video's Live streams first).
+ */
+function followedFor(target: AddTarget, follows: HomeFollow[], live = false) {
+  const same = follows.find((follow) => follow.url === target.url);
+  if (same || target.provider !== "youtube") return same;
+  const channel = target.url.replace(/\/+$/, "");
+  return channelTabs(live)
+    .map((tab) => follows.find((follow) => follow.url === `${channel}/${tab}`))
+    .find(Boolean);
+}
+
+/**
+ * A menu's Keep row for a series, programme or channel: "Add {name} to Home…" opens Add to Home; once its list is on
+ * Home, "Show {name} on Home" takes the person to that section, showing it again where it is hidden. `entry`, for what
+ * plays, says whether it is live, so a live video finds its channel's Live streams first.
+ */
+export function useHomeAction() {
+  const { changeSection } = useShell();
+  const follows = useHomeFollows();
+  return (target: AddTarget | undefined, entry?: QueueEntry): MenuAction[] => {
+    if (!target) return [];
+    const followed = followedFor(target, follows, !!entry?.endless);
+    return [
+      followed
+        ? {
+            label: `Show ${followed.name} on Home`,
+            group: "keep",
+            run: () => goToFollow(followed.id, changeSection),
+          }
+        : { label: `Add ${target.title} to Home…`, group: "keep", run: () => addToHome(target) },
+    ];
+  };
+}
+
 /** What a playing item belongs to that Home can follow: its season or list, else its channel. */
-function entryTarget(entry: QueueEntry): AddTarget | undefined {
+export function entryTarget(entry: QueueEntry): AddTarget | undefined {
   const [outer, inner] = collectionLinks(entry.collection);
   const list = inner ?? outer;
   if (list)
     return { provider: list.provider, url: list.url, title: inner ? outer!.title : list.title };
   const provider = entry.creator && providerForUrl(entry.creator.url);
   if (provider) return { provider, url: entry.creator!.url, title: entry.creator!.title };
-}
-
-// A YouTube channel's tabs Home can follow, in the order a playing video belongs to them: a live one to Live streams.
-const channelTabs = (live: boolean) =>
-  live ? ["streams", "videos", "shorts"] : ["videos", "shorts", "streams"];
-
-/**
- * The followed section a playing item's list is: its season or list itself, or for a YouTube channel the tab it plays
- * from (a live video's Live streams first).
- */
-function followedFor(entry: QueueEntry, target: AddTarget, follows: HomeFollow[]) {
-  const same = follows.find((follow) => follow.url === target.url);
-  if (same || target.provider !== "youtube" || target.url !== entry.creator?.url) return same;
-  const channel = target.url.replace(/\/+$/, "");
-  return channelTabs(!!entry.endless)
-    .map((tab) => follows.find((follow) => follow.url === `${channel}/${tab}`))
-    .find(Boolean);
-}
-
-/**
- * The player's Add to Home for what plays, beside where it comes from. Once its list is on Home, "On Home" takes the
- * person to that section; a section hidden there says so, and shows again as it is opened.
- */
-export function AddToHomeButton({ entry }: { entry: QueueEntry }) {
-  const { changeSection } = useShell();
-  const follows = useHomeFollows();
-  const { rows } = useHomeRows();
-  const target = entryTarget(entry);
-  if (!target) return null;
-  const followed = followedFor(entry, target, follows);
-  if (followed) {
-    const hidden = rows.some((row) => row.id === followed.id && !row.shown);
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-mx-2"
-        aria-label={hidden ? `Show ${followed.name} on Home` : `${followed.name} on Home`}
-        onClick={() => goToFollow(followed.id, changeSection)}
-      >
-        <House aria-hidden="true" />
-        {hidden ? "Hidden on Home" : "On Home"}
-      </Button>
-    );
-  }
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-mx-2"
-      onClick={(event) => addToHome(target, event.currentTarget)}
-    >
-      <HousePlus aria-hidden="true" />
-      Add to Home
-    </Button>
-  );
 }

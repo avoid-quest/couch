@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ComponentProps, type RefObject } from "react";
+import { ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenuItem,
@@ -7,11 +8,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ChooseWherePlays } from "./ChooseWherePlays";
+import { MenuPanel } from "./MenuPanel";
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
 import { playbackControls } from "@/session/playback-controls";
 import { isTvPresentation } from "@/session/presentation";
+import { cn } from "@/lib/utils";
 import type { PlayOn } from "../../shared/protocol";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
@@ -84,33 +87,52 @@ function Devices({
   disabled,
   sharingDeviceId,
   liveAudio,
+  sheet,
 }: {
   onPlay: (deviceId: string) => void;
   disabled?: boolean;
   sharingDeviceId?: string;
   liveAudio?: boolean;
+  sheet?: boolean;
 }) {
   const { devices, here } = usePlayOn(sharingDeviceId, liveAudio);
-  return devices.map((device) => (
-    <DropdownMenuItem
-      key={device.id}
-      disabled={disabled}
-      className="flex-col items-start gap-0.5"
-      onSelect={() => onPlay(device.id)}
-    >
-      <span className="w-full break-words">{device.name}</span>
-      {(device.id === here || device.id === sharingDeviceId) && (
-        <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">
-          {[
-            device.id === here && "This device",
-            device.id === sharingDeviceId && "Sharing this source",
-          ]
-            .filter(Boolean)
-            .join(", ")}
-        </span>
-      )}
-    </DropdownMenuItem>
-  ));
+  return devices.map((device) => {
+    const content = (
+      <>
+        <span className="w-full break-words">{device.name}</span>
+        {(device.id === here || device.id === sharingDeviceId) && (
+          <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">
+            {[
+              device.id === here && "This device",
+              device.id === sharingDeviceId && "Sharing this source",
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+        )}
+      </>
+    );
+    return sheet ? (
+      <Button
+        key={device.id}
+        variant="ghost"
+        disabled={disabled}
+        className="h-auto min-h-11 w-full flex-col items-start justify-center gap-0.5 rounded-md px-2 py-2 text-left font-normal whitespace-normal"
+        onClick={() => onPlay(device.id)}
+      >
+        {content}
+      </Button>
+    ) : (
+      <DropdownMenuItem
+        key={device.id}
+        disabled={disabled}
+        className="flex-col items-start gap-0.5"
+        onSelect={() => onPlay(device.id)}
+      >
+        {content}
+      </DropdownMenuItem>
+    );
+  });
 }
 
 /** A shared source's "Play on" inside its menu: it plays at once on the Device chosen. Nothing when only this Device is online. */
@@ -120,14 +142,34 @@ export function PlayOnGroup({
   sharingDeviceId,
   separated = true,
   liveAudio,
+  sheet,
 }: {
   onPlay: (deviceId: string) => void;
   disabled?: boolean;
   sharingDeviceId?: string;
   separated?: boolean;
   liveAudio?: boolean;
+  /** Drawn in a phone's menu Sheet instead of a DropdownMenu. */
+  sheet?: boolean;
 }) {
   if (!usePlayOn(sharingDeviceId, liveAudio).devices.length) return null;
+  if (sheet)
+    return (
+      <div
+        role="group"
+        aria-label="Play on"
+        className={cn("grid", separated && "border-t pt-1 mt-1")}
+      >
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">Play on</p>
+        <Devices
+          onPlay={onPlay}
+          disabled={disabled}
+          sharingDeviceId={sharingDeviceId}
+          liveAudio={liveAudio}
+          sheet
+        />
+      </div>
+    );
   return (
     <>
       {separated && <DropdownMenuSeparator />}
@@ -144,41 +186,101 @@ export function PlayOnGroup({
   );
 }
 
-/** "Play on…" beside a row's inline verbs: it opens Choose where it plays from itself. */
-export function PlayOnMenu({
+/** A shared source's devices when its menu has no room for them all (docs/design.md "Menus"): it plays at once on the one chosen. */
+export function ChooseDevice({
+  title,
+  onPlay,
+  onClose,
+  anchor,
+  sharingDeviceId,
+  liveAudio,
+}: {
+  title: string;
+  onPlay: (deviceId: string) => void;
+  onClose: () => void;
+  anchor: RefObject<HTMLElement | null>;
+  sharingDeviceId?: string;
+  liveAudio?: boolean;
+}) {
+  return (
+    <MenuPanel title={`Play ${title} on`} anchor={anchor} onClose={onClose}>
+      <div role="group" aria-label="Play on" className="grid">
+        <Devices
+          sheet
+          sharingDeviceId={sharingDeviceId}
+          liveAudio={liveAudio}
+          onPlay={(id) => {
+            onClose();
+            onPlay(id);
+          }}
+        />
+      </div>
+    </MenuPanel>
+  );
+}
+
+/**
+ * A Stage's main verb with where it plays (docs/design.md "Stage"): Play or Resume beside its destination ("on this
+ * device"), which opens Choose where it plays. Without another device that can play it, the verb stands alone.
+ */
+export function PlayPill({
+  label,
   title,
   thumbnail,
   verb,
   audioOnly,
-  onPlay,
   disabled,
+  onClick,
+  playOn,
+  playOnDisabled,
   size,
+  ...props
 }: {
+  label: string;
+  /** What plays, for Choose where it plays. */
   title: string;
   thumbnail?: string;
-  /** Play's word in the panel, "Resume" for an item partly played. */
   verb?: string;
   audioOnly?: boolean;
-  onPlay: (on: PlayOn) => void;
   disabled?: boolean;
+  onClick: () => void;
+  playOn?: (on: PlayOn) => void;
+  playOnDisabled?: boolean;
   size?: "default" | "lg";
-}) {
-  const [open, setOpen] = useState(false);
-  if (!usePlayOn().devices.length) return null;
+} & Omit<ComponentProps<typeof Button>, "onClick" | "size">) {
+  const [choosing, setChoosing] = useState(false);
+  const { devices } = usePlayOn();
+  const destination = usePlayDestination();
   return (
-    <ChooseWherePlays
-      title={title}
-      thumbnail={thumbnail}
-      verb={verb}
-      audioOnly={audioOnly}
-      onPlay={onPlay}
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <Button variant="ghost" size={size} disabled={disabled} aria-label={`Play ${title} on…`}>
-          Play on…
-        </Button>
-      }
-    />
+    <span className="inline-flex max-w-full min-w-0 rounded-full bg-secondary">
+      <Button size={size} disabled={disabled} onClick={onClick} {...props}>
+        <Play aria-hidden="true" className="fill-current" />
+        {label}
+      </Button>
+      {playOn && devices.length > 0 && (
+        <ChooseWherePlays
+          title={title}
+          thumbnail={thumbnail}
+          verb={verb}
+          audioOnly={audioOnly}
+          open={choosing}
+          onOpenChange={setChoosing}
+          onPlay={playOn}
+          trigger={
+            <Button
+              variant="ghost"
+              size={size}
+              disabled={disabled || playOnDisabled}
+              aria-label={`Choose where it plays. Now: ${destination.label}`}
+              title="Choose where it plays"
+              className="min-w-0 pr-3 pl-3"
+            >
+              <span className="truncate">{destination.label}</span>
+              <ChevronDown aria-hidden="true" className="text-muted-foreground" />
+            </Button>
+          }
+        />
+      )}
+    </span>
   );
 }

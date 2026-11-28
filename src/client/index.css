@@ -362,9 +362,10 @@
   align-items: start;
 }
 /* An item's "…" waits for the pointer or focus, so a shelf or a long list isn't a row or column of them; touch always
-   shows it, and the TV on the focused tile, whose held OK opens it. It appears at once: a fade starts and ends an
+   shows it, and the TV on the focused tile or row, whose held OK opens it. It appears at once: a fade starts and ends an
    animation on every row a scroll passes under the pointer. */
-.tv-presentation [data-tile]:not(:focus-within) [data-tile-menu]:not([aria-expanded="true"]) {
+.tv-presentation [data-tile]:not(:focus-within) [data-tile-menu]:not([aria-expanded="true"]),
+.tv-presentation [data-nav-row]:not(:focus-within) > * [data-row-menu]:not([aria-expanded="true"]) {
   opacity: 0;
 }
 @media (hover: hover) and (pointer: fine) {

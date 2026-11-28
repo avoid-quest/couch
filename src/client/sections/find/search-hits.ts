@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { artShape, type ArtShape } from "@/art-shape";
 import { mediaSubtitle } from "@/components/MediaContext";
+import type { MenuAction } from "@/components/RowMenu";
 import { collectionSubtitle, metaLine } from "@/media-caption";
 import { formatDay, formatRuntime } from "@/time-format";
 import { canReturn, foldCopies, searchRelevance, type SearchKind } from "../../search";
@@ -108,6 +109,15 @@ export const hitSources = (hit: SearchHit) => [
   ...(hit.radio ? stationSources(hit.radio) : []),
 ];
 
+/** A hit whose press plays keeps its own page in its menu: Details for an item, Open for a list or a station. */
+export const pageAction = (hit: SearchHit): MenuAction => ({
+  label:
+    hit.primary.label === "Open" && !hit.collection && !hit.radio ? "Details" : hit.primary.label,
+  group: "go",
+  disabled: hit.primary.disabled,
+  run: hit.primary.run,
+});
+
 /**
  * A hit as Search presses it: an episode, track, video or stream plays, an album, set or show plays all, and Open (its
  * page) moves to its menu; a film, series or channel keeps Open.
@@ -121,10 +131,7 @@ export function pressPlays(hit: SearchHit): SearchHit {
   return {
     ...hit,
     primary: { label: play.label, run: play.run!, disabled: play.disabled },
-    actions: [
-      { label: hit.primary.label, run: hit.primary.run, disabled: hit.primary.disabled },
-      ...hit.actions.filter((action) => action !== play),
-    ],
+    actions: [pageAction(hit), ...hit.actions.filter((action) => action !== play)],
   };
 }
 

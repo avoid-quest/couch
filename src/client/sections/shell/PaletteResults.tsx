@@ -48,7 +48,7 @@ const pause = 250;
 const shortest = 3;
 
 /** The verbs a row's menu offers in the palette besides its main one, in this order. */
-const menuVerbs = ["Play", "Play all", "Play next", "Queue", "Queue all", "Open"];
+const menuVerbs = ["Play", "Play all", "Play next", "Queue", "Queue all", "Open", "Details"];
 export const rowMenu = (hit: SearchHit) =>
   hit.actions
     .filter(

@@ -48,9 +48,10 @@ export function useLiveSourceHits(query: string): SearchHit[] {
             video: source.video,
             primary: { label: primary, disabled, run: play },
             actions: [
-              { label: primary, disabled, run: play },
+              { label: primary, group: "play", disabled, run: play },
               {
                 label: "Play on",
+                group: "play",
                 disabled: !connected,
                 sharingDeviceId: heldOutOf(source),
                 liveAudio: live,
@@ -63,6 +64,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
                 : [
                     {
                       label: "Play next",
+                      group: "play",
                       disabled: !connected,
                       run: () => {
                         void run({
@@ -75,6 +77,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
                     },
                     {
                       label: "Queue",
+                      group: "play",
                       disabled: !connected,
                       run: () => {
                         void run({ type: "playLive", sourceId: source.id, playNow: false });

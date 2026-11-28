@@ -1,6 +1,9 @@
 import type { MenuAction } from "@/components/RowMenu";
 import type { QueueEntry } from "../shared/protocol";
-import { providerForUrl } from "../shared/providers";
+import { isDesktop } from "@/sections/shell/Outputs";
+import { isTvPresentation } from "@/session/presentation";
+import { confirmed, failed } from "@/toasts";
+import { providerForUrl, publicPageUrl } from "../shared/providers";
 import { animeUnitySiteOrigin } from "../shared/animeunity";
 
 /** Only the entry's webpage reference is a page; source otherwise holds a file, stream or input. */
@@ -44,19 +47,66 @@ export function originalPageUrl(value?: string | null): string | undefined {
   }
 }
 
-/** Native anchors keep modified clicks and use Main's existing HTTP(S) window-open handler in the app. */
-export function browserActions(pageUrl?: string | null): MenuAction[] {
+/**
+ * A page link fit to hand to someone else: only a known source's public page, canonical (publicPageUrl), as the site
+ * spells it today; never Couch's own address or another on the network, a stream, nor a private link's secret.
+ */
+export function shareableUrl(value?: string | null): string | undefined {
+  const href = originalPageUrl(value);
+  const page = href && publicPageUrl(href);
+  return page ? originalPageUrl(page) : undefined;
+}
+
+/**
+ * The item's page beyond Couch, the menu's Share group: Copy link, or on a phone with a share sheet Share…, which also
+ * stands for Open in browser there. Neither on the TV, which has no clipboard or share sheet worth using. Native
+ * anchors keep modified clicks and use Main's existing HTTP(S) window-open handler in the app.
+ */
+export function browserActions(pageUrl?: string | null, title?: string): MenuAction[] {
   const url = originalPageUrl(pageUrl);
-  return url
-    ? [
-        {
-          label: "Open in browser",
-          node: (
-            <a href={url} target="_blank" rel="noopener noreferrer" data-tv-local-only>
-              Open in browser
-            </a>
-          ),
-        },
-      ]
-    : [];
+  if (!url) return [];
+  const link = !isTvPresentation() ? shareableUrl(url) : undefined;
+  const share = !!link && !isDesktop() && typeof navigator.share === "function";
+  return [
+    ...(link && share
+      ? [
+          {
+            label: "Share…",
+            group: "share",
+            now: true,
+            run: () =>
+              void navigator.share({ title, url: link }).catch((reason: unknown) => {
+                if (!(reason instanceof DOMException && reason.name === "AbortError"))
+                  failed("Couldn't share the link.", reason);
+              }),
+          },
+        ]
+      : link && navigator.clipboard
+        ? [
+            {
+              label: "Copy link",
+              group: "share",
+              now: true,
+              run: () =>
+                void navigator.clipboard.writeText(link).then(
+                  () => confirmed("Link copied."),
+                  (reason: unknown) => failed("Couldn't copy the link.", reason),
+                ),
+            },
+          ]
+        : []),
+    ...(share
+      ? []
+      : [
+          {
+            label: "Open in browser",
+            group: "share",
+            node: (
+              <a href={url} target="_blank" rel="noopener noreferrer" data-tv-local-only>
+                Open in browser
+              </a>
+            ),
+          },
+        ]),
+  ];
 }

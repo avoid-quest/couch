@@ -1,11 +1,6 @@
-import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { MoreHorizontal } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { RowOptions, type MenuAction } from "@/components/RowMenu";
-import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
-import { isTvPresentation } from "@/session/presentation";
 import { undoable } from "@/toasts";
 import { settingsPagePath } from "../../../shared/settings-pages";
 import { moveHomeSection, setHomeSectionShown, type HomeSectionId } from "./home-rows";
@@ -26,7 +21,7 @@ function whenDrawn(done: () => boolean, frames = 20) {
  * Where the focus goes when a section leaves Home (Hide, Remove): the next section's first control, else the
  * previous one's, so a remote stays on Home. Taken before the section goes; given once it has.
  */
-function focusAfter(section: Element | null | undefined) {
+export function focusAfter(section: Element | null | undefined) {
   const page = section?.closest("[data-page]");
   if (!section || !page) return;
   const sections = [...page.querySelectorAll<HTMLElement>("section")].filter(
@@ -85,10 +80,16 @@ function useSectionActions(id: HomeSectionId, name: string): MenuAction[] {
     );
   };
   return [
-    { label: "Move up", disabled: at <= 0, run: () => move(-1) },
-    { label: "Move down", disabled: at < 0 || at === order.length - 1, run: () => move(1) },
+    { label: "Move up", group: "arrange", disabled: at <= 0, run: () => move(-1) },
+    {
+      label: "Move down",
+      group: "arrange",
+      disabled: at < 0 || at === order.length - 1,
+      run: () => move(1),
+    },
     {
       label: "Hide",
+      group: "take away",
       run: () =>
         leaveHome(
           `${name} hidden on this device.`,
@@ -100,90 +101,39 @@ function useSectionActions(id: HomeSectionId, name: string): MenuAction[] {
 }
 
 /**
- * A Home section's "…", at the end of its heading's line; a followed section's adds Rename and Remove. Its menu hangs
- * from it on desktops and the TV; a phone's Sheet rises from the bottom.
+ * A Home section's "…", at the end of its heading's line; a followed section's adds Rename… and Remove from Home. Its
+ * groups are the list's own (`list`: Up next's Save as list…), how it stands (Rename…, Move up, Move down), taking it
+ * away (Hide, Remove from Home) and Edit Home. Its
+ * menu hangs from it on desktops and the TV; a phone's Sheet rises from the bottom.
  */
 export function SectionOptions({
   id,
   name,
   rename,
   remove,
+  list = [],
 }: {
   id: HomeSectionId;
   name: string;
   rename?: MenuAction;
   remove?: MenuAction;
+  list?: MenuAction[];
 }) {
   const router = useRouter();
-  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   const actions = [
-    ...(rename ? [rename] : []),
+    ...list,
+    ...(rename ? [{ ...rename, group: "arrange" }] : []),
     ...useSectionActions(id, name),
-    ...(remove ? [remove] : []),
+    ...(remove ? [{ ...remove, group: "take away" }] : []),
     {
       label: "Edit Home",
+      group: "home",
       run: () => void router.navigate({ to: settingsPagePath("home") }),
     },
   ];
   return (
     <span data-section-options={id} className="ml-auto flex shrink-0">
-      {desktop || isTvPresentation() ? (
-        <RowOptions title={name} actions={actions} />
-      ) : (
-        <OptionsSheet title={name} actions={actions} />
-      )}
+      <RowOptions title={name} actions={actions} />
     </span>
-  );
-}
-
-/** A phone's section menu. A verb runs once the Sheet has given the focus back to the "…", as the menu's do. */
-function OptionsSheet({ title, actions }: { title: string; actions: MenuAction[] }) {
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const chosen = useRef<() => void>(undefined);
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          ref={trigger}
-          data-row-options
-          variant="ghost"
-          size="icon"
-          aria-label={`Options for ${title}`}
-        >
-          <MoreHorizontal aria-hidden="true" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent
-        side="bottom"
-        aria-describedby={undefined}
-        className="max-h-[85dvh] overflow-y-auto px-(--gutter) py-4"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          trigger.current?.focus();
-          const run = chosen.current;
-          chosen.current = undefined;
-          run?.();
-        }}
-      >
-        <div className="mx-auto grid w-full max-w-3xl gap-1">
-          <SheetTitle className="mb-2 pr-11">{title}</SheetTitle>
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              variant="ghost"
-              disabled={action.disabled}
-              className="h-auto justify-start rounded-md px-2 py-3 text-left"
-              onClick={() => {
-                chosen.current = action.run;
-                setOpen(false);
-              }}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      </SheetContent>
-    </Sheet>
   );
 }

@@ -95,7 +95,7 @@ export function FollowShelf({
       id={follow.id}
       name={follow.name}
       rename={{
-        label: "Rename",
+        label: "Rename…",
         run: () =>
           setRenaming(
             panelAnchor() ?? root.current?.querySelector<HTMLElement>("[data-row-options]") ?? null,

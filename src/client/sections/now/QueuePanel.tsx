@@ -8,34 +8,22 @@ import { isRadio } from "../../../shared/radio";
 import { playbackStatus } from "@/playback-status";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type Ref } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiSend } from "@/api/client";
+import { useLayoutEffect, useRef, type ComponentProps, type Ref } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { shapeRatio } from "@/components/Stage";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ListMusic, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { deviceId } from "@/session/device-id";
+import { isTvPresentation } from "@/session/presentation";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
 import { useAutoplayList } from "./autoplay-list";
+import { useUpNextMenu } from "./UpNextMenu";
 import { browserActions, queuePageUrl } from "@/original-page";
 import { ItemMenu, RowOptions, useItemMenu } from "@/components/RowMenu";
 import { queueCursorIndex } from "../../../shared/queue";
@@ -131,24 +119,6 @@ export function QueuePanel({
   closeRef,
 }: Props) {
   const playbackClock = usePlaybackClock();
-  const autoplayId = useId();
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [listName, setListName] = useState("");
-  const keep = useMutation({
-    mutationFn: (name: string) =>
-      apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000),
-  });
-  const autoplaySave = useMutation({
-    mutationFn: async (autoplay: boolean) => {
-      if (state)
-        await run({
-          type: "preferences",
-          profileId: state.activeProfile.id,
-          preferences: { autoplay },
-        });
-    },
-  });
-  const keeping = keep.isPending;
   const panelRef = useRef<HTMLElement>(null);
   const focusedEntry = useRef<{
     element: HTMLElement;
@@ -189,7 +159,6 @@ export function QueuePanel({
     };
   };
   const autoplay = state?.autoplay;
-  // The switch shows only where Autoplay has something to continue; Settings → Playback always holds it.
   const autoplayList = useAutoplayList(credentials, state?.playback, autoplay);
   const autoplayUpcoming = autoplayList.entries;
   // The list takes its rows' majority shape, as Home's Up next does; a row of another shape is contained in that frame.
@@ -198,17 +167,18 @@ export function QueuePanel({
     current ? entryShape(current) : "video",
   );
   const autoplayFinding = !!autoplay?.enabled && !!autoplay.pending && !autoplayUpcoming.length;
-
-  const keepUpNext = async () => {
-    if (!connected || keeping || !upNext.length || !listName.trim()) return;
-    try {
-      const name = listName.trim();
-      await keep.mutateAsync(name);
-      setSaveOpen(false);
-    } catch {
-      /* The dialog keeps the name and shows the mutation error for retry. */
-    }
-  };
+  // Clear's "…" goes with the list, so the focus waits on the heading.
+  const listMenu = useUpNextMenu({
+    state,
+    credentials,
+    connected,
+    run,
+    upcoming: upNext.length,
+    options: () => panelRef.current?.querySelector<HTMLElement>("[data-row-options]"),
+    onClear: () =>
+      panelRef.current?.querySelector<HTMLElement>("#queue-title")?.focus({ preventScroll: true }),
+  });
+  const listActions = listMenu.actions;
 
   useLayoutEffect(() => {
     const focused = focusedEntry.current;
@@ -241,7 +211,8 @@ export function QueuePanel({
 
   if (!playbackControls(state).queue) return null;
   return (
-    <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+    <>
+      {listMenu.dialog}
       <section
         ref={panelRef}
         data-queue-panel
@@ -261,11 +232,11 @@ export function QueuePanel({
             : null;
         }}
       >
-        {/* The heading row stays while the list scrolls under it: the title, Autoplay's switch, then its Close. Under a sheet's own header only the switch shows. */}
+        {/* The heading row stays while the list scrolls under it: the title, its "…", then its Close. Under a sheet's own header only the "…" shows. */}
         <div
           className={cn(
             "flex min-h-11 shrink-0 items-center justify-between gap-4",
-            !titled && !autoplay?.upcoming.length && "sr-only",
+            !titled && !listActions.length && "sr-only",
           )}
         >
           <h2
@@ -275,22 +246,10 @@ export function QueuePanel({
           >
             Up next
           </h2>
-          {autoplay && autoplay.upcoming.length > 0 && (
-            <div className="ml-auto flex items-center gap-3">
-              <Label
-                htmlFor={autoplayId}
-                className="touch:min-h-11 text-sm font-normal text-muted-foreground"
-              >
-                Autoplay
-              </Label>
-              <Switch
-                id={autoplayId}
-                checked={autoplay.enabled}
-                disabled={!connected || autoplaySave.isPending}
-                onCheckedChange={(value) => autoplaySave.mutate(value)}
-              />
-            </div>
-          )}
+          {/* Up next's menu: Save as list…, Clear Up next (undone from its toast as Remove is) and Autoplay. */}
+          <span className="ml-auto flex">
+            <RowOptions title="Up next" disabled={!connected} actions={listActions} />
+          </span>
           {onClose && (
             <Button
               ref={closeRef}
@@ -305,48 +264,6 @@ export function QueuePanel({
             </Button>
           )}
         </div>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Save as list</DialogTitle>
-          </DialogHeader>
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void keepUpNext();
-            }}
-          >
-            <div className="grid gap-2">
-              <Label htmlFor="queue-list-name">List name</Label>
-              <Input
-                id="queue-list-name"
-                value={listName}
-                maxLength={80}
-                onChange={(event) => setListName(event.target.value)}
-              />
-            </div>
-            {keep.error && (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {keep.error.message || "Couldn't save Up next."}
-                </AlertDescription>
-              </Alert>
-            )}
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button
-                type="submit"
-                disabled={!connected || keeping || !upNext.length || !listName.trim()}
-              >
-                {keeping ? "Saving…" : "Save list"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
         {/* Its rows' controls pull back past the text (Save as list, Played, a row's "…"), so the scroller pads for them, with a
         little to spare: a vertical scroller with a stray pixel of overflow shifts its text when one takes focus. */}
         <div className="-mx-3 grid min-h-0 content-start gap-6 overflow-y-auto overscroll-contain px-3 pb-1">
@@ -369,7 +286,7 @@ export function QueuePanel({
           )}
           {upNext.length || autoplayUpcoming.length || autoplayFinding ? (
             <div className="grid gap-2">
-              {/* The list's status line, with the verb that saves it. */}
+              {/* The list's status line; its verbs are the heading's "…". */}
               {upNext.length > 0 && (
                 <>
                   <div className="flex items-center justify-between gap-4">
@@ -377,37 +294,6 @@ export function QueuePanel({
                       {upNext.length} to play
                       {doneIn == null ? "" : `, until ${formatEndTime(doneIn)}`}
                     </h3>
-                    <div className="-mr-2.5 flex items-center">
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          disabled={!connected}
-                          onClick={() => {
-                            keep.reset();
-                            setListName("");
-                          }}
-                        >
-                          Save as list
-                        </Button>
-                      </DialogTrigger>
-                      {/* Up next's menu: Clear Up next, undone from its toast as Remove is. Its "…" goes with
-                          the list, so the focus waits on the heading. */}
-                      <RowOptions
-                        title="Up next"
-                        disabled={!connected}
-                        actions={[
-                          {
-                            label: "Clear Up next",
-                            run: () => {
-                              panelRef.current
-                                ?.querySelector<HTMLElement>("#queue-title")
-                                ?.focus({ preventScroll: true });
-                              void run({ type: "clearUpNext" });
-                            },
-                          },
-                        ]}
-                      />
-                    </div>
                   </div>
                   <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">
                     {upNext.map((entry, index) => {
@@ -513,7 +399,7 @@ export function QueuePanel({
           )}
         </div>
       </section>
-    </Dialog>
+    </>
   );
 }
 
@@ -553,8 +439,8 @@ function QueueRow({
     ...(verbs
       ? actions
       : [
-          { label: "Details", run: () => details.open(queueItemLocation(entry)) },
-          ...browserActions(queuePageUrl(entry)),
+          { label: "Details", group: "go", run: () => details.open(queueItemLocation(entry)) },
+          ...browserActions(queuePageUrl(entry), entry.title),
         ]),
     ...related,
   ]);
@@ -624,7 +510,12 @@ function QueueRow({
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>
       )}
-      <ItemMenu menu={options} title={entry.title} />
+      {/* On the TV, as MediaRow's, it is no focus stop while the press works: a held OK opens the menu. */}
+      <ItemMenu
+        menu={options}
+        title={entry.title}
+        tabIndex={isTvPresentation() && onPlay && !disabled ? -1 : undefined}
+      />
     </li>
   );
 }

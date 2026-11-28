@@ -1,7 +1,7 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
-import { MediaContext } from "@/components/MediaContext";
+import { MediaContext, useRelatedMenu } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import {
   canReturn,
@@ -40,8 +40,9 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayOn } from "@/components/PlayOn";
 import type { Action, PlayOn } from "../../../shared/protocol";
+import { browserActions } from "@/original-page";
 import {
   linkTarget,
   type ProviderId,
@@ -73,7 +74,7 @@ import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
-import { verbRow } from "@/components/DetailHeader";
+import { SaveToggle, verbRow } from "@/components/DetailHeader";
 import { StageTitle } from "@/components/Stage";
 import { useRoomLead } from "@/components/AmbientLight";
 import { useLiveSourceHits } from "./useLiveSourceHits";
@@ -82,6 +83,7 @@ import {
   hitMeta,
   hitSources,
   names,
+  pageAction,
   pressPlays,
   quickSources,
   shapeOf,
@@ -134,7 +136,7 @@ const fluidTile = {
  * Search's ground (docs/design.md, Room): while nothing plays, the top or focused item's artwork lights the room
  * (RoomLight.tsx), neutral without one.
  */
-function SearchRoom({ thumbnail }: { thumbnail?: string }) {
+export function SearchRoom({ thumbnail }: { thumbnail?: string }) {
   useRoomLead(thumbnail);
   return null;
 }
@@ -547,19 +549,29 @@ const hitRelated = (
 
 /**
  * The closest match as a hero on the room: its artwork standing as an object, its title, one meta line and its links,
- * then its main verb (focused first, on the TV too), Queue and its menu. On a phone the artwork sits beside the title, so
+ * then its main verb with where it plays (focused first, on the TV too), Save and its menu. On a phone the artwork sits beside the title, so
  * the first screen holds the shelves too.
  */
-function TopResult({ hit }: { hit: SearchHit }) {
+export function TopResult({ hit }: { hit: SearchHit }) {
   const { on } = usePlayOn();
   const main = hit.primary;
   const label = main.label === "Play" || main.label === "Resume" ? on(main.label) : main.label;
-  const queue = hit.actions.find(
-    (action) => action.label === "Queue" || action.label === "Queue all",
-  );
-  const rest = useItemMenu(
-    hit.actions.filter((action) => action !== queue && action.label !== main.label),
-  );
+  // What plays leads with the pill, Play and where it plays; its page stays the title's link and the menu's Details.
+  const play = hit.actions.find((action) => action.label === "Play" && action.run);
+  const playOn =
+    play &&
+    hit.actions.find((action) => action.playOn && !action.sharingDeviceId && !action.liveAudio);
+  const own = hit.actions.find((action) => action.group === "keep" && action.pressed !== undefined);
+  // The "…" holds Play on… as well as the pill, then where it belongs, as the hit's row has it.
+  const rest = useItemMenu([
+    ...(play && main.label === "Open" && main.href
+      ? [{ label: "Details", group: "go", disabled: main.disabled, run: main.run }]
+      : []),
+    ...hit.actions.filter(
+      (action) => action !== play && action !== own && action.label !== main.label,
+    ),
+    ...useRelatedMenu(hitRelated(hit)),
+  ]);
   const meta = hitMeta(hit);
   const level = useLevel(hitSources(hit));
   return (
@@ -600,28 +612,48 @@ function TopResult({ hit }: { hit: SearchHit }) {
         <MediaContext {...hitRelated(hit)} />
       </div>
       <div data-nav-row className={cn("col-span-2 min-w-0 md:col-span-1 md:col-start-2", verbRow)}>
-        <Button
-          data-page-first
-          data-play
-          size="lg"
-          asChild={!!main.href && !main.disabled}
-          disabled={main.disabled}
-          onClick={(event) => {
-            if (
-              main.href &&
-              (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-            )
-              return;
-            if (main.href) event.preventDefault();
-            main.run();
-          }}
-        >
-          {main.href && !main.disabled ? <a href={detailHref(main.href)}>{label}</a> : label}
-        </Button>
-        {queue && (
-          <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>
-            {queue.label}
+        {play ? (
+          <PlayPill
+            data-page-first
+            data-play
+            size="lg"
+            label="Play"
+            aria-label={on(`Play ${hit.title}`)}
+            title={hit.title}
+            thumbnail={hit.thumbnail}
+            audioOnly={playOn?.audioOnly}
+            disabled={play.disabled}
+            onClick={() => play.run?.()}
+            playOn={playOn?.playOn}
+            playOnDisabled={playOn?.disabled}
+          />
+        ) : (
+          <Button
+            data-page-first
+            data-play
+            size="lg"
+            asChild={!!main.href && !main.disabled}
+            disabled={main.disabled}
+            onClick={(event) => {
+              if (
+                main.href &&
+                (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              )
+                return;
+              if (main.href) event.preventDefault();
+              main.run();
+            }}
+          >
+            {main.href && !main.disabled ? <a href={detailHref(main.href)}>{label}</a> : label}
           </Button>
+        )}
+        {own && (
+          <SaveToggle
+            aria-label={`Save ${hit.title}`}
+            saved={!!own.pressed}
+            disabled={own.disabled}
+            onClick={() => own.run?.()}
+          />
         )}
         <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
@@ -712,7 +744,7 @@ export function HitTile({
       href={!play ? hit.primary.href : undefined}
       onClick={() => primary.run()}
       menu={[
-        ...(play && hit.primary.label !== "Play" ? [hit.primary] : []),
+        ...(play && hit.primary.label !== "Play" ? [pageAction(hit)] : []),
         ...hit.actions.filter((action) => action.label !== primary.label),
       ]}
     />
@@ -819,15 +851,7 @@ export const HitList = memo(function HitList({
               menu={
                 play || hit.primary.label === "Play"
                   ? [
-                      ...(play && hit.primary.label !== "Play"
-                        ? [
-                            {
-                              label: hit.primary.label,
-                              disabled: hit.primary.disabled,
-                              run: hit.primary.run,
-                            },
-                          ]
-                        : []),
+                      ...(play && hit.primary.label !== "Play" ? [pageAction(hit)] : []),
                       ...hit.actions.filter((action) => action.label !== "Play"),
                     ]
                   : hit.actions
@@ -961,8 +985,8 @@ export function SourcesUnanswered({ summaries }: { summaries: Entry[] }) {
 
 /**
  * A pasted list (a set, an album, a show, a station's style page) as its own page on the room: its title set large, what
- * it holds, then Play all (focused first), Queue all, Play next and Open; then its items, a shelf per show when a radio
- * list gathers several, else as rows.
+ * it holds, then Play all with where it plays (focused first), Save and its "…" (Play next, Queue all, Play on…, Open,
+ * Copy link); then its items, a shelf per show when a radio list gathers several, else as rows.
  */
 function PastedList({
   url,
@@ -1003,16 +1027,12 @@ function PastedList({
     setPending(false);
     return () => controller.abort();
   }, [props.origin, props.token, props.connected]);
-  async function send(verb: LinkVerb, playOn?: PlayOn) {
+  async function send(verb: LinkVerb, on?: PlayOn) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
     try {
-      const ok = await listCommand(
-        linkAction(url, target, verb, quality, list, playOn),
-        list,
-        title,
-      );
+      const ok = await listCommand(linkAction(url, target, verb, quality, list, on), list, title);
       if (ok && !signal.aborted) onDone();
     } finally {
       if (!signal.aborted) setPending(false);
@@ -1020,6 +1040,33 @@ function PastedList({
   }
   const disabled = !props.connected || pending || !props.onCommand;
   const limit = listLimit(list.count);
+  const saves = summary?.collection;
+  const menu = useItemMenu([
+    {
+      label: "Play next",
+      group: "play",
+      disabled,
+      run: () => void send("next"),
+    },
+    {
+      label: listLabel("Queue all", list.count),
+      group: "play",
+      disabled,
+      run: () => void send("queue"),
+    },
+    {
+      label: "Play on",
+      group: "play",
+      disabled: disabled || !props.canPlay,
+      playOn: (on) => void send("play", on),
+    },
+    {
+      label: "Open",
+      group: "go",
+      run: () => navigation.open(collectionLocation({ provider: target.provider, url })),
+    },
+    ...browserActions(url, title),
+  ]);
   const root = useRef<HTMLElement>(null);
   useFirstVerb(root, !disabled && props.canPlay, url);
   return (
@@ -1042,33 +1089,26 @@ function PastedList({
         <SearchTitle title={title} />
         {meta && <p className="text-meta text-muted-foreground tabular-nums">{meta}</p>}
         <div data-nav-row className={verbRow}>
-          <Button
+          <PlayPill
             data-page-first
             size="lg"
+            label={listLabel("Play all", list.count)}
+            aria-label={on(`${listLabel("Play all", list.count)} ${title}`)}
+            title={title}
+            thumbnail={page?.thumbnail}
             disabled={disabled || !props.canPlay}
             onClick={() => void send("play")}
-          >
-            {on(listLabel("Play all", list.count))}
-          </Button>
-          <PlayOnMenu
-            size="lg"
-            title={title}
-            disabled={disabled || !props.canPlay}
-            onPlay={(playOn) => void send("play", playOn)}
+            playOn={(playOn) => void send("play", playOn)}
           />
-          <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("queue")}>
-            Queue all
-          </Button>
-          <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("next")}>
-            Play next
-          </Button>
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
-          >
-            Open
-          </Button>
+          {saves?.save && (
+            <SaveToggle
+              aria-label={`Save ${title}`}
+              saved={!!saves.saved}
+              disabled={!props.connected || !!saves.saveDisabled}
+              onClick={saves.save}
+            />
+          )}
+          <ItemMenu menu={menu} size="icon-lg" title={title} className="opacity-100" />
         </div>
         {limit && (
           <p className="text-meta text-muted-foreground">

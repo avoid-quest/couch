@@ -1,20 +1,19 @@
-import { useState, type ReactNode } from "react";
-import { ChevronDown, Play } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useItemLight, useRoomLead } from "@/components/AmbientLight";
-import { ChooseWherePlays } from "@/components/ChooseWherePlays";
 import { SaveToggle } from "@/components/DetailHeader";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { usePlayDestination, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayDestination, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import { useRelatedMenu } from "@/components/MediaContext";
 import { ArtLevel, useLevel } from "@/components/Level";
 import { ShelfHeading } from "@/components/Shelf";
 import { historyShape, majorityShape } from "@/art-shape";
 import { mediaCaption, metaLine } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
-import { historyReference, useDetailAction, useForLaterToggle } from "@/sections/details/ItemPage";
+import { historyReference, useDetailAction, useForLaterToggle } from "@/sections/details/save";
 import { isTvPresentation } from "@/session/presentation";
 import type { PlayOn } from "../../../shared/protocol";
 import type { HistoryItem } from "../../../shared/viewing";
@@ -141,25 +140,17 @@ function Lead({
   menu: MenuAction[];
   playing: boolean;
 }) {
-  const [choosing, setChoosing] = useState(false);
-  const { devices, on } = usePlayOn();
+  const { on } = usePlayOn();
   const destination = usePlayDestination();
   const save = useForLaterToggle(item.url, () => historyReference(item), useDetailAction());
-  // The TV has no Save or "…" beside Resume: a held OK opens the menu, from the artwork, and Save is in it.
+  // The pill holds Resume and Play on, and the icon Save, so the "…" holds the rest, Play on… too. The TV has no Save or
+  // "…" beside Resume: a held OK opens the menu, from the artwork, and Save is in it.
   const tv = isTvPresentation();
-  const options = useItemMenu(
-    tv && item.url
-      ? [
-          ...menu,
-          {
-            label: save.saved ? "Saved" : "Save",
-            pressed: save.saved,
-            disabled: save.disabled,
-            run: save.run,
-          },
-        ]
-      : menu,
-  );
+  const related = useRelatedMenu({ collection: item.collection, creator: item.creator });
+  const options = useItemMenu([
+    ...menu.filter((action) => tv || action.pressed === undefined),
+    ...related,
+  ]);
   const light = useItemLight(item.thumbnail);
   // With nothing playing, the lead lights the room a little (RoomLight.tsx).
   useRoomLead(item.thumbnail);
@@ -227,38 +218,17 @@ function Lead({
         )}
       </div>
       <div data-nav-row className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <span className="inline-flex max-w-full min-w-0 rounded-full bg-secondary">
-          <Button
-            aria-label={label}
-            disabled={!resumable}
-            onClick={() => resume(item, { fromStart: false })}
-          >
-            <Play aria-hidden="true" className="fill-current" />
-            Resume
-          </Button>
-          {devices.length > 0 && (
-            <ChooseWherePlays
-              title={item.title}
-              thumbnail={item.thumbnail}
-              verb={item.position > 0 ? "Resume" : undefined}
-              open={choosing}
-              onOpenChange={setChoosing}
-              onPlay={(on) => resume(item, { fromStart: false, on })}
-              trigger={
-                <Button
-                  variant="ghost"
-                  disabled={!resumable || !item.playable}
-                  aria-label={`Choose where it plays. Now: ${destination.label}`}
-                  title="Choose where it plays"
-                  className="min-w-0 pr-3 pl-3"
-                >
-                  <span className="truncate">{destination.label}</span>
-                  <ChevronDown aria-hidden="true" className="text-muted-foreground" />
-                </Button>
-              }
-            />
-          )}
-        </span>
+        <PlayPill
+          label="Resume"
+          aria-label={label}
+          title={item.title}
+          thumbnail={item.thumbnail}
+          verb={item.position > 0 ? "Resume" : undefined}
+          disabled={!resumable}
+          onClick={() => resume(item, { fromStart: false })}
+          playOn={(on) => resume(item, { fromStart: false, on })}
+          playOnDisabled={!item.playable}
+        />
         {!tv && item.url && (
           <SaveToggle size="icon" saved={save.saved} disabled={save.disabled} onClick={save.run} />
         )}

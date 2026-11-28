@@ -54,7 +54,10 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: {} }),
   useMutation: () => ({ isPending: false }),
 }));
-mock.module("../src/client/radio-clock", () => ({ useRadioClock: () => 0 }));
+mock.module("../src/client/radio-clock", () => ({
+  useRadioClock: () => 0,
+  useRadioBoundaryClock: () => 0,
+}));
 const shell = await import("../src/client/sections/shell/shell-context");
 mock.module("../src/client/sections/shell/shell-context", () => ({
   ...shell,

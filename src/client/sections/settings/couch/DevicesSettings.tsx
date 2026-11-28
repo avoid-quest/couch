@@ -205,10 +205,12 @@ export function DevicesSettings({
               : [
                   {
                     label: device.role === "administrator" ? "Remove admin" : "Make admin",
+                    group: "role",
                     run: () => act([device], "role"),
                   },
                 ]),
-            { label: "Forget", run: () => setRemoving([device]) },
+            // Destructive, so last and apart; it confirms.
+            { label: "Forget", group: "forget", run: () => setRemoving([device]) },
           ]}
         />
       )}

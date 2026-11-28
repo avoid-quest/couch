@@ -238,6 +238,7 @@ export function SavedFavorites({
             ? [
                 {
                   label: "Details",
+                  group: "go",
                   run: () => details.open(itemLocation("radio", favorite.item.id)),
                 },
               ]
@@ -246,6 +247,7 @@ export function SavedFavorites({
             ? [
                 {
                   label: "Play",
+                  group: "play",
                   disabled: !connected || !canPlay || pending,
                   run: () => void enqueue(favorite, true),
                 },
@@ -253,30 +255,36 @@ export function SavedFavorites({
             : []),
           {
             label: "Play on",
+            group: "play",
             disabled: !connected || !canPlay || pending,
             playOn: (on) => void enqueue(favorite, true, on),
             audioOnly: favorite.kind === "radio",
           },
           {
             label: "Queue",
+            group: "play",
             disabled: !connected || pending,
             run: () => void enqueue(favorite, false),
           },
           ...browserActions(
             favorite.kind === "provider" ? favorite.item.url : favorite.item.homepage,
+            itemTitle,
           ),
           {
             label: "Move up",
+            group: "list",
             disabled: blocked || favorites[index - 1]?.kind !== favorite.kind,
             run: () => move(-1),
           },
           {
             label: "Move down",
+            group: "list",
             disabled: blocked || favorites[index + 1]?.kind !== favorite.kind,
             run: () => move(1),
           },
           {
-            label: "Remove",
+            label: "Remove from Saved",
+            group: "list",
             disabled: !connected || pending,
             run: () => {
               if (!connected || pending) return;

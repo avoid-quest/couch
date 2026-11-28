@@ -6,6 +6,7 @@ import { artAspect, fillsFrame, type ArtShape } from "@/art-shape";
 import { detailHref } from "@/detail-navigation";
 import { usePlayOn } from "./PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "./RowMenu";
+import { isTvPresentation } from "@/session/presentation";
 import { ArtLevel, Level, useLevel } from "./Level";
 import { useItemLight } from "./AmbientLight";
 import { useRelatedMenu, type Related } from "./MediaContext";
@@ -233,7 +234,14 @@ export function MediaRow({
               </div>
             )}
           </div>
-          <ItemMenu data-row-menu menu={options} title={title} className="mt-1.5" />
+          {/* On the TV, as a tile's, it is no focus stop while the press works: a held OK opens the menu. */}
+          <ItemMenu
+            data-row-menu
+            menu={options}
+            title={title}
+            tabIndex={isTvPresentation() && primary && !primary.disabled ? -1 : undefined}
+            className="mt-1.5"
+          />
         </div>
         {actions && (
           <ItemActions
