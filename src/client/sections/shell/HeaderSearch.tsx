@@ -602,6 +602,9 @@ export function HeaderSearch({ className }: { className?: string }) {
                 onPlayStation={(station) => leave(() => void shell.enqueueRadio(station, true))}
                 onLink={(verb, list) =>
                   leave(() => {
+                    // The link stays in the field until it plays, so a failed one can be tried again; a field
+                    // edited meanwhile keeps its edit.
+                    const submitted = value;
                     void listCommand(
                       linkAction(
                         url!,
@@ -612,8 +615,12 @@ export function HeaderSearch({ className }: { className?: string }) {
                       ),
                       list,
                       url!.replace(/^https?:\/\//i, ""),
-                    );
-                    setDraft((current) => ({ ...current, value: "" }));
+                    ).then((ok) => {
+                      if (ok)
+                        setDraft((current) =>
+                          current.value === submitted ? { ...current, value: "" } : current,
+                        );
+                    });
                     input.current?.blur();
                   })
                 }
