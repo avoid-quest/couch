@@ -264,17 +264,24 @@ export function HitRow({
 }) {
   const { className, ...hold } = useRowHold(onMenu);
   const menuable = rowMenu(hit).length > 0;
+  // With its main verb unavailable, a row with a menu stays selectable, dimmed, for the menu's Queue.
+  const unavailable = hit.primary.disabled;
   return (
     <>
       <CommandItem
         value={`hit:${hit.id}`}
-        disabled={hit.primary.disabled}
-        onSelect={() => onRun(hit.primary.run)}
+        disabled={unavailable && !menuable}
+        onSelect={() => {
+          if (!unavailable) onRun(hit.primary.run);
+        }}
         {...(menuable ? hold : {})}
         className={cn("gap-3", large && "py-2", menuable && className)}
       >
-        <Art hit={hit} className={large ? "h-14" : "h-10"} />
-        <span className="grid min-w-0 flex-1">
+        <Art
+          hit={hit}
+          className={cn(large ? "h-14" : "h-10", unavailable && menuable && "opacity-50")}
+        />
+        <span className={cn("grid min-w-0 flex-1", unavailable && menuable && "opacity-50")}>
           <span className={cn("truncate", large ? "text-title font-medium" : "text-body")}>
             {hit.title}
           </span>
