@@ -113,8 +113,16 @@ export function recording(value: unknown): string | undefined {
   return page.href;
 }
 
+/** An episode's day as Couch says it, "19 Nov 2026" (time-format.ts's formatDay), wherever its subtitle shows. */
 const date = (value: unknown) =>
-  typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : undefined;
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)
+    ? new Date(`${value.slice(0, 10)}T00:00Z`).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : undefined;
 
 /** "01:00:00" or "01:00:00.000" as seconds. */
 export function clock(value: unknown) {

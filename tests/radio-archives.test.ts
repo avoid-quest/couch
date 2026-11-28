@@ -119,8 +119,9 @@ test("LYL's residents for a style list every past episode of their shows once, n
   expect(page.title).toBe("Baile Funk");
   expect(page.items).toHaveLength(44);
   expect(page.item).toMatchObject({ kind: "collection", url });
-  const dates = page.items.map((item) => item.subtitle!.slice(-10));
-  expect(dates).toEqual(dates.toSorted().toReversed());
+  const dates = page.items.map((item) => Date.parse(item.subtitle!.split(" · ").at(-1)!));
+  expect(dates.every(Number.isFinite)).toBe(true);
+  expect(dates).toEqual(dates.toSorted((a, b) => b - a));
   expect(page.items.map((item) => item.collection?.index)).toEqual([...Array(44).keys()]);
   expect(page.items[0]).toMatchObject({
     provider: "archives",
