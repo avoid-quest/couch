@@ -40,8 +40,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { usePlayOn } from "@/components/PlayOn";
-import type { Action } from "../../../shared/protocol";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import type { Action, PlayOn } from "../../../shared/protocol";
 import {
   linkTarget,
   type ProviderId,
@@ -1003,12 +1003,16 @@ function PastedList({
     setPending(false);
     return () => controller.abort();
   }, [props.origin, props.token, props.connected]);
-  async function send(verb: LinkVerb) {
+  async function send(verb: LinkVerb, playOn?: PlayOn) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
     try {
-      const ok = await listCommand(linkAction(url, target, verb, quality, list), list, title);
+      const ok = await listCommand(
+        linkAction(url, target, verb, quality, list, playOn),
+        list,
+        title,
+      );
       if (ok && !signal.aborted) onDone();
     } finally {
       if (!signal.aborted) setPending(false);
@@ -1046,6 +1050,12 @@ function PastedList({
           >
             {on(listLabel("Play all", list.count))}
           </Button>
+          <PlayOnMenu
+            size="lg"
+            title={title}
+            disabled={disabled || !props.canPlay}
+            onPlay={(playOn) => void send("play", playOn)}
+          />
           <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("queue")}>
             Queue all
           </Button>
