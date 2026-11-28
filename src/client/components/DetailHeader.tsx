@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Stage, StageTitle } from "@/components/Stage";
+import { ContentLink } from "@/components/ContentLink";
 import { Button } from "@/components/ui/button";
 import { ProgressLine } from "@/components/DurationBar";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
@@ -98,6 +99,7 @@ export function Description({ text, className }: { text?: string | null; classNa
  */
 export function DetailHeader({
   title,
+  titleHref,
   meta,
   context,
   description,
@@ -117,6 +119,8 @@ export function DetailHeader({
   children,
 }: {
   title: string;
+  /** Where pressing the title goes (a station's show searches for it). */
+  titleHref?: string;
   meta?: string;
   context?: ReactNode;
   description?: string | null;
@@ -156,7 +160,13 @@ export function DetailHeader({
     <Stage data-detail-header thumbnail={thumbnail ?? ""} shape={shape} fit={fit} title={title}>
       <div className="grid w-full justify-items-start gap-3">
         {trail}
-        <StageTitle title={title} />
+        <StageTitle title={title}>
+          {titleHref ? (
+            <ContentLink href={titleHref} className="no-underline hover:underline">
+              {title}
+            </ContentLink>
+          ) : undefined}
+        </StageTitle>
       </div>
       {(line || context || started || progress) && (
         <div className="grid w-full justify-items-start gap-2">

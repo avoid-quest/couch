@@ -38,8 +38,13 @@ branch. Phones keep a bottom tab bar for thumb reach.
   video too: two colours read from its picture (via `/api/artwork`) as a lamp
   by the player and a spill from the bottom left, at full strength while it
   plays, dimmed while paused, out once nothing plays. With nothing playing, the
-  picture a page leads with (a Stage, `useRoomLead`) lights it a little. The
-  header and the phone's tabs paint the same room (`.room-ground`), so it runs
+  picture a page leads with (a Stage, `useRoomLead`) lights it a little.
+  Search's results and a pasted list's page stand in the room too, lit by the
+  top or focused item, neutral without artwork. So does a source's own page
+  (`sections/find/Room.tsx`, `SourceRooms.tsx`): its name set large, its own
+  doors (the Browse line's), its lead, then its lists as Shelves, while the
+  header's field wears the source as a token. The header and the phone's tabs
+  paint the same room (`.room-ground`), so it runs
   on under them. The full player throws the picture itself, blurred, on its
   wall; the full video player stays black. Artwork colour is the only colour
   besides danger's red. Artwork Core can't read (an SVG logo) gives no light.
@@ -119,7 +124,7 @@ plays. New motion is `motion-safe:`; reduced motion stills everything.
 In `src/client/components`:
 
 - `PageHeader`, `ContentBreadcrumb`, `SettingsRow` / `SettingsSection`
-- `Stage`, `DetailHeader`, `SaveToggle`, `Description`, `Onboarding`
+- `Stage`, `DetailHeader`, `Description`, `Onboarding`
 - `Shelf`, `MediaTile`, `MediaRow` / `MediaList`, `MediaArtwork` (`artShape`:
   2:3 posters, 16:9 videos, square music and stations, round channels),
   `mediaCaption`, `metaLine`

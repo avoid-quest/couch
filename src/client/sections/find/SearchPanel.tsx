@@ -1,19 +1,34 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { playbackStatus } from "@/playback-status";
 import { useOptionalSessionGate } from "@/session/session-context";
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
+import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
 import {
   canReturn,
-  isLink,
-  mergeSearchHits,
+  linkOf,
   searchLocation,
   searchRelevance,
-  type SearchKind,
   type SearchRouteState,
 } from "../../search";
-import { kindLabels, scopeLabels } from "../../search-palette";
-import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  chipScopes,
+  chooseScope,
+  hasScope,
+  isChosen,
+  scopeLabels,
+  type SearchScope,
+} from "../../search-palette";
+import {
+  memo,
+  useMemo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { isTvPresentation } from "@/session/presentation";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TryAgain } from "@/components/TryAgain";
@@ -24,18 +39,15 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import type { Action, PlayOn } from "../../../shared/protocol";
+import { usePlayOn } from "@/components/PlayOn";
+import type { Action } from "../../../shared/protocol";
 import {
-  providerForUrl,
+  linkTarget,
   type ProviderId,
   type ProviderItem,
   type VideoQuality,
 } from "../../../shared/providers";
-import { stationSources } from "../../../shared/radio";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import {
   SearchOnlineResults,
@@ -45,19 +57,15 @@ import {
 } from "./SearchOnlineResults";
 import { Shelf } from "@/components/Shelf";
 import { MediaTile } from "@/components/MediaTile";
-import { artAspect, artShape, majorityShape, type ArtShape } from "@/art-shape";
-import { collectionSubtitle, episodeRow, metaLine, withoutUrls } from "@/media-caption";
+import { artAspect, majorityShape, type ArtShape } from "@/art-shape";
+import { episodeRow, metaLine, withoutUrls } from "@/media-caption";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 import { SearchRadioResults } from "./SearchRadioResults";
-import { SearchKinds, SearchSources } from "./SearchFilters";
-import {
-  supportsWebVideoQuality,
-  useEnqueueVideoQuality,
-  videoQualityOptions,
-} from "../../video-quality";
-import { createId } from "../../session/session";
+import { PastedLink } from "./PastedLink";
+import { ScopeChips } from "./ScopeChips";
+import { useEnqueueVideoQuality } from "../../video-quality";
 import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { RadioSlot } from "@/components/RadioSchedule";
@@ -65,8 +73,31 @@ import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SaveToggle, verbRow } from "@/components/DetailHeader";
+import { verbRow } from "@/components/DetailHeader";
+import { StageTitle } from "@/components/Stage";
+import { useRoomLead } from "@/components/AmbientLight";
 import { useLiveSourceHits } from "./useLiveSourceHits";
+import {
+  hitContext,
+  hitMeta,
+  hitSources,
+  names,
+  pressPlays,
+  quickSources,
+  shapeOf,
+  sourceOrder,
+  useSourceHits,
+  useTopHit,
+} from "./search-hits";
+import {
+  linkAction,
+  listLabel,
+  listLimit,
+  listUnit,
+  useListCommand,
+  usePastedList,
+  type LinkVerb,
+} from "@/pasted-link";
 
 export type Props = {
   origin: string;
@@ -83,73 +114,9 @@ export type Props = {
 };
 type Entry = [source: string, summary: SearchResultSummary];
 
-// Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = [
-  "Shared sources",
-  "YouTube",
-  "Bandcamp",
-  "SoundCloud",
-  "Twitch",
-  "RaiPlay",
-  "avoid radio",
-  "Radio playlists",
-  "Radio directory",
-  "StreamingCommunity",
-  "123MoviesFree",
-  "AnimeSaturn",
-  "AnimeUnity",
-];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
-type GroupId = Exclude<SearchKind, "audio"> | "channels";
-type Group = { id: GroupId; title: string; shape: ArtShape };
-// What's on the board first, then what you'd listen to, then the long tail of videos and channels, every kind a shelf.
-// The kinds above already count, so the headings don't.
-const groups: Group[] = [
-  { id: "films", title: "Films and series", shape: "poster" },
-  { id: "radio", title: "Radio", shape: "square" },
-  { id: "live", title: "Streaming now", shape: "video" },
-  { id: "music", title: "Music", shape: "square" },
-  { id: "videos", title: "Videos", shape: "video" },
-  { id: "channels", title: "Channels and lists", shape: "round" },
-];
-// The kinds above the results, in the shelves' order; only those the query found are offered.
-const kinds = groups.flatMap((group) =>
-  group.id === "channels"
-    ? []
-    : [{ value: group.id as SearchKind, label: kindLabels[group.id as SearchKind] }],
-);
-const kindOf = (group: GroupId): SearchKind => (group === "channels" ? "videos" : group);
-const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
-// RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
-const groupOf = (hit: SearchHit): GroupId =>
-  (catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List") ||
-  (hit.source === "RaiPlay" && !!hit.collection)
-    ? "films"
-    : hit.kind === "Radio"
-      ? "radio"
-      : hit.kind === "Stream"
-        ? "live"
-        : hit.kind === "Music"
-          ? "music"
-          : hit.collection
-            ? "channels"
-            : "videos";
-/** A hit's own artwork shape (art-shape.ts). */
-const shapeOf = (hit: SearchHit): ArtShape =>
-  artShape(
-    hit.source,
-    hit.kind === "Radio"
-      ? "station"
-      : hit.collection === "Channel"
-        ? "channel"
-        : hit.collection
-          ? "collection"
-          : hit.context
-            ? "episode"
-            : "media",
-  );
-// One kind's tiles wrap as ProviderPage's posters do, each as wide as its column.
+// One source's tiles wrap as ProviderPage's posters do, each as wide as its column.
 const gridColumns = {
   poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]",
   square: "grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]",
@@ -164,9 +131,57 @@ const fluidTile = {
 } as const satisfies Record<ArtShape, string>;
 
 /**
- * The results of the header's search (`searchState`, the route's): the kinds it found, then that kind's sources, then the
- * closest match, then every source's hits by kind as shelves in their artwork's shape; one kind fills the page as a grid.
- * Sources that didn't answer close the page in one quiet line. Or a pasted link.
+ * Search's ground (docs/design.md, Room): while nothing plays, the top or focused item's artwork lights the room
+ * (RoomLight.tsx), neutral without one.
+ */
+function SearchRoom({ thumbnail }: { thumbnail?: string }) {
+  useRoomLead(thumbnail);
+  return null;
+}
+
+/**
+ * On the TV the page's first verb (the hero's Play, a list's Play all) takes the focus once it shows and can be pressed,
+ * unless the person already pressed something since what it shows (`shows`: the search, the link) began.
+ */
+export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean, shows: string) {
+  const pressed = useRef(false);
+  // Before the focus below, so a search that shows its verb at once still takes it.
+  useLayoutEffect(() => {
+    pressed.current = false;
+  }, [shows]);
+  useEffect(() => {
+    const press = () => {
+      pressed.current = true;
+    };
+    addEventListener("keydown", press, true);
+    addEventListener("pointerdown", press, true);
+    return () => {
+      removeEventListener("keydown", press, true);
+      removeEventListener("pointerdown", press, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!ready || pressed.current || !isTvPresentation()) return;
+    page.current?.querySelector<HTMLElement>("[data-page-first]")?.focus({ preventScroll: true });
+  }, [ready]);
+}
+
+/** The query or the list, set large in the display face; with no query yet, a heading named for screen readers alone. */
+function SearchTitle({ title }: { title: string }) {
+  return (
+    <div className="search-title @container">
+      <StageTitle title={title}>
+        {title || <span className="sr-only">Search results</span>}
+      </StageTitle>
+    </div>
+  );
+}
+
+/**
+ * The results of the header's search (`searchState`, the route's), on the room: the query set large, the kinds it found,
+ * the closest match as a hero, then a shelf per source in the order they answered, so a late source never moves what is
+ * above it; one source fills the page as a grid. Sources that didn't answer close the page in one quiet line. Or a
+ * pasted link.
  */
 export function SearchPanel(props: Props) {
   const { searchState } = props;
@@ -174,15 +189,13 @@ export function SearchPanel(props: Props) {
   const kind = searchState.kind;
   const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
   const liveHits = useLiveSourceHits(query);
-  const latest = useMemo<Record<string, SearchResultSummary>>(
+  const summaries = useMemo<Record<string, SearchResultSummary>>(
     () => ({
       ...remoteSummaries,
       "Shared sources": { count: liveHits.length, hits: liveHits, loading: false, error: false },
     }),
     [remoteSummaries, liveHits],
   );
-  // Query cache hits are published before paint; never debounce them into a blank revisit.
-  const summaries = latest;
   const resultsKey = JSON.stringify([query, props.origin, props.token]);
   const [seenResults, setSeenResults] = useState(resultsKey);
   if (resultsKey !== seenResults) {
@@ -198,7 +211,11 @@ export function SearchPanel(props: Props) {
     props.defaultQuality ?? "auto",
   );
   const panel = useRef<HTMLElement>(null);
-  const url = isLink(query) ? query : undefined;
+  const url = linkOf(query);
+  const filter = searchState.source;
+  // Only the sources that can return the kind are asked, waited on, or report a problem.
+  const inScope = (source: string) =>
+    (filter === "All" || filter === source) && canReturn(source, kind);
   const providers = url
     ? []
     : (
@@ -206,6 +223,9 @@ export function SearchPanel(props: Props) {
           "youtube",
           "bandcamp",
           "soundcloud",
+          "archives",
+          "mixcloud",
+          "spotify",
           "raiplay",
           "twitch",
           "streamingcommunity",
@@ -213,74 +233,43 @@ export function SearchPanel(props: Props) {
           "animesaturn",
           "animeunity",
         ] as ProviderId[]
-      ).filter((provider) => kind !== "audio" || canReturn(providerNames[provider], kind));
+      ).filter((provider) => inScope(providerNames[provider]));
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
-  // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
-  // strong when its title holds every word.
-  const { close, strong } = searchRelevance(query);
-  const merged = useMemo(
-    () =>
-      mergeSearchHits(
-        sourceOrder,
-        Object.fromEntries(
-          Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []]),
-        ),
-        query,
-      ),
-    [summaries, query],
-  );
+  // What the search asked for, and what merely came back: a hit is close when it mentions every word of the query.
+  const { close } = searchRelevance(query);
+  const { order, hits, within } = useSourceHits(resultsKey, summaries, query);
+  const focusedHit = useRef<string | null>(null);
   // The kind and source are the header field's scope, chosen before or after the results. The filters come from what
   // was found, so no choice made here can come up empty: a kind is offered once it has a hit, and inside a kind, a
   // source once it has a hit of it. A scope chosen in the field shows too, and says so when it holds nothing.
-  const found = merged.filter(
-    (hit) => close(hit) && (kind !== "audio" || canReturn(hit.source, kind)),
-  );
-  const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
-  const inKind = (hit: SearchHit, of = kind) =>
-    !of || (of === "audio" ? canReturn(hit.source, of) : kindOfHit(hit) === of);
-  const choices = kind === "audio" ? [{ value: kind, label: kindLabels.audio }, ...kinds] : kinds;
-  const foundKinds = choices.flatMap((option) => {
-    const n = found.filter((hit) => inKind(hit, option.value)).length;
-    return n || (option.value === kind && found.length) ? [{ ...option, count: n }] : [];
-  });
-  const filter = searchState.source;
-  const foundSources = sourceOrder
-    .map((source) => ({
-      value: source,
-      count: found.filter((hit) => hit.source === source && inKind(hit)).length,
-    }))
-    .filter((source) => source.count || (source.value === filter && found.length));
-  // Only the sources that can return the kind are waited on, or report a problem.
-  const inScope = (source: string) =>
-    (filter === "All" || filter === source) && canReturn(source, kind);
+  const isFound = (hit: SearchHit) =>
+    close(hit) && (kind !== "audio" || canReturn(hit.source, kind));
+  const found = hits.filter(isFound);
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
-  const scoped = merged.filter((hit) => inScope(hit.source) && inKind(hit));
+  const scoped = within(filter, kind);
   const relevant = scoped.filter(close);
   const loose = scoped.filter((hit) => !close(hit));
-  // The closest match leads: the first strong hit of the first kind that has one, as Home's hero leads its shelves. The first match
-  // holds still for the query and kind, so nothing moves under the focus while browsing.
-  const candidate = groups
-    .map((group) => relevant.find((hit) => groupOf(hit) === group.id && strong(hit)))
-    .find(Boolean);
-  const holdKey = `${resultsKey}:${kind ?? "all"}`;
-  const [held, setHeld] = useState<Record<string, string>>({});
-  useLayoutEffect(() => {
-    if (candidate)
-      setHeld((current) => (current[holdKey] ? current : { ...current, [holdKey]: candidate.id }));
-  }, [candidate, holdKey]);
-  const top = (held[holdKey] && relevant.find((hit) => hit.id === held[holdKey])) || candidate;
-  const [expanded, setExpanded] = useState<{ key: string; groups: GroupId[] }>({
+  // The closest match leads and holds still for the query and kind, so nothing moves under the focus while browsing.
+  // The room takes the colour of the focused item, else the top one's; once a hit has the focus, the top one holds.
+  const [focused, setFocused] = useState<{ key: string; id: string } | null>(null);
+  const lit = focused?.key === resultsKey ? focused.id : null;
+  const waiting = quickSources.some((source) => inScope(source) && pending(source));
+  const top = useTopHit(`${resultsKey}:${kind ?? "all"}`, relevant, query, waiting, !!lit);
+  const litHit = relevant.find((hit) => hit.id === lit) ?? top;
+  // The focus freezes the hero, so it waits for the quick sources a stronger match could still come from.
+  useFirstVerb(panel, !!top && !top.primary.disabled && !waiting, resultsKey);
+  const [expanded, setExpanded] = useState<{ key: string; sources: string[] }>({
     key: resultsKey,
-    groups: [],
+    sources: [],
   });
-  const expandedGroups = expanded.key === resultsKey ? expanded.groups : [];
-  const grouped = groups
-    .map((group) => ({
-      ...group,
-      hits: relevant.filter((hit) => hit !== top && groupOf(hit) === group.id),
+  const expandedSources = expanded.key === resultsKey ? expanded.sources : [];
+  const shelves = order
+    .filter(inScope)
+    .map((source) => ({
+      source,
+      hits: relevant.filter((hit) => hit !== top && hit.source === source),
     }))
-    .filter((group) => group.hits.length);
-  const focusedHit = useRef<string | null>(null);
+    .filter((shelf) => shelf.hits.length);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
     const row =
@@ -289,39 +278,57 @@ export function SearchPanel(props: Props) {
       ) ?? panel.current?.querySelector<HTMLElement>("[data-play], [data-media-tile]");
     row?.focus({ preventScroll: true });
   }, [relevant, props.active]);
-  // A heading that changed the kind, or a source that took its line away, left with its control; the focus goes to the chosen kind.
+  // A shelf heading that changed the source, or a chip that went once unchosen, left with its control; the focus goes to
+  // the chosen chip.
   const shownFilters = useRef(`${kind}:${filter}`);
   useLayoutEffect(() => {
     if (shownFilters.current === `${kind}:${filter}`) return;
     shownFilters.current = `${kind}:${filter}`;
     if (document.activeElement === document.body)
       panel.current
-        ?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')
+        ?.querySelector<HTMLElement>('[data-chip][aria-pressed="true"]')
         ?.focus({ preventScroll: true });
   }, [kind, filter]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
-  // A kind keeps the chosen source when the source has hits of it; otherwise every source.
-  const withKind = (next?: SearchKind): SearchRouteState => ({
-    ...searchState,
-    kind: next,
-    source:
-      canReturn(filter, next) && found.some((hit) => hit.source === filter && inKind(hit, next))
-        ? filter
-        : "All",
-  });
+  // The chips come from what was found, so no choice made here comes up empty: each counts what pressing it shows, and
+  // shows once that is something. A chosen one always shows; the page says when it holds nothing. Audio overlaps music
+  // and videos, so it shows only when chosen.
+  const current: SearchScope = { kind, source: filter };
+  const holds = (state: SearchScope) => within(state.source, state.kind).filter(isFound).length;
+  const chips = [
+    {
+      label: "All",
+      checked: !hasScope(current),
+      // All clears the kind too, Audio's included.
+      count: hits.filter(close).length,
+      onPress: () => props.onSearchChange({ query, source: "All" }),
+    },
+    ...chipScopes(current).flatMap((scope) => {
+      const checked = isChosen(current, scope);
+      const count = holds(checked ? current : chooseScope(current, scope));
+      if (!checked && (!count || scope.kind === "audio")) return [];
+      return [
+        {
+          label: scope.label,
+          checked,
+          count,
+          onPress: () => props.onSearchChange({ ...searchState, ...chooseScope(current, scope) }),
+        },
+      ];
+    }),
+  ];
   const everything = () => props.onSearchChange({ query, source: "All" });
   const [looseOpen, setLooseOpen] = useState(false);
-  const one = kind && groups.find((group) => group.id === kind)!;
-  const heading = (group: Group) => (kind ? undefined : searchLocation(withKind(kindOf(group.id))));
   return (
     <section
       ref={panel}
       className="min-w-0 space-y-8"
-      aria-label="Search results"
+      aria-label={url ? "Pasted link" : "Search results"}
       onFocusCapture={(event) => {
         focusedHit.current =
           (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ??
           null;
+        if (focusedHit.current) setFocused({ key: resultsKey, id: focusedHit.current });
       }}
       onBlurCapture={(event) => {
         if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget))
@@ -330,33 +337,14 @@ export function SearchPanel(props: Props) {
     >
       {!url && (
         <>
-          {/* The lines hold their height while sources answer, so nothing below moves as options arrive. A chosen kind
-          always keeps its source line, empty while it has one source. */}
-          {(foundKinds.length > 0 || asking.length > 0) && (
-            <div role="group" aria-label="Search filters" className="flex flex-col gap-1">
-              <div className="min-h-8 touch:min-h-11">
-                {foundKinds.length > 0 && (
-                  <SearchKinds
-                    query={resultsKey}
-                    value={kind ?? "all"}
-                    onChange={(next) =>
-                      props.onSearchChange(withKind(next === "all" ? undefined : next))
-                    }
-                    options={[{ value: "all", label: "All", count: found.length }, ...foundKinds]}
-                  />
-                )}
-              </div>
-              {(kind || filter !== "All") && (
-                <div className="min-h-8 touch:min-h-11">
-                  {(foundSources.length > 1 || filter !== "All") && (
-                    <SearchSources
-                      query={`${resultsKey}:${kind}`}
-                      value={filter}
-                      onChange={(source) => props.onSearchChange({ ...searchState, kind, source })}
-                      options={foundSources}
-                    />
-                  )}
-                </div>
+          <SearchRoom thumbnail={litHit?.thumbnail} />
+          <SearchTitle title={query} />
+          {/* The row holds its height while sources answer, so nothing below moves as chips arrive. On a phone or touch
+              screen it stays under the header while the shelves scroll, as the palette's does. */}
+          {(found.length > 0 || asking.length > 0 || hasScope(current)) && (
+            <div className="min-h-control touch:sticky touch:top-(--top-bar) touch:z-20 touch:-mx-(--gutter) touch:-my-2 touch:min-h-15 touch:bg-background touch:px-(--gutter) touch:py-2">
+              {(found.length > 0 || hasScope(current)) && (
+                <ScopeChips query={resultsKey} chips={chips} />
               )}
             </div>
           )}
@@ -367,41 +355,33 @@ export function SearchPanel(props: Props) {
             {asking.length > 0 &&
               ` ${asking.length === 1 ? `Still asking ${asking[0]}.` : `Still asking ${asking.length} sources.`}`}
           </p>
-          {!scoped.length &&
-            asking.length > 0 &&
-            (one ? (
-              <ul
-                aria-label="Loading search results…"
-                className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[one.shape])}
-              >
-                <MediaTilesSkeleton shape={one.shape} fluid />
-              </ul>
-            ) : (
-              <SearchSkeleton />
-            ))}
+          {!scoped.length && asking.length > 0 && <SearchSkeleton />}
+          {/* The hero's place is kept while the quick sources answer, so nothing under it moves when it comes. */}
+          {scoped.length > 0 && !top && waiting && <HeroSkeleton />}
           {top && <TopResult key={top.id} hit={top} />}
-          {grouped.map((group, index) => {
-            const shape = majorityShape(group.hits.slice(0, 12).map(shapeOf));
-            // A word every hit of a kind shares (RaiPlay's "Programme") says nothing, so it goes.
+          {shelves.map((shelf, index) => {
+            const shape = majorityShape(shelf.hits.slice(0, 12).map(shapeOf));
+            // A word every hit of a shelf shares (RaiPlay's "Programme") says nothing, so it goes.
             const showCollection = !(
-              group.hits.length > 1 &&
-              group.hits.every(
-                (hit) => hit.collection && hit.collection === group.hits[0]!.collection,
+              shelf.hits.length > 1 &&
+              shelf.hits.every(
+                (hit) => hit.collection && hit.collection === shelf.hits[0]!.collection,
               )
             );
-            // One kind fills the page as a grid, without its heading or the twelve-tile cap; Channels and lists stay a shelf under Videos.
-            if (kind === group.id)
+            // One source fills the page as a grid, without its heading or the twelve-tile cap.
+            if (filter !== "All")
               return (
                 <ul
-                  key={group.id}
-                  aria-label={group.title}
+                  key={shelf.source}
+                  aria-label={shelf.source}
                   className={cn("grid list-none gap-x-4 gap-y-6 p-0", gridColumns[shape])}
                 >
-                  {group.hits.map((hit, position) => (
+                  {shelf.hits.map((hit, position) => (
                     <li key={hit.id} className="@container min-w-0">
                       <HitTile
                         hit={hit}
                         shape={shape}
+                        showSource={false}
                         showCollection={showCollection}
                         pageFirst={!top && position === 0}
                         className={cn(
@@ -414,28 +394,36 @@ export function SearchPanel(props: Props) {
                 </ul>
               );
             return (
-              <Shelf key={group.id} title={group.title} href={heading(group)}>
-                {group.hits
-                  .slice(0, expandedGroups.includes(group.id) ? undefined : 12)
+              <Shelf
+                key={shelf.source}
+                title={shelf.source}
+                href={searchLocation({ ...searchState, source: shelf.source })}
+              >
+                {shelf.hits
+                  .slice(0, expandedSources.includes(shelf.source) ? undefined : 12)
                   .map((hit, position) => (
                     <li key={hit.id} className="shrink-0">
                       <HitTile
                         hit={hit}
                         shape={shape}
+                        showSource={false}
                         showCollection={showCollection}
                         pageFirst={!top && index === 0 && position === 0}
                       />
                     </li>
                   ))}
-                {!expandedGroups.includes(group.id) && group.hits.length > 12 && (
+                {!expandedSources.includes(shelf.source) && shelf.hits.length > 12 && (
                   <li className="shrink-0 self-center">
                     <Button
                       variant="ghost"
                       onClick={() =>
-                        setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })
+                        setExpanded({
+                          key: resultsKey,
+                          sources: [...expandedSources, shelf.source],
+                        })
                       }
                     >
-                      {group.hits.length - 12} more
+                      {shelf.hits.length - 12} more
                     </Button>
                   </li>
                 )}
@@ -480,7 +468,7 @@ export function SearchPanel(props: Props) {
                 )}
               </Empty>
             )}
-          {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
+          {/* What came back without every word of the query waits behind one line, so a stray hit never leads. */}
           {loose.length > 0 && (
             <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
               <CollapsibleTrigger asChild>
@@ -507,7 +495,7 @@ export function SearchPanel(props: Props) {
           key={`${provider}:${query}`}
           {...props}
           onResults={reportResults}
-          active={props.active && inScope(providerNames[provider])}
+          active={props.active}
           provider={provider}
           query={query}
           quality={quality}
@@ -515,18 +503,22 @@ export function SearchPanel(props: Props) {
         />
       ))}
       {!url &&
-        kind !== "audio" &&
-        radioSources.map((source) => (
-          <SearchRadioResults
-            key={`${source}:${query}`}
-            {...props}
-            onResults={reportResults}
-            active={props.active && inScope(source)}
-            query={query}
-            source={source}
-          />
-        ))}
-      {url && (
+        radioSources
+          .filter(inScope)
+          .map((source) => (
+            <SearchRadioResults
+              key={`${source}:${query}`}
+              {...props}
+              onResults={reportResults}
+              active={props.active}
+              query={query}
+              source={source}
+            />
+          ))}
+      {url && linkTarget(url)?.shape === "playlist" && (
+        <PastedList key={url} url={url} {...props} quality={quality} onDone={resetQuality} />
+      )}
+      {url && linkTarget(url)?.shape !== "playlist" && (
         <PastedLink
           key={url}
           url={url}
@@ -540,25 +532,6 @@ export function SearchPanel(props: Props) {
   );
 }
 
-const hitContext = (hit: SearchHit) =>
-  metaLine(
-    ...(collectionSubtitle(hit.meta, hit.collection, hit.source) ?? "")
-      .split(" · ")
-      .filter(
-        (part) =>
-          part !== hit.source &&
-          mediaSubtitle({ subtitle: part, creator: hit.creator, collection: hit.context }),
-      ),
-  );
-/** One meta line by the caption rules: the byline the links don't already give, what an openable hit is, then its length. */
-const hitMeta = (hit: SearchHit, showCollection = true) =>
-  metaLine(
-    hitContext(hit),
-    showCollection && hit.collection,
-    !hit.live && !hit.collection && hit.duration != null && formatDuration(hit.duration),
-  );
-
-/** Sources stay readable even when a long artist or programme name fills the context line. */
 /** Where a hit leads: its source's home, its creator, series or season, its station. */
 const hitRelated = (
   hit: SearchHit,
@@ -570,37 +543,23 @@ const hitRelated = (
   collection: onPage?.context ? undefined : hit.context,
   creator: onPage?.creator ? undefined : hit.creator,
 });
-function HitSource({ hit }: { hit: SearchHit }) {
-  return <MediaContext {...hitRelated(hit)} />;
-}
 
 /**
- * The closest match, laid out like Home's hero at a smaller size: artwork, title, one meta line and its links, then its
- * verbs. On a phone the artwork sits beside the title, so the first screen holds the shelves too.
+ * The closest match as a hero on the room: its artwork standing as an object, its title, one meta line and its links,
+ * then its main verb (focused first, on the TV too), Queue and its menu. On a phone the artwork sits beside the title, so
+ * the first screen holds the shelves too.
  */
 function TopResult({ hit }: { hit: SearchHit }) {
   const { on } = usePlayOn();
-  const label =
-    hit.primary.label === "Play" || hit.primary.label === "Resume"
-      ? on(hit.primary.label)
-      : hit.primary.label;
-  const play =
-    hit.primary.label !== "Play"
-      ? hit.actions.find((action) => action.label === "Play")
-      : undefined;
-  const queue = hit.actions.find((action) => action.label === "Queue");
-  const save = hit.actions.find((action) => action.label === "Save" || action.label === "Saved");
+  const main = hit.primary;
+  const label = main.label === "Play" || main.label === "Resume" ? on(main.label) : main.label;
+  const queue = hit.actions.find(
+    (action) => action.label === "Queue" || action.label === "Queue all",
+  );
   const rest = useItemMenu(
-    hit.actions.filter(
-      (action) =>
-        action !== play &&
-        action !== queue &&
-        action !== save &&
-        action.label !== hit.primary.label,
-    ),
+    hit.actions.filter((action) => action !== queue && action.label !== main.label),
   );
   const meta = hitMeta(hit);
-  const description = withoutUrls(hit.description);
   const level = useLevel(hitSources(hit));
   return (
     <section
@@ -609,12 +568,13 @@ function TopResult({ hit }: { hit: SearchHit }) {
       aria-label={hit.title}
       className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3"
     >
-      {/* Its shape's frame at a set height, as Details draws it. */}
+      {/* Its shape's frame at a set height, as Details draws it, standing in the room with its shadow. */}
       <div
         aria-hidden="true"
         className={cn(
-          "relative h-20 max-w-[36vw] overflow-hidden md:row-span-2 md:h-56 md:max-w-[40vw]",
+          "relative h-24 max-w-[36vw] overflow-hidden rounded-sm shadow-(--object-shadow) md:row-span-2 md:h-56 md:max-w-[40vw]",
           artAspect[shapeOf(hit)],
+          shapeOf(hit) === "round" && "rounded-full",
         )}
       >
         <MediaArtwork
@@ -627,8 +587,8 @@ function TopResult({ hit }: { hit: SearchHit }) {
       </div>
       <div className="grid min-w-0 gap-1 md:self-end">
         <h2 className="break-words text-xl leading-tight font-semibold tracking-tight md:text-4xl md:leading-[1.02] md:tracking-[-.03em]">
-          {hit.primary.href ? (
-            <ContentLink href={hit.primary.href} className="no-underline hover:underline">
+          {main.href ? (
+            <ContentLink href={main.href} className="no-underline hover:underline">
               {hit.title}
             </ContentLink>
           ) : (
@@ -636,54 +596,56 @@ function TopResult({ hit }: { hit: SearchHit }) {
           )}
         </h2>
         {meta && <p className="text-sm text-muted-foreground break-words tabular-nums">{meta}</p>}
-        <HitSource hit={hit} />
+        <MediaContext {...hitRelated(hit)} />
       </div>
-      <div className="col-span-2 grid min-w-0 gap-4 md:col-span-1 md:col-start-2">
-        <div data-nav-row className={verbRow}>
-          <Button
-            data-page-first
-            data-play
-            size="lg"
-            asChild={!!hit.primary.href && !hit.primary.disabled}
-            disabled={hit.primary.disabled}
-            onClick={(event) => {
-              if (
-                hit.primary.href &&
-                (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-              )
-                return;
-              if (hit.primary.href) event.preventDefault();
-              hit.primary.run();
-            }}
-          >
-            {hit.primary.href && !hit.primary.disabled ? (
-              <a href={detailHref(hit.primary.href)}>{label}</a>
-            ) : (
-              label
-            )}
+      <div data-nav-row className={cn("col-span-2 min-w-0 md:col-span-1 md:col-start-2", verbRow)}>
+        <Button
+          data-page-first
+          data-play
+          size="lg"
+          asChild={!!main.href && !main.disabled}
+          disabled={main.disabled}
+          onClick={(event) => {
+            if (
+              main.href &&
+              (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            )
+              return;
+            if (main.href) event.preventDefault();
+            main.run();
+          }}
+        >
+          {main.href && !main.disabled ? <a href={detailHref(main.href)}>{label}</a> : label}
+        </Button>
+        {queue && (
+          <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>
+            {queue.label}
           </Button>
-          {play && (
-            <Button variant="ghost" size="lg" disabled={play.disabled} onClick={play.run}>
-              {on("Play")}
-            </Button>
-          )}
-          {queue && (
-            <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>
-              Queue
-            </Button>
-          )}
-          {save && (
-            <SaveToggle saved={!!save.pressed} disabled={save.disabled} onClick={save.run} />
-          )}
-          <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
-        </div>
-        {description && (
-          <p className="line-clamp-3 max-w-prose break-words text-sm leading-relaxed text-muted-foreground max-md:hidden">
-            {description}
-          </p>
         )}
+        <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
     </section>
+  );
+}
+
+/** The closest match's place while it is chosen. */
+function HeroSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3"
+    >
+      <Skeleton className="size-24 rounded-none md:row-span-2 md:size-56" />
+      <div className="grid gap-2 md:self-end">
+        <Skeleton className="h-7 w-3/5 max-w-96 md:h-8" />
+        <Skeleton className="h-4 w-2/5 max-w-64" />
+      </div>
+      <div className="col-span-2 flex flex-wrap gap-2 md:col-span-1 md:col-start-2">
+        <Skeleton className="h-11 w-28 max-md:w-full" />
+        <Skeleton className="h-11 w-20" />
+        <Skeleton className="size-10" />
+      </div>
+    </div>
   );
 }
 
@@ -696,21 +658,7 @@ function SearchSkeleton() {
       data-loading="search"
       className="space-y-8"
     >
-      <div
-        aria-hidden="true"
-        className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 md:grid-rows-[1fr_auto] md:gap-x-8 md:gap-y-3"
-      >
-        <Skeleton className="size-20 rounded-none md:row-span-2 md:size-56" />
-        <div className="grid gap-2 md:self-end">
-          <Skeleton className="h-7 w-3/5 max-w-96 md:h-8" />
-          <Skeleton className="h-4 w-2/5 max-w-64" />
-        </div>
-        <div className="col-span-2 flex flex-wrap gap-2 md:col-span-1 md:col-start-2">
-          <Skeleton className="h-11 w-28 max-md:w-full" />
-          <Skeleton className="h-11 w-20" />
-          <Skeleton className="size-10" />
-        </div>
-      </div>
+      <HeroSkeleton />
       <div aria-hidden="true" className="grid gap-3">
         <div className="flex min-h-11 items-center">
           <Skeleton className="h-6 w-40" />
@@ -723,20 +671,20 @@ function SearchSkeleton() {
   );
 }
 
-/** A hit's addresses, for the level while it plays: its page, or its station (by its source or its stream). */
-const hitSources = (hit: SearchHit) => [hit.url, ...(hit.radio ? stationSources(hit.radio) : [])];
-
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
 export function HitTile({
   hit,
   shape,
   showCollection = true,
+  showSource = true,
   pageFirst,
   className,
 }: {
   hit: SearchHit;
   shape: ArtShape;
   showCollection?: boolean;
+  /** A source's own shelf doesn't repeat its name. */
+  showSource?: boolean;
   pageFirst: boolean;
   className?: string;
 }) {
@@ -755,7 +703,7 @@ export function HitTile({
       shape={shape}
       own={shapeOf(hit)}
       title={hit.title}
-      meta={metaLine(hitMeta(hit, showCollection), hit.source)}
+      meta={metaLine(hitMeta(hit, showCollection), showSource && hit.source)}
       thumbnail={hit.thumbnail}
       source={hitSources(hit)}
       aria-label={`${primary.label} ${hit.title}`}
@@ -927,9 +875,6 @@ function MoreResults({ summaries }: { summaries: Entry[] }) {
   ) : null;
 }
 
-const names = (sources: string[]) =>
-  sources.length > 1 ? `${sources.slice(0, -1).join(", ")} and ${sources.at(-1)}` : sources[0];
-
 /** A page whose one source failed: one Alert with its reason and Try again; then source notes. */
 export function SourceProblems({ summaries }: { summaries: Entry[] }) {
   const failed = summaries.filter(([, summary]) => summary.error);
@@ -1013,20 +958,43 @@ export function SourcesUnanswered({ summaries }: { summaries: Entry[] }) {
   );
 }
 
-function PastedLink({
+/**
+ * A pasted list (a set, an album, a show, a station's style page) as its own page on the room: its title set large, what
+ * it holds, then Play all (focused first), Queue all, Play next and Open; then its items, a shelf per show when a radio
+ * list gathers several, else as rows.
+ */
+function PastedList({
   url,
   quality,
-  onQualityChange,
   onDone,
   ...props
-}: Props & {
-  url: string;
-  quality: VideoQuality;
-  onQualityChange: (quality: VideoQuality) => void;
-  onDone: () => void;
-}) {
-  const [mode, setMode] = useState<"Webpage" | "Direct media">("Webpage");
+}: Props & { url: string; quality: VideoQuality; onDone: () => void }) {
+  const target = linkTarget(url)!;
+  const credentials = props.origin && props.token ? props : null;
+  const list = usePastedList(credentials, url, target);
+  const [summary, setSummary] = useState<SearchResultSummary>();
+  const onResults = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
   const [pending, setPending] = useState(false);
+  const navigation = useDetailNavigation();
+  const { on } = usePlayOn();
+  const page = summary?.page;
+  const hits = (summary?.hits ?? []).map(pressPlays);
+  const [lit, setLit] = useState<string | null>(null);
+  const title = list.title ?? page?.title ?? new URL(url).hostname;
+  // A radio list of several shows (a station's style page) shelves each show's episodes.
+  const shows =
+    target.provider === "archives"
+      ? [...new Set(hits.map((hit) => hit.creator?.url))].map((show) => ({
+          show: hits.find((hit) => hit.creator?.url === show)?.creator,
+          hits: hits.filter((hit) => hit.creator?.url === show),
+        }))
+      : [];
+  const meta = metaLine(
+    page?.subtitle,
+    list.count !== undefined && listUnit(target.provider, list.count),
+  );
+  const listCommand = useListCommand(props.onCommand);
+  // A command sent to another Core, or before a reconnect, no longer changes this one's controls (as PastedLink).
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -1034,96 +1002,99 @@ function PastedLink({
     setPending(false);
     return () => controller.abort();
   }, [props.origin, props.token, props.connected]);
-  const { hostname, pathname } = new URL(url);
-  const { on } = usePlayOn();
-  async function send(playNow: boolean, on?: PlayOn) {
+  async function send(verb: LinkVerb) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
-    // The command reports its own failure on the page.
     try {
-      if (
-        (await props.onCommand(
-          mode === "Direct media"
-            ? {
-                type: "enqueue",
-                entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url },
-                playNow,
-                ...on,
-              }
-            : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, ...on },
-        )) &&
-        !signal.aborted
-      )
-        onDone();
+      const ok = await listCommand(linkAction(url, target, verb, quality, list), list, title);
+      if (ok && !signal.aborted) onDone();
     } finally {
       if (!signal.aborted) setPending(false);
     }
   }
-  const navigation = useDetailNavigation();
-  const provider = providerForUrl(url);
-  const disabled = !props.connected || pending;
+  const disabled = !props.connected || pending || !props.onCommand;
+  const limit = listLimit(list.count);
+  const root = useRef<HTMLElement>(null);
+  useFirstVerb(root, !disabled && props.canPlay, url);
   return (
-    <section className="max-w-3xl space-y-4" aria-label="Pasted link">
-      <SettingsSection>
-        <SettingsRow label="Open as">
-          <ChoiceGroup
-            label="Open link as"
-            value={mode}
-            onValueChange={setMode}
-            disabled={disabled}
-            options={[
-              { value: "Webpage", label: "Webpage" },
-              { value: "Direct media", label: "Direct media" },
-            ]}
-          />
-        </SettingsRow>
-        {mode === "Webpage" && supportsWebVideoQuality(url) && (
-          <SettingsRow label="Quality">
-            <ChoiceGroup
-              label="Video quality"
-              value={quality}
-              onValueChange={onQualityChange}
-              disabled={disabled}
-              options={videoQualityOptions}
-            />
-          </SettingsRow>
-        )}
-      </SettingsSection>
-      <div className="flex flex-wrap gap-2">
-        {/* Keep playback available for provider links outside the catalog, such as Twitch VODs. */}
-        {provider && (
+    <section
+      ref={root}
+      aria-label={title}
+      className="space-y-8"
+      onFocusCapture={(event) => {
+        const id = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset
+          .hitId;
+        if (id) setLit(id);
+      }}
+    >
+      <SearchRoom
+        thumbnail={
+          hits.find((hit) => hit.id === lit)?.thumbnail ?? page?.thumbnail ?? hits[0]?.thumbnail
+        }
+      />
+      <div className="grid gap-4">
+        <SearchTitle title={title} />
+        {meta && <p className="text-meta text-muted-foreground tabular-nums">{meta}</p>}
+        <div data-nav-row className={verbRow}>
           <Button
-            variant="outline"
-            onClick={() => navigation.open(collectionLocation({ provider, url }))}
+            data-page-first
+            size="lg"
+            disabled={disabled || !props.canPlay}
+            onClick={() => void send("play")}
           >
-            Open page
+            {on(listLabel("Play all", list.count))}
           </Button>
-        )}
-        <Button
-          disabled={disabled || !props.canPlay || !props.onCommand}
-          onClick={() => void send(true)}
-        >
-          {on("Play")}
-        </Button>
-        <PlayOnMenu
-          title={hostname + pathname}
-          disabled={disabled || !props.canPlay || !props.onCommand}
-          onPlay={(on) => void send(true, on)}
-        />
-        <Button
-          variant="ghost"
-          disabled={disabled || !props.onCommand}
-          onClick={() => void send(false)}
-        >
-          Queue
-        </Button>
-        {/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && (
-          <Button variant="ghost" onClick={() => props.onManageSources?.("streaming-community")}>
-            StreamingCommunity settings
+          <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("queue")}>
+            Queue all
           </Button>
+          <Button variant="ghost" size="lg" disabled={disabled} onClick={() => void send("next")}>
+            Play next
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
+          >
+            Open
+          </Button>
+        </div>
+        {limit && (
+          <p className="text-meta text-muted-foreground">
+            Up next holds 500: Play all keeps the {limit}.
+          </p>
         )}
       </div>
+      {summary?.loading && <SearchSkeleton />}
+      {shows.length > 1
+        ? shows.map(({ show, hits: episodes }) => {
+            const shape = majorityShape(episodes.slice(0, 12).map(shapeOf));
+            return (
+              <Shelf
+                key={show?.url ?? ""}
+                title={show?.title ?? title}
+                href={show && collectionLocation({ provider: target.provider, url: show.url })}
+              >
+                {episodes.map((hit) => (
+                  <li key={hit.id} className="shrink-0">
+                    <HitTile hit={hit} shape={shape} showSource={false} pageFirst={false} />
+                  </li>
+                ))}
+              </Shelf>
+            );
+          })
+        : hits.length > 0 && <HitList hits={hits} label={title} compact showSource={false} />}
+      <SourcesUnanswered summaries={summary ? [[providerNames[target.provider], summary]] : []} />
+      <SearchOnlineResults
+        {...props}
+        onResults={onResults}
+        provider={target.provider}
+        query=""
+        url={url}
+        paged
+        quality={quality}
+        onEnqueued={onDone}
+      />
     </section>
   );
 }

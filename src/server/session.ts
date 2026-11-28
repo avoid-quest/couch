@@ -107,7 +107,7 @@ export function createSession(
   const removedEntries = new Map<
     string,
     {
-      entry: QueueEntry;
+      entries: QueueEntry[];
       index: number;
       queueIds: string[];
       currentEntryId: string | null;
@@ -124,6 +124,9 @@ export function createSession(
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
+  // A Play still loading its list holds a reservation that Stop, Next, another Play or a profile reset ends; Autoplay
+  // keeps it.
+  let reservation = 0;
   let expiry: MediaSource["expiry"];
   // Subtitle files added while this item plays; they move with it.
   let addedSubtitles: ExternalSubtitle[] = [];
@@ -149,6 +152,8 @@ export function createSession(
   let quiescing = false;
   let continuation = store.playbackContinuation();
   let continuationResolution: AbortController | null = null;
+  // The later part of a list read in parts, while it loads (extendContinuation).
+  let listPart: AbortController | null = null;
   let continuationManualSources: string[] = [];
   let awaitingContinuation: "ended" | { authorize: () => void; playedBy?: PlaybackActor } | false =
     false;
@@ -337,9 +342,29 @@ export function createSession(
   };
   const remainingContinuation = () =>
     continuation ? { ...continuation, entries: continuation.entries.slice(1) } : null;
+  // Once the list's loaded entries have all played, it still ends at `lastEntryId` until its part comes, though a
+  // queued item may play meanwhile; Stop and a replacing Play cancel the part instead.
+  const extendWith = (lastEntryId: string, entries: QueueEntry[]) => {
+    if (!continuation) return false;
+    if ((continuation.entries.at(-1)?.id ?? lastEntryId) !== lastEntryId) return false;
+    const extended = { ...continuation, entries: [...continuation.entries, ...entries] };
+    try {
+      store.savePlaybackContinuation(extended);
+    } catch {
+      state.queueError = STORAGE_ERROR("Autoplay");
+      return false;
+    }
+    continuation = extended;
+    return true;
+  };
   const afterManualEntry = (entry: QueueEntry) =>
     continuation?.entries[0]?.source === entry.source ? remainingContinuation() : continuation;
-  const cancelContinuation = () => {
+  // Where Autoplay ends: its last entry, else the entry playing.
+  const listEnd = (list: PlaybackContinuation | null, current: string | null) =>
+    list ? (list.entries.at(-1)?.id ?? current) : undefined;
+  // `keepPart`: a list part still loading carries on, since Autoplay still ends where it did.
+  const cancelContinuation = (keepPart = false) => {
+    if (keepPart && continuationResolution && continuationResolution === listPart) return;
     continuationResolution?.abort();
     continuationResolution = null;
     continuationManualSources = [];
@@ -679,7 +704,7 @@ export function createSession(
     return true;
   };
   const assertCurrentPlay = (intent: number) => {
-    if (intent !== playIntent) throw new Error(PLAY_CANCELED);
+    if (intent !== reservation) throw new Error(PLAY_CANCELED);
   };
   const play = (
     entryId: string,
@@ -698,6 +723,7 @@ export function createSession(
     const entry = proposedQueue.find((entry) => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
     options.prepareAudio?.(entry);
+    const endedAt = listEnd(continuation, state.currentEntryId);
     const index = proposedQueue.indexOf(entry);
     const cursor = proposedQueue.findIndex(
       (item) => item.id === (state.currentEntryId ?? state.queueCursorEntryId),
@@ -732,9 +758,11 @@ export function createSession(
     );
     awaitingContinuation = false;
     if (preserveContext && continuationResolution) continuationManualSources.push(entry.source);
-    if (!preserveContext) cancelContinuation();
+    if (!preserveContext)
+      cancelContinuation(endedAt !== undefined && listEnd(continuation, entry.id) === endedAt);
     if (reason === "retry") state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
+    if (reason === "play" || reason === "undoStop") reservation++;
     activePlayIntent = ++playIntent;
     webRecovery = null;
     state.webRetry = null;
@@ -1003,6 +1031,7 @@ export function createSession(
     pendingPause = null;
     audioInterrupted = false;
     playIntent++;
+    reservation++;
     cancelRadioRetry();
     finishProgress(true);
     resolution?.abort();
@@ -1063,6 +1092,7 @@ export function createSession(
     return true;
   };
   const next = (authorize = () => {}, playedBy?: PlaybackActor) => {
+    reservation++;
     if (!advanceNext(authorize, playedBy)) {
       if (continuationResolution && state.preferences?.profile.autoplay !== false)
         awaitingContinuation = { authorize, playedBy };
@@ -1272,6 +1302,7 @@ export function createSession(
       state.preferences = preferences;
       if (reset) {
         playIntent++;
+        reservation++;
         cancelContinuation();
         continuation = null;
         state.progressError = null;
@@ -1335,7 +1366,7 @@ export function createSession(
     endSource(sourceId: string) {
       let changed = false;
       for (const [token, removed] of removedEntries)
-        if (removed.entry.liveSourceId === sourceId) {
+        if (removed.entries.some((entry) => entry.liveSourceId === sourceId)) {
           clearTimeout(removed.timer);
           removedEntries.delete(token);
           if (state.queueRemoval?.token === token) {
@@ -1451,6 +1482,36 @@ export function createSession(
       send({ type: "addSubtitle", playbackId, ...subtitle });
     },
     playNewEntries,
+    // A list read in parts adds its later part to the Autoplay its first part started, while that Autoplay still
+    // ends where the first part did (`lastEntryId`). Until the part comes, Autoplay waits for it at its end, as it
+    // waits for any continuation still resolving; Stop, another Play or a failed part ends the wait.
+    async extendContinuation(lastEntryId: string, later: Promise<QueueEntry[]>) {
+      continuationResolution?.abort();
+      const controller = new AbortController();
+      continuationResolution = controller;
+      listPart = controller;
+      continuationManualSources = [];
+      broadcast();
+      const entries = await later.catch(() => []);
+      if (listPart === controller) listPart = null;
+      if (continuationResolution !== controller) return false;
+      continuationResolution = null;
+      const advance = awaitingContinuation;
+      awaitingContinuation = false;
+      const extended = admitted() && extendWith(lastEntryId, entries);
+      broadcast();
+      if (!admitted()) return false;
+      if (advance === "ended" && state.player.status === "ended") advanceNext();
+      else if (
+        advance &&
+        typeof advance === "object" &&
+        !["error", "unavailable"].includes(state.player.status)
+      ) {
+        advance.authorize();
+        if (!advanceNext(advance.authorize, advance.playedBy)) stop();
+      }
+      return extended;
+    },
     reservePlay() {
       available();
       qualityResolution?.abort();
@@ -1459,7 +1520,8 @@ export function createSession(
         broadcast();
       }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
-      return ++playIntent;
+      playIntent++;
+      return ++reservation;
     },
     playIfCurrent(
       intent: number,
@@ -1545,7 +1607,7 @@ export function createSession(
           const timer = setTimeout(() => removedEntries.delete(token), 6_000);
           timer.unref?.();
           removedEntries.set(token, {
-            entry,
+            entries: [entry],
             index,
             queueIds: state.queue.map((entry) => entry.id),
             currentEntryId: state.currentEntryId === action.entryId ? null : state.currentEntryId,
@@ -1557,6 +1619,26 @@ export function createSession(
           else broadcast();
           break;
         }
+        case "clearUpNext": {
+          const index = queueCursorIndex(state) + 1;
+          const entries = state.queue.slice(index);
+          if (!entries.length) break;
+          saveQueue(state.queue.slice(0, index));
+          const token = crypto.randomUUID();
+          const timer = setTimeout(() => removedEntries.delete(token), 6_000);
+          timer.unref?.();
+          removedEntries.set(token, {
+            entries,
+            index,
+            queueIds: state.queue.map((entry) => entry.id),
+            currentEntryId: state.currentEntryId,
+            expiresAt: Date.now() + 6_000,
+            timer,
+          });
+          state.queueRemoval = { entryId: entries[0]!.id, token };
+          broadcast();
+          break;
+        }
         case "restoreRemoved": {
           const removed = removedEntries.get(action.token);
           if (!removed || Date.now() >= removed.expiresAt)
@@ -1565,11 +1647,11 @@ export function createSession(
             state.currentEntryId !== removed.currentEntryId ||
             state.queue.length !== removed.queueIds.length ||
             state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) ||
-            state.queue.length >= 500
+            state.queue.length + removed.entries.length > 500
           )
             throw new Error("Up next or playback changed. Try again.");
           const queue = [...state.queue];
-          queue.splice(removed.index, 0, removed.entry);
+          queue.splice(removed.index, 0, ...removed.entries);
           saveQueue(queue);
           clearTimeout(removed.timer);
           removedEntries.delete(action.token);

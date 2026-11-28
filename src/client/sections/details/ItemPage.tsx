@@ -4,6 +4,8 @@ import { metaLine } from "@/media-caption";
 import { DetailSkeleton } from "@/components/LoadingMedia";
 import { radioSearchQuery, radioFavoritesListQuery } from "@/api/radio";
 import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
+import { SearchNames } from "@/components/SearchNames";
+import { searchLocation } from "@/search";
 import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
 import { useRouter } from "@tanstack/react-router";
@@ -32,8 +34,7 @@ import {
   isRadio,
   radioNow,
   radioNext,
-  radioHost,
-  radioShowLabels,
+  radioShowNames,
   type RadioStation,
 } from "../../../shared/radio";
 import type { PlaybackCollection, PlayOn } from "../../../shared/protocol";
@@ -549,20 +550,19 @@ function RadioDetails({ item }: { item: RadioStation }) {
   const guide = programmes.data?.[item.id];
   const programme = connected ? radioNow(guide, item.id, now) : null;
   const next = connected ? radioNext(guide, now) : undefined;
-  // The show leads with its categories and host, then the station with its tags; without a show the station is the title.
-  const show =
-    programme &&
-    metaLine(
-      ...radioShowLabels(programme),
-      radioHost(programme),
-      programme.album,
-      !!programme.bitrate && `${programme.bitrate} kbps`,
-    );
+  // The show leads with its categories and host, each searching everything for it, then the station with its tags;
+  // without a show the station is the title.
+  const names = radioShowNames(programme);
+  const details =
+    programme && metaLine(programme.album, !!programme.bitrate && `${programme.bitrate} kbps`);
   return (
     <>
       <DetailLayout
         radio
         title={programme?.title || item.name}
+        titleHref={
+          programme?.title ? searchLocation({ query: programme.title, source: "All" }) : undefined
+        }
         thumbnail={programme?.artworkUrl ?? item.logoUrl}
         shape="square"
         fit={programme?.artworkUrl ? undefined : "contain"}
@@ -574,7 +574,13 @@ function RadioDetails({ item }: { item: RadioStation }) {
         context={
           programme && (
             <span className="grid gap-caption">
-              {show && <span>{show}</span>}
+              {(names.length > 0 || details) && (
+                <span>
+                  <SearchNames names={names} />
+                  {names.length > 0 && details && ", "}
+                  {details}
+                </span>
+              )}
               <span>{metaLine(item.name, ...(item.tags ?? []))}</span>
             </span>
           )

@@ -148,7 +148,8 @@ function card(raw: Record<string, unknown>): ProviderItem | undefined {
       raw["transparent-icon"],
   );
   const description = text(raw.description || raw.sommario, 2000);
-  const subtitle = text(raw.subtitle || raw.programma || raw.timePublished);
+  // A hero's label says what it is ("La serie completa").
+  const subtitle = text(raw.subtitle || raw.programma || raw.timePublished || raw.label);
   const seconds = duration(raw.duration || raw.durata);
   return {
     id: providerItemId("raiplay", url.href),
@@ -175,6 +176,20 @@ function cards(rows: Record<string, unknown>[]): ProviderItem[] {
     ).values(),
   ];
 }
+
+// A page's blocks: its lists (sliders of things), its lead (the hero) and its own navigation (Generi: sections, genres).
+const listed = (row: Record<string, unknown>) =>
+  /^PublishingBlock-[a-f0-9-]+$/i.test(text(row.id)) && Array.isArray(row.contents);
+const isShelf = (row: Record<string, unknown>) =>
+  listed(row) && /Slider/.test(text(row.type)) && !/Generi/.test(text(row.type));
+const isHero = (row: Record<string, unknown>) => listed(row) && /Hero/.test(text(row.type));
+const isNavigation = (row: Record<string, unknown>) => /Generi/.test(text(row.type));
+const isLive = (row: Record<string, unknown>) => /Dirette/.test(text(row.type));
+// RaiPlay's "In Diretta" is the one list Couch names in its own words: what is on now.
+const blockName = (row: Record<string, unknown>, fallback: string) =>
+  isLive(row) ? "On now" : isHero(row) ? "In evidenza" : text(row.name).trim() || fallback;
+// A section's first lists, which its door names: read with the front page, kept a quarter of an hour.
+const sectionLists = new Map<string, { names: string[]; expires: number }>();
 
 function page(items: ProviderItem[], offset: number, title: string, size = pageSize): ProviderPage {
   return {
@@ -328,7 +343,7 @@ async function readRaiPlay(
     return page(
       cards(array(data.dirette)).filter((item) => item.live),
       offset,
-      "Dirette RaiPlay",
+      "On now",
     );
   }
 
@@ -351,15 +366,20 @@ async function readRaiPlay(
   const title = text(data.name || data.title || object(data.program_info).name) || "RaiPlay";
   const info = object(data.program_info);
   const metadata = card({ ...data, ...info, name: title, weblink: url.href });
-  const catalogPage = (items: ProviderItem[], title: string): ProviderPage => {
-    const parent = blockId
+  const catalogPage = (
+    items: ProviderItem[],
+    title: string,
+    block = blockId,
+    length = size,
+  ): ProviderPage => {
+    const parent = block
       ? { title: metadata?.title || title, url: url.href }
       : /\/ContentSet-/.test(url.pathname)
         ? items.find((item) => item.collection)?.collection
         : undefined;
     const container = {
       title,
-      url: blockId ? `${url.href}#block=${blockId}` : url.href,
+      url: block ? `${url.href}#block=${block}` : url.href,
       ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
     };
     const programme = /^\/(?:programmi|collezioni)\//.test(url.pathname);
@@ -372,7 +392,7 @@ async function readRaiPlay(
         ),
         offset,
         title,
-        size,
+        length,
       ),
       ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
       ...(metadata?.thumbnail || items[0]?.thumbnail
@@ -382,16 +402,22 @@ async function readRaiPlay(
     };
   };
   if (Array.isArray(data.items)) return catalogPage(cards(array(data.items)), title);
+  // An A to Z comes whole, with its letters, so a letter is a jump within it and an empty one keeps its place.
   if (data.contents && typeof data.contents === "object" && !Array.isArray(data.contents)) {
-    const letters = object(data.contents);
-    return catalogPage(
-      cards(
-        Object.keys(letters)
-          .sort()
-          .flatMap((letter) => array(letters[letter])),
-      ),
-      title,
-    );
+    const groups = object(data.contents);
+    const seen = new Set<string>();
+    const items: ProviderItem[] = [];
+    const letters = Object.keys(groups)
+      .sort()
+      .slice(0, 40)
+      .map((letter) => {
+        const fresh = cards(array(groups[letter])).filter(
+          (item) => !seen.has(item.url) && !!seen.add(item.url),
+        );
+        items.push(...fresh);
+        return { letter: text(letter, 8), count: fresh.length };
+      });
+    return { ...catalogPage(items, title, undefined, Math.max(1, items.length)), letters };
   }
   if (Array.isArray(data.blocks)) {
     const info = object(data.program_info);
@@ -419,7 +445,7 @@ async function readRaiPlay(
     if (blockId) {
       const block = contents.find((row) => row.id === blockId);
       if (!block) throw new ProviderError("This RaiPlay collection is no longer available.", 404);
-      return catalogPage(cards(array(block.contents)), text(block.name) || title);
+      return catalogPage(cards(array(block.contents)), blockName(block, title));
     }
     const items = contents.flatMap((row) => {
       if (Array.isArray(row.contents)) {
@@ -427,7 +453,7 @@ async function readRaiPlay(
         if (!children.length || !/^PublishingBlock-[a-f0-9-]+$/i.test(text(row.id))) return [];
         return [
           collection(
-            text(row.type).includes("Hero") ? "In evidenza" : text(row.name) || title,
+            blockName(row, title),
             `${url.href}#block=${text(row.id)}`,
             children[0]?.thumbnail,
           ),
@@ -436,10 +462,83 @@ async function readRaiPlay(
       const item = card(row);
       return item ? [item] : [];
     });
-    return catalogPage(items, title);
+    // The front page and each section are rooms: their navigation, their hero and their lists, each list as its own
+    // address answers it.
+    if (offset || !(home || url.pathname.startsWith("/tipologia/")))
+      return catalogPage(items, title);
+    const list = (row: Record<string, unknown>) =>
+      withProviderItem(
+        "raiplay",
+        `${url.href}#block=${text(row.id)}`,
+        "collection",
+        catalogPage(cards(array(row.contents)), blockName(row, title), text(row.id), pageSize),
+      );
+    const hero = contents.find(isHero);
+    const live = contents.find((row) => isLive(row) && listed(row));
+    const shelves = contents.filter(isShelf).map(list);
+    const doors = await raiPlayDoors(
+      array(contents.find(isNavigation)?.contents),
+      live && array(live.contents).length,
+      json,
+    );
+    return {
+      ...catalogPage(items, title),
+      room: {
+        doors,
+        ...(hero ? { lead: list(hero) } : {}),
+        shelves: shelves.filter((shelf) => shelf.items.length),
+      },
+    };
   }
   if (data.video) return catalogPage(cards([{ ...data, path_id: url.href }]), title);
   throw new ProviderError("RaiPlay returned an unsupported catalog response.");
+}
+
+/**
+ * A room's doors: On now (when the page lists what is on), then the page's own navigation, each saying what is behind it.
+ * A section names its first three lists; a genre is an A to Z.
+ */
+async function raiPlayDoors(
+  rows: Record<string, unknown>[],
+  channels: number | undefined,
+  json: (url: string) => Promise<unknown>,
+): Promise<ProviderItem[]> {
+  const doors = rows.flatMap((row) => {
+    // A section's own link (/film) isn't a catalogue address; its index is.
+    const section = text(row.path_id, 2048).match(
+      /^(\/tipologia\/[a-z0-9_%.-]+)\/index\.json$/i,
+    )?.[1];
+    const item = card({ ...row, ...(section ? { weblink: section } : {}) });
+    return item && item.kind === "collection" ? [{ ...item, description: undefined }] : [];
+  });
+  const named = await Promise.all(
+    doors.map(async (door) => {
+      if (!new URL(door.url).pathname.startsWith("/tipologia/"))
+        return { ...door, subtitle: "A to Z" };
+      const kept = sectionLists.get(door.url);
+      if (kept && kept.expires > Date.now()) return { ...door, subtitle: kept.names.join(", ") };
+      try {
+        const names = array(object(await json(`${door.url}/index.json`)).contents)
+          .filter((row) => isShelf(row) && array(row.contents).length)
+          .slice(0, 3)
+          .map((row) => blockName(row, door.title));
+        if (sectionLists.size > 100) sectionLists.clear();
+        sectionLists.set(door.url, { names, expires: Date.now() + 15 * 60_000 });
+        return { ...door, subtitle: names.join(", ") };
+      } catch {
+        return door;
+      }
+    }),
+  );
+  return channels
+    ? [
+        {
+          ...collection("On now", `${origin}/dirette`),
+          subtitle: `${channels} channels, live`,
+        },
+        ...named,
+      ]
+    : named;
 }
 
 export async function browseRaiPlay(

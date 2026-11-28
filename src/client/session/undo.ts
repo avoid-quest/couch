@@ -16,7 +16,7 @@ export type UndoPlan =
       expectedCurrent: string | null;
       expectedQueueIds: string[];
       resume: Resume;
-      removed: { entryId: string; token: string; beforeEntryId: string | null };
+      removed: { entryIds: string[]; token: string; beforeEntryId: string | null };
     };
 
 function resume(state: SessionState): Resume {
@@ -77,10 +77,23 @@ export function undoPlan(
       expectedQueueIds: after.queue.map((entry) => entry.id),
       resume: before.currentEntryId === action.entryId ? resume(before) : null,
       removed: {
-        entryId: action.entryId,
+        entryIds: [action.entryId],
         token: after.queueRemoval.token,
         beforeEntryId: before.queue[index + 1]?.id ?? null,
       },
+    };
+  }
+  if (action.type === "clearUpNext") {
+    const kept = new Set(after.queue.map((entry) => entry.id));
+    const cleared = before.queue.filter((entry) => !kept.has(entry.id)).map((entry) => entry.id);
+    if (!cleared.length || !after.queueRemoval || after.queueRemoval.entryId !== cleared[0])
+      return null;
+    return {
+      text: "Cleared Up next.",
+      expectedCurrent: before.currentEntryId,
+      expectedQueueIds: after.queue.map((entry) => entry.id),
+      resume: null,
+      removed: { entryIds: cleared, token: after.queueRemoval.token, beforeEntryId: null },
     };
   }
   return null;
@@ -146,13 +159,13 @@ export async function applyUndo(
   )
     throw changed();
   const prior = ids(state);
-  if (prior.includes(plan.removed.entryId)) throw changed();
+  if (plan.removed.entryIds.some((id) => prior.includes(id))) throw changed();
   const restored = [...prior];
   const before = plan.removed.beforeEntryId
     ? restored.indexOf(plan.removed.beforeEntryId)
     : restored.length;
   if (before < 0) throw changed();
-  restored.splice(before, 0, plan.removed.entryId);
+  restored.splice(before, 0, ...plan.removed.entryIds);
   assertCurrent(current, state);
   await command({ type: "restoreRemoved", token: plan.removed.token });
   state = await observe(current, prior, state.currentEntryId, restored, state.currentEntryId);

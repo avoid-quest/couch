@@ -23,7 +23,7 @@ export function Shelf({
   label?: string;
   href?: string;
   loading?: boolean;
-  /** A quiet line after the heading: what the section follows. */
+  /** A quiet word after the heading: what the section follows, where the list comes from, or its order ("On now first"). */
   note?: ReactNode;
   /** The section's own "…", at the end of its heading's line. */
   options?: ReactNode;
@@ -64,7 +64,11 @@ export function Shelf({
       <div className="flex items-center gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3">
           <ShelfHeading title={title} href={href} loading={loading} />
-          {note}
+          {typeof note === "string" ? (
+            <span className="text-meta text-muted-foreground">{note}</span>
+          ) : (
+            note
+          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {(edges.previous || edges.next) && (

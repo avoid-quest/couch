@@ -257,10 +257,10 @@ function useShellValue() {
     if (section === "Now") void router.navigate({ href: lastBrowsePath.current }).then(focus);
     else focus();
   };
-  // A source without a home scopes the header's field to itself, so there is one search field, not two.
+  // A source without a home scopes the header's field to itself (a kind, to its sources), so there is one search field.
   const [searchScope, setSearchScope] = useState<SearchScope | null>(null);
-  const scopeSearch = (source: string) => {
-    setSearchScope({ source });
+  const scopeSearch = (scope: string | SearchScope) => {
+    setSearchScope(typeof scope === "string" ? { source: scope } : scope);
     focusSearch();
   };
   const leavePlayer = () => {

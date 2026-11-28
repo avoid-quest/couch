@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "key": "/lylradio/playlists/meakusma-festival-2022/",
+      "url": "https://www.mixcloud.com/lylradio/playlists/meakusma-festival-2022/",
+      "name": "Meakusma Festival 2022",
+      "slug": "meakusma-festival-2022",
+      "owner": {
+        "url": "https://www.mixcloud.com/lylradio/",
+        "name": "LYL Radio",
+        "username": "lylradio",
+        "pictures": {
+          "320wx320h": "https://thumbnailer.mixcloud.com/unsafe/320x320/profile/5/0/9/1/6131-21c7-44db-8d9e-2bd73a9ad8d2"
+        }
+      }
+    },
+    {
+      "key": "/lylradio/playlists/khenjar-with-marwa/",
+      "url": "https://www.mixcloud.com/lylradio/playlists/khenjar-with-marwa/",
+      "name": "Khenjar with Marwa",
+      "slug": "khenjar-with-marwa",
+      "owner": {
+        "url": "https://www.mixcloud.com/lylradio/",
+        "name": "LYL Radio",
+        "username": "lylradio",
+        "pictures": {
+          "320wx320h": "https://thumbnailer.mixcloud.com/unsafe/320x320/profile/5/0/9/1/6131-21c7-44db-8d9e-2bd73a9ad8d2"
+        }
+      }
+    }
+  ],
+  "paging": {
+    "next": "https://api.mixcloud.com/lylradio/playlists/?limit=2&until=2021-03-24+11%3A39%3A39",
+    "previous": "https://api.mixcloud.com/lylradio/playlists/?limit=2&since=2022-11-03+13%3A05%3A58"
+  }
+}

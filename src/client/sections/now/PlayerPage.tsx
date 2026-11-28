@@ -4,6 +4,8 @@ import { usePictureMapping } from "@/session/picture-mapping";
 import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import { ContentLink } from "@/components/ContentLink";
+import { SearchNames } from "@/components/SearchNames";
+import { searchLocation } from "@/search";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import {
   useCallback,
@@ -72,13 +74,7 @@ import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSc
 import { RadioRecognition } from "@/components/RadioRecognition";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioStationQuery } from "@/api/radio";
 import { useQuery } from "@tanstack/react-query";
-import {
-  isRadio,
-  radioHost,
-  radioShowLabels,
-  radioNext,
-  type RadioGuide,
-} from "../../../shared/radio";
+import { isRadio, radioShowNames, radioNext, type RadioGuide } from "../../../shared/radio";
 import { useRadioClock } from "@/radio-clock";
 import { useStationShow } from "@/sections/home/on-air";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
@@ -647,13 +643,13 @@ export function PlayerPage({
   // channel), else the source (a station's is its stream host). A subtitle the relationship links already name isn't
   // said twice.
   // A station's tags follow its link under the show, or stand in for the byline while the station is the title.
+  // A show's names search everything for them.
   const stationTags = radio ? (stationDetails.data?.tags ?? []) : [];
+  const showNames = radioShowNames(currentProgramme);
   const byline = !current
     ? ""
     : currentProgramme
-      ? [...radioShowLabels(currentProgramme), radioHost(currentProgramme)]
-          .filter(Boolean)
-          .join(", ")
+      ? showNames.length > 0 && <SearchNames names={showNames} />
       : stationTags.length
         ? stationTags.join(", ")
         : current.subtitle && !mediaSubtitle(current)
@@ -694,8 +690,12 @@ export function PlayerPage({
       className="[&_[data-slot=breadcrumb-list]]:text-base"
     />
   );
-  const linkedTitle = detailHref ? (
-    <ContentLink href={detailHref} className="no-underline hover:underline">
+  // A show's title searches for the show; its station's link is under it.
+  const titleHref = currentProgramme?.title
+    ? searchLocation({ query: currentProgramme.title, source: "All" })
+    : detailHref;
+  const linkedTitle = titleHref ? (
+    <ContentLink href={titleHref} className="no-underline hover:underline">
       {title}
     </ContentLink>
   ) : (

@@ -1,0 +1,16 @@
+{
+  "_id": "6b08ea0e6dcab8295fe2f572",
+  "title": "Gussief1",
+  "slug": "gussief1-11-25-2026",
+  "airdate": "2026-11-25T00:00:00.000Z",
+  "resident": {
+    "name": "Gussief1",
+    "slug": "gussief1"
+  },
+  "mixFile": null,
+  "mixcloud": "https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&mini=1&feed=/HKCR/gussief1-25112026/",
+  "youtube": null,
+  "thumbnail": {
+    "url": "https://cdn.hkcr.live/images/shows/thumbnails/gussief1/5361-1638-4756-8d7b-37920754a559"
+  }
+}

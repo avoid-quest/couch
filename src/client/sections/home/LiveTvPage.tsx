@@ -8,11 +8,10 @@ import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
 import { collectionPageSize } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { NoPlaylists } from "@/components/NoPlaylists";
-import { PageHeader } from "@/components/PageHeader";
+import { RoomHead } from "@/sections/find/Room";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import type { MenuAction } from "@/components/RowMenu";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -153,7 +152,8 @@ export function LiveTvPage() {
     });
   return (
     <section data-page="Live TV" className="min-w-0 space-y-6">
-      <PageHeader breadcrumb={<ContentBreadcrumb />} title="Live TV" />
+      {/* No token: the header's search doesn't reach the playlists' channels, so Filter finds one. */}
+      <RoomHead title="Live TV" />
       {!connected && (
         <p className="text-sm text-muted-foreground" role="status">
           {offline(state?.installationName)}

@@ -18,7 +18,7 @@ const clean = (value: unknown, limit = 200) =>
 
 // Only text and attributes from the site's public catalogue are read. Scripts,
 // event handlers and page markup never enter Couch's UI.
-function text(value: string): string {
+export function text(value: string): string {
   const entities: Record<string, string> = {
     amp: "&",
     quot: '"',

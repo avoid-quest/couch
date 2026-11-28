@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
+import { Route as AnimeRouteImport } from './routes/anime'
 import { Route as CollectionRouteImport } from './routes/collection'
+import { Route as FilmsAndSeriesRouteImport } from './routes/films-and-series'
 import { Route as FindRouteImport } from './routes/find'
 import { Route as ItemRouteImport } from './routes/item'
 import { Route as LibraryRouteImport } from './routes/library'
@@ -54,9 +56,19 @@ const SplatRoute = SplatRouteImport.update({
   path: '/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnimeRoute = AnimeRouteImport.update({
+  id: '/anime',
+  path: '/anime',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CollectionRoute = CollectionRouteImport.update({
   id: '/collection',
   path: '/collection',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FilmsAndSeriesRoute = FilmsAndSeriesRouteImport.update({
+  id: '/films-and-series',
+  path: '/films-and-series',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FindRoute = FindRouteImport.update({
@@ -222,7 +234,9 @@ const SettingsCouchSourcesStreamingCommunityRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/anime': typeof AnimeRoute
   '/collection': typeof CollectionRoute
+  '/films-and-series': typeof FilmsAndSeriesRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
@@ -258,7 +272,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/anime': typeof AnimeRoute
   '/collection': typeof CollectionRoute
+  '/films-and-series': typeof FilmsAndSeriesRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
@@ -292,7 +308,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/anime': typeof AnimeRoute
   '/collection': typeof CollectionRoute
+  '/films-and-series': typeof FilmsAndSeriesRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/library': typeof LibraryRoute
@@ -330,7 +348,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$'
+    | '/anime'
     | '/collection'
+    | '/films-and-series'
     | '/find'
     | '/item'
     | '/library'
@@ -366,7 +386,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$'
+    | '/anime'
     | '/collection'
+    | '/films-and-series'
     | '/find'
     | '/item'
     | '/library'
@@ -399,7 +421,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$'
+    | '/anime'
     | '/collection'
+    | '/films-and-series'
     | '/find'
     | '/item'
     | '/library'
@@ -436,7 +460,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
+  AnimeRoute: typeof AnimeRoute
   CollectionRoute: typeof CollectionRoute
+  FilmsAndSeriesRoute: typeof FilmsAndSeriesRoute
   FindRoute: typeof FindRoute
   ItemRoute: typeof ItemRoute
   LibraryRoute: typeof LibraryRoute
@@ -470,11 +496,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/anime': {
+      id: '/anime'
+      path: '/anime'
+      fullPath: '/anime'
+      preLoaderRoute: typeof AnimeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/collection': {
       id: '/collection'
       path: '/collection'
       fullPath: '/collection'
       preLoaderRoute: typeof CollectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/films-and-series': {
+      id: '/films-and-series'
+      path: '/films-and-series'
+      fullPath: '/films-and-series'
+      preLoaderRoute: typeof FilmsAndSeriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/find': {
@@ -762,7 +802,9 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
+  AnimeRoute: AnimeRoute,
   CollectionRoute: CollectionRoute,
+  FilmsAndSeriesRoute: FilmsAndSeriesRoute,
   FindRoute: FindRoute,
   ItemRoute: ItemRoute,
   LibraryRoute: LibraryRoute,

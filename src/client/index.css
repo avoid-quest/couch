@@ -1746,6 +1746,23 @@ html[data-cursor-hidden] * {
     margin-top: 1.75rem;
   }
 }
+/* The query or the list's title, a step under a Details page's; a source's room names itself the same. */
+.search-title,
+.room-title {
+  --title-short: 4rem;
+  --title-medium: 3.25rem;
+  --title-long: 2.5rem;
+  --title-xlong: 2rem;
+}
+@media (max-width: 47.99rem) {
+  .search-title,
+  .room-title {
+    --title-short: 2.75rem;
+    --title-medium: 2.25rem;
+    --title-long: 1.875rem;
+    --title-xlong: 1.625rem;
+  }
+}
 
 /* Saved's media is Home's shelf tiles in justified rows: each grows by its picture's width (`--tile-ratio`,
    measured on the item), so a row shares one height and fills the column, every picture whole. The last row keeps its size. */

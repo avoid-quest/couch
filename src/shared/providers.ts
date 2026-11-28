@@ -3,6 +3,8 @@ import { isStreamingCommunityHost } from "./streamingcommunity";
 import { isAnimeSaturnHost, animeSaturnPageUrl } from "./animesaturn";
 import { isAnimeUnityHost, animeUnityPageUrl } from "./animeunity";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
+import { archiveLink, isArchiveHost, isStationSite } from "./archives";
+import { isMixcloudHost, mixcloudLink } from "./mixcloud";
 
 export type ProviderId =
   | "youtube"
@@ -13,7 +15,10 @@ export type ProviderId =
   | "streamingcommunity"
   | "movies123"
   | "animesaturn"
-  | "animeunity";
+  | "animeunity"
+  | "mixcloud"
+  | "archives"
+  | "spotify";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export const providerPageSize = 24;
@@ -35,11 +40,15 @@ export type ProviderItem = {
   collection?: MediaCollection;
   duration?: number;
   live?: boolean;
+  /** The same recording's pages on other sources (a radio episode's Mixcloud and SoundCloud uploads), so search shows it once. */
+  copies?: string[];
 };
 
 export type ProviderPage = {
   item?: ProviderItem;
   items: ProviderItem[];
+  /** How many items the whole list holds, when the source says (a paged list shows only its first). */
+  count?: number;
   nextCursor?: string;
   /** A list in pages oldest first (a long anime's episodes): the page before this one, and the last, newest page. */
   previousCursor?: string;
@@ -49,7 +58,17 @@ export type ProviderPage = {
   description?: string;
   subtitle?: string;
   parent?: CollectionLink;
+  /** A source's own front page or a section of it, as a room (RaiPlay's): see ProviderRoom. */
+  room?: ProviderRoom;
+  /** A list a source files by letter (RaiPlay's A to Z), whole: each letter in order, with how many of `items` it holds. */
+  letters?: { letter: string; count: number }[];
 };
+/**
+ * What a source shows on its own front page: its navigation (`doors`, each a page to open), the item it leads with, and
+ * its lists. The lead and each list are the first page their own address (`item.url`) answers, so they open without
+ * another request.
+ */
+type ProviderRoom = { doors: ProviderItem[]; lead?: ProviderPage; shelves: ProviderPage[] };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
 /** A section of a page (RaiPlay's "In Diretta" on its front page): that page's row, not a programme to save. */
@@ -99,12 +118,15 @@ export function providerForUrl(value: string): ProviderId | undefined {
     if (isMovies123Host(url.hostname)) return "movies123";
     if (isAnimeSaturnHost(url.hostname)) return "animesaturn";
     if (isAnimeUnityHost(url.hostname)) return "animeunity";
+    if (isMixcloudHost(url.hostname)) return "mixcloud";
+    if (isArchiveHost(url.hostname)) return "archives";
     const domains: Partial<Record<ProviderId, string[]>> = {
       youtube: ["youtube.com", "youtu.be"],
       twitch: ["twitch.tv"],
       raiplay: ["raiplay.it"],
       bandcamp: ["bandcamp.com"],
       soundcloud: ["soundcloud.com"],
+      spotify: ["open.spotify.com"],
     };
     return (Object.keys(domains) as ProviderId[]).find((provider) =>
       domains[provider]!.some(
@@ -124,6 +146,10 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       provider = providerForUrl(value);
     if (!provider || url.port || url.hash) return;
     const path = url.pathname.replace(/\/$/, "");
+    if (provider === "mixcloud" || provider === "archives") {
+      const link = provider === "mixcloud" ? mixcloudLink(value) : archiveLink(value);
+      return link?.shape === "atom" ? link.url : undefined;
+    }
     if (provider === "animesaturn") {
       const page = animeSaturnPageUrl(value);
       return page && !page.pathname.startsWith("/anime/") ? page.href : undefined;
@@ -166,6 +192,10 @@ export function publicProviderMediaUrl(value: string): string | undefined {
         !short && path === "/watch" ? /^\?v=[A-Za-z0-9_-]{11}$/.test(url.search) : !url.search;
       if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && publicQuery)
         return `https://www.youtube.com/watch?v=${id}`;
+    }
+    if (provider === "spotify") {
+      const link = spotifyLink(value);
+      return link?.kind === "track" ? link.url : undefined;
     }
     if (url.search) return;
     if (
@@ -227,4 +257,166 @@ export const providerNames: Record<ProviderId, string> = {
   movies123: "123MoviesFree",
   animesaturn: "AnimeSaturn",
   animeunity: "AnimeUnity",
+  mixcloud: "Mixcloud",
+  archives: "Radio archives",
+  spotify: "Spotify",
 };
+
+const soundCloudHosts = ["soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"];
+// First path segments that are SoundCloud's own pages, not a profile.
+const soundCloudPages =
+  /^(?:search|discover|you|stations|charts|library|upload|pages|settings|messages|notifications|feed|people|tags|jobs|imprint|pro|connect|mobile|logout|signin|terms-of-use|popular)$/i;
+
+/** A public SoundCloud set (`/<user>/sets/<set>`) or profile (`/<user>`), canonical; never a private or reserved page. */
+export function soundCloudListUrl(value: string): string | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !soundCloudHosts.includes(url.hostname) ||
+      url.searchParams.has("secret_token")
+    )
+      return;
+    const path = url.pathname.replace(/\/$/, "");
+    const match = /^\/([a-z0-9_-]+)(\/sets\/[a-z0-9_-]+)?$/i.exec(path);
+    if (!match || soundCloudPages.test(match[1]!)) return;
+    return `https://soundcloud.com${path}`;
+  } catch {
+    return;
+  }
+}
+
+// bandcamp.com's own pages, not a fan's.
+const bandcampPages =
+  /^(?:api|search|tag|tags|discover|login|signup|help|about|artists|fans|labels|terms_of_use|privacy|guide|gift_cards|settings|yum|feed|apps|developer|community|daily|EmbeddedPlayer|stream_redirect|download|cart|contact)$/i;
+
+/** A Bandcamp fan's public collection (`bandcamp.com/<fan>`) or wishlist (`/<fan>/wishlist`), canonical. */
+export function bandcampFanUrl(
+  value: string,
+): { url: string; fan: string; list: "collection" | "wishlist" } | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !["bandcamp.com", "www.bandcamp.com"].includes(url.hostname)
+    )
+      return;
+    const match = /^\/([a-z0-9_]{1,64})(\/wishlist)?\/?$/i.exec(url.pathname);
+    if (!match || bandcampPages.test(match[1]!)) return;
+    const fan = match[1]!.toLowerCase();
+    return {
+      url: `https://bandcamp.com/${fan}${match[2] ? "/wishlist" : ""}`,
+      fan,
+      list: match[2] ? "wishlist" : "collection",
+    };
+  } catch {
+    return;
+  }
+}
+
+type SpotifyKind = "track" | "album" | "playlist" | "artist";
+
+/** A Spotify track or list link (`open.spotify.com[/intl-xx]/<kind>/<id>`), canonical. */
+export function spotifyLink(
+  value: string,
+): { url: string; kind: SpotifyKind; id: string } | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hostname !== "open.spotify.com"
+    )
+      return;
+    const match =
+      /^(?:\/intl-[a-z]{2}(?:-[a-z]{2})?)?\/(track|album|playlist|artist)\/([A-Za-z0-9]{22})\/?$/i.exec(
+        url.pathname,
+      );
+    if (!match) return;
+    const kind = match[1]!.toLowerCase() as SpotifyKind;
+    return { url: `https://open.spotify.com/${kind}/${match[2]}`, kind, id: match[2]! };
+  } catch {
+    return;
+  }
+}
+
+/**
+ * What a pasted link is, from its URL alone (no fetch, so Enter is always safe): an `atom` plays by itself, a `playlist`
+ * queues whole, a `page` (a channel, a series, a category) is opened to choose from, and a `station` (a radio's home
+ * page) plays that radio live. Undefined: Couch's providers don't open it, and it plays as a webpage.
+ */
+export type LinkTarget = { provider: ProviderId; shape: MediaShape | "page" | "station" };
+type LinkClassifier = (url: string) => LinkTarget | undefined;
+
+function builtInLink(value: string): LinkTarget | undefined {
+  const provider = providerForUrl(value);
+  if (!provider) return;
+  const path = new URL(value).pathname.replace(/\/$/, "");
+  // Twitch pages list only channels and categories; a VOD or a clip plays as a webpage.
+  if (provider === "twitch")
+    return path.startsWith("/videos/") ||
+      /\/clip\//.test(path) ||
+      new URL(value).hostname === "clips.twitch.tv"
+      ? undefined
+      : { provider, shape: "page" };
+  if (provider === "spotify") {
+    const link = spotifyLink(value);
+    return link && { provider, shape: link.kind === "track" ? "atom" : "playlist" };
+  }
+  if (provider === "youtube" && isYouTubePlaylistUrl(value))
+    return { provider, shape: path === "/playlist" ? "playlist" : "atom" };
+  // Share links carry tracking and start-time parameters (`?si=`, `&t=`) that don't change what plays.
+  const page = new URL(value);
+  page.hash = "";
+  if (provider === "youtube") {
+    const v = page.searchParams.get("v");
+    page.search = path === "/watch" && v ? `?v=${encodeURIComponent(v)}` : "";
+  } else if (["soundcloud", "bandcamp", "raiplay"].includes(provider)) page.search = "";
+  if (publicProviderMediaUrl(page.href)) return { provider, shape: "atom" };
+  if (provider === "soundcloud")
+    return soundCloudListUrl(value) ? { provider, shape: "playlist" } : undefined;
+  if (provider === "bandcamp")
+    return /^[a-z0-9-]+\.bandcamp\.com$/i.test(new URL(value).hostname) &&
+      /^\/album\/[a-z0-9_-]+$/i.test(path)
+      ? { provider, shape: "playlist" }
+      : bandcampFanUrl(value)
+        ? { provider, shape: "playlist" }
+        : undefined;
+  return { provider, shape: "page" };
+}
+
+/** Each host's classifier, first match wins. */
+const linkClassifiers: LinkClassifier[] = [
+  (value) => {
+    const link = archiveLink(value) ?? mixcloudLink(value);
+    return link && { provider: link.provider, shape: link.shape };
+  },
+  // A station's pages other than its episodes and shows, its home page first, play the station live.
+  (value) =>
+    isStationSite(new URL(value).hostname) ? { provider: "archives", shape: "station" } : undefined,
+  builtInLink,
+];
+
+export function linkTarget(value: string): LinkTarget | undefined {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
+  } catch {
+    return;
+  }
+  for (const classify of linkClassifiers) {
+    const target = classify(value);
+    if (target) return target;
+  }
+}

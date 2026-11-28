@@ -9,8 +9,8 @@ const pagePaths: Record<string, string> = {
   Search: "/search",
   Now: "/now",
 };
-// Home's own pages: every station, and every Live TV channel.
-export const browsePaths = ["/radio", "/live-tv"];
+// Home's own pages: every station, every Live TV channel, and the rooms its kind doors open.
+export const browsePaths = ["/radio", "/live-tv", "/films-and-series", "/anime"];
 // Where a TV's pairing code leads an admin's phone (routes/pair/tv.tsx), before that phone has opened Couch.
 const pairingPaths = ["/pair/tv"];
 // Earlier pages, served so bookmarks reach their redirects (routes/find.tsx, live.tsx, library.tsx, where-it-plays.tsx,

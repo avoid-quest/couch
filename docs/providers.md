@@ -84,7 +84,116 @@ a database ID (not the episode number).
   [domain tracker](https://domains-tracker.server66.workers.dev/get) shared with
   StreamingCommunity, validating real catalogue records before adopting it.
 
+## Mixcloud
+
+`api.mixcloud.com`, Mixcloud's public REST API: search (`/search/?type=cloudcast`),
+a user's uploads (`/<user>/cloudcasts/`) with their playlists first, a user's
+playlists and one playlist's mixes, 24 per page by `offset`. The API never gives
+audio: a mix plays through yt-dlp from its page (`www.mixcloud.com/<user>/<mix>/`,
+the URL Couch keeps). Play all and Autoplay take a user's or playlist's first 500
+mixes, its pages sharing one 30-second deadline; a user's page says how many uploads
+they have. A user's playlists page is opened to choose a playlist. Mixcloud throttles with HTTP 403 and `Retry-After` (seconds, also in
+`error.retry_after`); Core sends nothing to Mixcloud until that time has passed
+and says how long to wait.
+
+## Radio archives
+
+Past episodes of the stations in avoid radio, each read from the station's own
+public API by a small module in `src/server/providers/archives/`:
+
+| Station | Search | Lists | Episode recording |
+| --- | --- | --- | --- |
+| Lyl Radio | `strapi.lyl.live/api/lyl/search?q=` | GraphQL `episodesByShow`; a residents page by style (`/shows/residents?styles=`) is `showsByStyles`, then every show's episodes | `audio.url`, else SoundCloud, else Mixcloud |
+| NTS | `/api/v2/search` | `/api/v2/shows/<show>/episodes`, 12 per page | `audio_sources` (SoundCloud or Mixcloud) |
+| Cashmere Radio | WordPress `episode?search=` and show pages | `episode?categories=` (the show's category) | `episode_mixcloud_link` |
+| Sygma Radio | the catalogue embedded in its home page, kept an hour | `backend.radio.syg.ma/shows/<show>.json` | `mc_link` |
+| HKCR | `cms.hkcr.live/shows/search` | `/shows?residents=` | `mixFile.url`, else the Mixcloud player's `feed`, else YouTube |
+| Internet Public Radio | `/api/search` | Sanity GROQ by resident or series | `audioUrl` (SoundCloud or Mixcloud) |
+| Radio BlackOut | WordPress `podcast?search=` (titles) | `podcast?podcastfilter=` (the show's filter) | the post's `<audio>`/`<source>`, else a SoundCloud or Mixcloud player |
+| Resonance Extra | series names from `/api/series_index`, kept a day | `/api/series/<series>` | `mixcloud_stream_url`, or the original broadcast's for a repeat |
+| Radio Alhara | its Mixcloud uploads, kept a day | — (Mixcloud items) | Mixcloud |
+
+- Links classify without fetching (`archiveLink` in `src/shared/archives.ts`,
+  `mixcloudLink` in `src/shared/mixcloud.ts`): an episode page is an atom; a
+  show, resident, series or style page is a playlist, newest first, each
+  episode once, at most 500. Episodes not yet aired are left out.
+- Every request goes through the public network boundary, and a list's pages share
+  one 30-second deadline. Pictures are shown only from each station's own image
+  hosts. WordPress stations (Cashmere, Radio BlackOut) stop at the last page
+  `X-WP-TotalPages` counts.
+- A search asks every station at once; each has 3 seconds. A station that fails
+  or is slow is named ("NTS didn't answer.") and the others still show.
+- Playback resolves the episode page when it plays: the station's own file goes
+  to yt-dlp as a direct file, a SoundCloud or Mixcloud copy as that page. Up
+  next, Saved and history keep the station's episode page; Autoplay continues
+  through the episode's show.
+
+## Bandcamp fan pages
+
+A fan's collection (`bandcamp.com/<fan>`) and wishlist (`/<fan>/wishlist`) read
+the page's `pagedata` literal (fan ID, first items, paging token), then page with
+the site's own `POST /api/fancollection/1/{collection,wishlist}_items`. bandcamp.com
+challenges Node's HTTP client, so both requests go through the managed yt-dlp's
+transport, as Bandcamp search does (`vendor/bandcamp`), each read at most 4 MiB with
+redirects refused. **Play all** and **Queue all** on a fan page page through the list
+(100 releases a request) until its releases hold 500 tracks, plus four spare releases
+that replace an album that fails, then read the albums a few per extraction, two at
+once, each album's tracks in order, all within 30 seconds. Play all starts on the
+first page's first four albums and adds the rest to the same Autoplay once read;
+what was read when the time runs out is what plays. When that is under 500 tracks
+and the fan has more, the Device that pressed Play all says how many play.
+
+## SoundCloud lists
+
+Sets (`/<user>/sets/<set>`) and profiles (`/<user>`) list through yt-dlp's
+`--flat-playlist`. A set's page lists only its first tracks in full;
+`vendor/soundcloud` completes the rest that `--playlist-items` asks for with the same
+`tracks?ids=` request upstream makes for private sets, so every entry listed has its
+public page, title and length.
+
+## Spotify
+
+Spotify plays only in its own DRM player. Couch reads the literal track list from
+the public embed page (`open.spotify.com/embed/{track,album,playlist,artist}/<id>`,
+`__NEXT_DATA__`), with no account. An artist link plays the top tracks in the
+order Spotify lists them in the embed (up to ten). Each track keeps its canonical
+`open.spotify.com/track/<id>` link in Up next and Saved, and its meta line says it
+plays from YouTube: at play time Couch searches YouTube for "artists title" and
+plays the video closest to Spotify's length, within 10 seconds, whose title has
+every word of the track's title (its "(feat. …)", "[…]" and " - Remastered …" parts
+aside) and whose title or channel names one of its artists ("<Artist> - Topic"
+does). With none, the item is unavailable with **Try again**.
+
+Search asks what open.spotify.com asks for a logged-out visitor, reimplemented in
+`src/server/providers/spotify-token.ts` and `spotify.ts`:
+
+- The anonymous token: `GET /api/server-time`, then `GET /api/token?reason=init&
+  productType=web-player&totp=&totpServer=&totpVer=`, where `totp` and `totpServer`
+  are RFC 6238 codes (SHA-1, 6 digits, 30 s) for Core's clock and Spotify's. The key
+  is the web player's secret with each character's code XOR `i % 33 + 9`, written
+  in decimal, as UTF-8. Core keeps the token until a minute before
+  `accessTokenExpirationTimestampMs`; a refused token asks again with the next
+  secret, once.
+- The search: `POST api-partner.spotify.com/pathfinder/v2/query` with the token, the
+  persisted query `searchDesktop` and its sha256 hash, and the first page's sizes.
+  Results keep Spotify's order: the top result, songs, artists, albums, playlists
+  (10 of each). A song is one track; an album, artist or playlist plays whole
+  through its embed page.
+- A failed token or search reports "Spotify search is unavailable." for Spotify
+  alone.
+
+When Spotify rotates its secrets, `/api/token` answers 400 (or names
+`totpVerExpired`) and search fails. Open `open.spotify.com`, find the
+`web-player.<hash>.js` bundle it loads, and copy its array of
+`{secret, version}` (next to `/api/server-time`) into `webPlayerSecrets`, newest
+first; projects such as `xyloflake/spot-secrets-go` publish the same pairs as
+byte arrays. When search alone fails with a token, the `searchDesktop` hash changed:
+it is in the search route's bundle (`xpui-routes-search.<hash>.js`) as
+`"searchDesktop","query","<hash>"`.
+
 ## Queue limit
 
-Whole-series queueing stops at 500 episodes (Couch's queue limit); longer series
+Up next holds 500 entries. A pasted or opened list (a YouTube playlist, a Bandcamp
+album, a SoundCloud set or profile, a Spotify list) longer than that plays its first
+500, or queues as many as Up next has room for, and says so. Whole-series queueing stops at 500 episodes; longer series
 return an error, and their episodes stay playable one by one.

@@ -86,6 +86,7 @@ export function playbackActionAllowed(action: Action, controls: PlaybackControls
     case "enqueueProvider":
     case "enqueueRadio":
     case "remove":
+    case "clearUpNext":
     case "restoreRemoved":
     case "move":
     case "play":

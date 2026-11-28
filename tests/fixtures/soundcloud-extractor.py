@@ -1,5 +1,5 @@
 from yt_dlp.extractor.common import InfoExtractor
-from yt_dlp_plugins.extractor.soundcloud import _CouchSoundcloudIE, _CouchSoundcloudSearchIE
+from yt_dlp_plugins.extractor.soundcloud import _CouchSoundcloudIE, _CouchSoundcloudSearchIE, _CouchSoundcloudSetIE
 
 
 class CouchSoundcloudTestIE(InfoExtractor):
@@ -40,4 +40,27 @@ class CouchSoundcloudTestIE(InfoExtractor):
         metadata = extractor._extract_info_dict(track)
         assert calls == ['https://api-v2.soundcloud.com/media/123']
         assert metadata['formats'][0]['url'] == 'https://audio.example/track.mp3'
+
+        # A set's page completes only the bare tracks it lists.
+        asked = []
+        def details(url, *args, query=None, **kwargs):
+            asked.append(query['ids'])
+            return [{**track, 'id': int(id), 'title': f'Track {id}', 'permalink_url': f'https://soundcloud.com/artist/{id}'}
+                    for id in query['ids'].split(',')]
+
+        extractor = _CouchSoundcloudSetIE(self._downloader)
+        extractor._CLIENT_ID = 'test'
+        extractor._call_api = details
+        playlist = {'id': 9, 'title': 'Set', 'permalink_url': 'https://soundcloud.com/artist/sets/set',
+                    'tracks': [track] + [{'id': id} for id in range(200, 260)]}
+        self._downloader.params['playlist_items'] = '2:3'
+        try:
+            extractor._extract_set(playlist)
+            self._downloader.params['playlist_items'] = '57:'
+            extractor._extract_set(playlist)
+        finally:
+            del self._downloader.params['playlist_items']
+        extractor._extract_set(playlist)
+        assert asked == ['200,201', '255,256,257,258,259', ','.join(str(id) for id in range(200, 250)),
+                         ','.join(str(id) for id in range(250, 260))], asked
         return {'id': 'test', 'title': 'SoundCloud offline checks passed', 'url': 'https://audio.example/track.mp3'}

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
+import { publicFetch } from "../public-network";
 
 export class ProviderError extends Error {
   constructor(
@@ -9,6 +10,21 @@ export class ProviderError extends Error {
     super(message);
   }
 }
+
+/** A JSON object a site returned, as opposed to an array, null or a scalar. */
+export const object = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+/** A site's text on one line, without control characters, at most `limit` long. */
+export const label = (value: unknown, limit = 200) =>
+  typeof value === "string"
+    ? value
+        .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
+        .trim()
+        .slice(0, limit) || undefined
+    : undefined;
+
+/** Catalogue requests leave through Core's public network boundary; tests put their own site in its place. */
+export const catalogueTransport: { fetch: typeof fetch } = { fetch: publicFetch };
 
 export const providerItemId = (provider: ProviderId, url: string) =>
   `${provider}-${createHash("sha256").update(url).digest("hex").slice(0, 32)}`;
@@ -78,6 +94,15 @@ export async function providerJson(
   init: RequestInit = {},
   request: typeof fetch = globalThis.fetch,
 ): Promise<unknown> {
+  return (await providerJsonResponse(url, init, request)).value;
+}
+
+/** A provider's JSON and the headers it came with (WordPress counts a collection's pages in one). */
+export async function providerJsonResponse(
+  url: string,
+  init: RequestInit = {},
+  request: typeof fetch = globalThis.fetch,
+): Promise<{ value: unknown; headers: Headers }> {
   const signal = AbortSignal.any([
     ...(init.signal ? [init.signal] : []),
     AbortSignal.timeout(12_000),
@@ -95,7 +120,7 @@ export async function providerJson(
     new ProviderError("The provider returned too much data."),
   );
   try {
-    return JSON.parse(text);
+    return { value: JSON.parse(text), headers: response.headers };
   } catch {
     throw new ProviderError("The provider returned invalid data.");
   }
