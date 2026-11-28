@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { SectionRowsSettings } from "./SectionRowsSettings";
 import { Switch } from "@/components/ui/switch";
-import { homeRowLabels, useHomeRows } from "@/sections/home/home-rows";
+import { homeRows, useHomeRows } from "@/sections/home/home-rows";
 import { ShareButton } from "@/sections/share/ShareControl";
 import { useShowShare } from "@/sections/share/show-share";
 import { useShell } from "@/sections/shell/AppShell";
@@ -139,7 +139,7 @@ export function HomeSettingsPage() {
   const home = useHomeRows();
   return (
     <SettingsLayout section="home">
-      <SectionRowsSettings page="Home" labels={homeRowLabels} layout={home} />
+      <SectionRowsSettings page="Home" rows={homeRows} layout={home} />
     </SettingsLayout>
   );
 }

@@ -1,37 +1,43 @@
 import { useState } from "react";
 import { readSectionRows, useSectionRows } from "../section-rows";
 
-// Home's sections, in the order a fresh device shows them: yours first (what you were watching, saved for later and
-// played, which share one board), then the sources (Discover folded into Home). Each device keeps its own choice.
-// What plays is not one: it leads Home as its Stage, and a saved "now" row is dropped as unknown. Source IDs stay
+// Every kind of section Home can show: its name, on Home and in Edit Home, and what Edit Home says it holds. A new kind
+// is one more entry here, a place in defaultHomeRows and what HomePage draws for it. Each device keeps its own choice;
+// what plays is not one (it is the now-playing bar's), and a saved "now" row is dropped as unknown. Source IDs stay
 // independent of their availability, contents and display names.
-export const homeRowLabels = {
-  continue: "Continue",
-  later: "For later",
-  recent: "Played recently",
-  upNext: "Up next",
-  shared: "Shared sources",
-  radio: "Radio",
-  "live-tv": "Live TV",
-  twitch: "Twitch",
-  streamingcommunity: "StreamingCommunity",
-  raiplay: "RaiPlay",
-  movies123: "123MoviesFree",
-  animesaturn: "AnimeSaturn",
-  animeunity: "AnimeUnity",
-  sources: "Sources",
-} as const;
-export type HomeRowId = keyof typeof homeRowLabels;
+export const homeRows = {
+  sources: { label: "Browse", note: "Doors to Radio, Live TV and the catalogues" },
+  continue: { label: "Continue", note: "What you stopped part way through" },
+  later: { label: "For later", note: "What you saved to play later" },
+  recent: { label: "Played recently", note: "What you played to the end" },
+  upNext: { label: "Up next", note: "What plays after this" },
+  shared: { label: "Shared sources", note: "Screens and sound devices share" },
+  radio: { label: "Radio", note: "Stations on air" },
+  "live-tv": { label: "Live TV", note: "Channels from your playlists" },
+  twitch: { label: "Twitch", note: "Channels you saved" },
+  streamingcommunity: { label: "StreamingCommunity", note: "Films and series you saved" },
+  raiplay: { label: "RaiPlay", note: "Programmes you saved" },
+  movies123: { label: "123MoviesFree", note: "Films and series you saved" },
+  animesaturn: { label: "AnimeSaturn", note: "Anime you saved" },
+  animeunity: { label: "AnimeUnity", note: "Anime you saved" },
+} as const satisfies Record<string, { label: string; note: string }>;
+export type HomeRowId = keyof typeof homeRows;
 export type HomeRow = { id: HomeRowId; shown: boolean };
 /** Your own rows, which Home sets as one board of short lists rather than shelves. */
 export const boardRows: readonly HomeRowId[] = ["continue", "later", "recent", "upNext"];
-const sourceRows: HomeRow[] = (Object.keys(homeRowLabels) as HomeRowId[])
+const sourceRows: HomeRow[] = (Object.keys(homeRows) as HomeRowId[])
   .filter((id) => !boardRows.includes(id))
   .map((id) => ({ id, shown: true }));
 // A device that ordered or hid Discover's sources before they moved here keeps that choice (couch.discover-rows).
+const discoverRows = readSectionRows("couch.discover-rows", sourceRows);
+// A fresh device's Home: Browse, Continue, For later, then the sources, then the rest of your own.
 export const defaultHomeRows: HomeRow[] = [
-  ...boardRows.map((id) => ({ id, shown: id !== "upNext" })),
-  ...readSectionRows("couch.discover-rows", sourceRows),
+  discoverRows.find((row) => row.id === "sources")!,
+  { id: "continue", shown: true },
+  { id: "later", shown: true },
+  ...discoverRows.filter((row) => row.id !== "sources"),
+  { id: "recent", shown: true },
+  { id: "upNext", shown: false },
 ];
 export const readHomeRows = (storage?: Pick<Storage, "getItem">) =>
   readSectionRows("couch.home-rows", defaultHomeRows, storage);

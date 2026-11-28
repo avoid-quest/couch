@@ -5,8 +5,8 @@ import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
-import { Play, X } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -45,14 +45,14 @@ import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { useOnAir, useStationMenu } from "./on-air";
-import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
+import { boardRows, homeRows, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 import { Board, BoardArt, BoardList } from "./HomeBoard";
 import {
   Failed,
   LiveTvShelf,
   SavedSourceShelf,
   SharedSources,
-  SourcesLine,
+  BrowseLine,
   sourceHomes,
 } from "./HomeSources";
 import { MediaRow } from "@/components/MediaRow";
@@ -60,6 +60,7 @@ import { iptvSourcesQuery } from "@/api/iptv";
 import { providerFavoritesQuery } from "@/api/providers";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
 import { providerMediaPage, type ProviderId } from "../../../shared/providers";
+import { settingsPagePath } from "../../../shared/settings-pages";
 
 export type HistoryPlayback = (
   item: HistoryItem,
@@ -534,7 +535,7 @@ export function HomePage() {
         ),
       ]),
     ),
-    sources: <SourcesLine />,
+    sources: <BrowseLine />,
   };
   // A list or shelf still loading holds its place, so nothing moves under the focus when it arrives.
   const pending = (id: HomeRowId) =>
@@ -550,9 +551,9 @@ export function HomePage() {
     lists[id] ||
     (pending(id) &&
       (id === "upNext" ? (
-        <BoardList title={homeRowLabels[id]} loading />
+        <BoardList title={homeRows[id].label} loading />
       ) : (
-        <Shelf title={homeRowLabels[id]} loading>
+        <Shelf title={homeRows[id].label} loading>
           <MediaTilesSkeleton shape="square" />
         </Shelf>
       )));
@@ -634,6 +635,17 @@ export function HomePage() {
             <Fragment key={group[0]}>{section(group[0]!)}</Fragment>
           ),
         )}
+      {/* Which sections Home shows, and in what order, is this device's choice: Edit Home is its page in Settings. */}
+      {hero !== undefined && (
+        <div data-nav-row>
+          <Button asChild variant="ghost" className="-ml-3.5 text-muted-foreground">
+            <Link to={settingsPagePath("home")}>
+              <SlidersHorizontal aria-hidden="true" />
+              Edit Home
+            </Link>
+          </Button>
+        </div>
+      )}
 
       <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
         <SheetContent

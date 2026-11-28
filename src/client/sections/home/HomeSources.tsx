@@ -1,9 +1,15 @@
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { type ComponentProps, type MouseEvent, useSyncExternalStore } from "react";
+import { type ComponentProps, useSyncExternalStore } from "react";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import { iptvGuideQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MediaTile } from "@/components/MediaTile";
 import { majorityShape, providerItemShape } from "@/art-shape";
 import { metaLine } from "@/media-caption";
@@ -32,8 +38,6 @@ export const sourceHomes = [
   "animesaturn",
   "animeunity",
 ] as const satisfies readonly ProviderId[];
-// The sources without one open on a search of their own.
-const searches: ProviderId[] = ["youtube", "bandcamp", "soundcloud"];
 
 /** The first channels of the Live TV guide; the heading opens every channel. A channel has no page, so its tile plays it. */
 export function LiveTvShelf() {
@@ -97,7 +101,7 @@ function ChannelTile({
 
 /**
  * What's saved from a source, in Saved's order, live channels first and offline ones dimmed; each tile opens its page,
- * and the heading the source's own home. Nothing saved, no shelf: the Sources line opens the source.
+ * and the heading the source's own home. Nothing saved, no shelf: the Browse line opens the source.
  */
 export function SavedSourceShelf({
   provider,
@@ -170,7 +174,7 @@ export function SharedSources({ hits }: { hits: SearchHit[] }) {
 
 /**
  * The sources whose latest answer here was a failure (their home, a page or a search), by their catalogue queries'
- * state, so the Sources line can say so before it is opened again.
+ * state, so the Browse line can say so before it is opened again.
  */
 function useFailingSources() {
   const client = useQueryClient();
@@ -200,78 +204,147 @@ function useFailingSources() {
   return (provider: ProviderId) => failing.split(" ").includes(provider);
 }
 
-/** Every source as a chip: one with a home opens it, one without (YouTube, Bandcamp, SoundCloud) scopes the header's field to itself. */
-export function SourcesLine() {
+// Home's Browse line: what is behind each door, in the order Home's sources come in. A door with one place opens it; a
+// door with several opens a menu of them, hung from the door. A source without a home scopes the header's field, so
+// search stays the one way to look things up.
+type Door = { label: string; meta: string; to: string | readonly ProviderId[] };
+const doors: Door[] = [
+  { label: "Radio", meta: "Stations on air", to: "/radio" },
+  { label: "Live TV", meta: "Channels from your playlists", to: "/live-tv" },
+  { label: "RaiPlay", meta: "Rai's programmes, films and channels", to: ["raiplay"] },
+  { label: "Twitch", meta: "Live channels and their videos", to: ["twitch"] },
+  {
+    label: "Films and series",
+    meta: "StreamingCommunity, 123MoviesFree",
+    to: ["streamingcommunity", "movies123"],
+  },
+  { label: "Anime", meta: "AnimeSaturn, AnimeUnity", to: ["animesaturn", "animeunity"] },
+  {
+    label: "Music and video",
+    meta: "YouTube, Bandcamp, SoundCloud",
+    to: ["youtube", "bandcamp", "soundcloud"],
+  },
+];
+const hasHome = (provider: ProviderId) => (sourceHomes as readonly ProviderId[]).includes(provider);
+
+/** One quiet line of doors to the sources, each saying what is behind it; it scrolls sideways where it doesn't fit. */
+export function BrowseLine() {
   const { scopeSearch } = useShell();
   const details = useDetailNavigation();
   const failing = useFailingSources();
+  const open = (provider: ProviderId) =>
+    hasHome(provider)
+      ? details.open(collectionLocation({ provider, url: "" }))
+      : scopeSearch(providerNames[provider]);
   return (
-    <section aria-label="Sources" className="grid min-w-0 gap-stack">
-      <ShelfHeading title="Sources" />
-      <ul
-        data-nav-row
-        aria-label="Sources"
-        className="flex flex-wrap gap-2 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-2 max-md:[&>li]:shrink-0"
+    <section
+      aria-labelledby="home-browse"
+      className="-mx-(--gutter) flex overflow-x-auto border-y px-(--gutter) [scrollbar-width:none]"
+    >
+      <h2
+        id="home-browse"
+        className="flex shrink-0 items-center pr-6 text-title font-semibold max-sm:pr-4"
       >
-        {sourceHomes.map((provider, index) => (
-          <SourceChip
-            data-page-first={index === 0 || undefined}
-            key={provider}
-            title={providerNames[provider]}
-            failing={failing(provider)}
-            aria-label={`Open ${providerNames[provider]}`}
-            href={collectionLocation({ provider, url: "" })}
-            onClick={() => details.open(collectionLocation({ provider, url: "" }))}
-          />
-        ))}
-        {searches.map((provider) => (
-          <SourceChip
-            key={provider}
-            title={providerNames[provider]}
-            failing={failing(provider)}
-            aria-label={`Search ${providerNames[provider]}`}
-            onClick={() => scopeSearch(providerNames[provider])}
-          />
-        ))}
+        Browse
+      </h2>
+      <ul data-nav-row aria-labelledby="home-browse" className="flex flex-1">
+        {doors.map((door, index) => {
+          const href =
+            typeof door.to === "string"
+              ? door.to
+              : door.to.length === 1 && hasHome(door.to[0]!)
+                ? collectionLocation({ provider: door.to[0]!, url: "" })
+                : undefined;
+          // A door with one source says it didn't load last time; a menu says it beside each of its sources.
+          const down = typeof door.to !== "string" && door.to.length === 1 && failing(door.to[0]!);
+          const body = <DoorBody label={door.label} meta={down ? "Couldn't load" : door.meta} />;
+          return (
+            <li key={door.label} className="flex min-w-36 flex-1 border-l first:border-l-0">
+              {href ? (
+                <Button
+                  asChild
+                  variant="ghost"
+                  data-page-first={index === 0 || undefined}
+                  className={doorClass}
+                >
+                  <a
+                    href={detailHref(href)}
+                    aria-label={down ? `${door.label}, couldn't load` : undefined}
+                    onClick={(event) => {
+                      if (
+                        event.button ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      details.open(href);
+                    }}
+                  >
+                    {body}
+                  </a>
+                </Button>
+              ) : (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className={doorClass}>
+                      {body}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-56">
+                    {(door.to as readonly ProviderId[]).map((provider) => (
+                      <DropdownMenuItem
+                        key={provider}
+                        className="justify-between gap-4"
+                        onSelect={() => open(provider)}
+                      >
+                        {hasHome(provider)
+                          ? providerNames[provider]
+                          : `Search ${providerNames[provider]}`}
+                        {failing(provider) && (
+                          <span className="text-meta text-muted-foreground">Couldn't load</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 }
 
-/**
- * A source as a chip with its name (and a muted word after it, where it has one), one target; a shared input's other
- * verbs are its menu, as a tile's are. A source that didn't load last time is muted and says so; it still opens, to try again.
- */
+// A door's words: its name, then what is behind it, muted and at most two lines.
+const doorClass =
+  "h-auto min-h-16 w-full min-w-0 flex-col items-start justify-start gap-0.5 rounded-md px-4 py-3 text-left whitespace-normal";
+function DoorBody({ label, meta }: { label: string; meta: string }) {
+  return (
+    <>
+      <span className="text-body font-medium">{label}</span>
+      <span className="line-clamp-2 text-meta font-normal text-muted-foreground">{meta}</span>
+    </>
+  );
+}
+
+/** A shared source as a chip with its name and a muted word after it, one target; its other verbs are its menu, as a tile's are. */
 function SourceChip({
   title,
   meta,
-  failing = false,
-  href,
   onClick,
   menu = [],
   ...props
 }: {
   title: string;
   meta?: string;
-  failing?: boolean;
-  href?: string;
   onClick: () => void;
   menu?: MenuAction[];
 } & Omit<ComponentProps<typeof Button>, "title" | "onClick" | "children">) {
   const options = useItemMenu(menu);
-  const body = (
-    <>
-      <span className={cn(failing && "text-muted-foreground")}>{title}</span>
-      {(failing || meta) && (
-        <span className="font-normal text-muted-foreground">
-          {failing ? "Couldn't load" : meta}
-        </span>
-      )}
-    </>
-  );
-  // A label replaces the chip's words, so it says the failure too.
-  const label =
-    props["aria-label"] && failing ? `${props["aria-label"]}, couldn't load` : props["aria-label"];
   return (
     <li
       {...options.item}
@@ -281,23 +354,14 @@ function SourceChip({
         variant="secondary"
         {...options.target}
         {...props}
-        aria-label={label}
-        asChild={!!href}
         className={cn(
           "h-auto min-h-control min-w-0 max-w-full flex-wrap text-body font-normal whitespace-normal [overflow-wrap:anywhere]",
           options.shown.length && "pr-10",
         )}
-        onClick={(event: MouseEvent<HTMLElement>) => {
-          if (
-            href &&
-            (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-          )
-            return;
-          event.preventDefault();
-          onClick();
-        }}
+        onClick={onClick}
       >
-        {href ? <a href={detailHref(href)}>{body}</a> : body}
+        <span>{title}</span>
+        {meta && <span className="font-normal text-muted-foreground">{meta}</span>}
       </Button>
       <ItemMenu menu={options} title={title} className="absolute top-0 right-1 size-control" />
     </li>

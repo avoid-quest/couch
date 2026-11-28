@@ -9,8 +9,9 @@ how big text is, which language and quality films play in.
 
 - For everyone: **Settings → Sources → Hidden → Hide a word**, or an item's
   **Hide**.
-- On this device: **This device → Home**: rows on or off, **Move up/down**,
-  **Reset to default**; **General → Text size**.
+- On this device: **Edit Home** at the foot of Home (or **This device → Home**):
+  each section on or off, **Move up/down**, **Reset to default**; **General →
+  Text size**.
 - For what I play: **Online video quality** and **Playback → Audio language**.
 - An admin: the TV's interface size, with **Keep** or **Revert**, and the
   Couch's name.

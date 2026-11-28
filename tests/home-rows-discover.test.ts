@@ -13,15 +13,17 @@ Object.assign(globalThis, {
 });
 const { defaultHomeRows } = await import("../src/client/sections/home/home-rows");
 
-test("Home's sources start in the order and visibility Discover's had", () => {
-  expect(defaultHomeRows.slice(0, 7).map((row) => [row.id, row.shown])).toEqual([
+test("A fresh Home opens with Browse, Continue and For later, then the sources as Discover had them", () => {
+  expect(defaultHomeRows.slice(0, 5).map((row) => [row.id, row.shown])).toEqual([
+    ["sources", true],
     ["continue", true],
     ["later", true],
-    ["recent", true],
-    ["upNext", false],
-    ["sources", true],
     ["radio", false],
     ["twitch", true],
   ]);
-  expect(defaultHomeRows.at(-1)).toEqual({ id: "animeunity", shown: true });
+  expect(defaultHomeRows.slice(-3)).toEqual([
+    { id: "animeunity", shown: true },
+    { id: "recent", shown: true },
+    { id: "upNext", shown: false },
+  ]);
 });
