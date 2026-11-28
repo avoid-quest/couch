@@ -184,7 +184,7 @@ export function show(
   };
 }
 
-/** A whole list as one page: newest first, each episode once, each placed in the list by its position. */
+/** A whole list as one page: newest first, each episode once, each placed in the list by its position, the first 500 kept. */
 export function wholeList(
   link: ArchiveLink,
   cursor: string | undefined,
@@ -193,14 +193,13 @@ export function wholeList(
 ): ProviderPage {
   if (cursor) throw new ProviderError("Invalid archive page. Open the list again.", 400);
   const seen = new Set<string>();
-  const items = episodes
-    .filter((item) => !seen.has(item.url) && !!seen.add(item.url))
-    .slice(0, maxList)
-    .map((item, index) => ({
-      ...item,
-      collection: { title: page.title, url: link.url, index },
-    }));
-  return { ...page, items };
+  const unique = episodes.filter((item) => !seen.has(item.url) && !!seen.add(item.url));
+  const items = unique.slice(0, maxList).map((item, index) => ({
+    ...item,
+    collection: { title: page.title, url: link.url, index },
+  }));
+  // The count is the whole list's, so Play all says it keeps the first 500 of a longer one.
+  return { ...page, count: unique.length, items };
 }
 
 /** A value kept for a while, fetched once by concurrent readers; a failure isn't kept. */

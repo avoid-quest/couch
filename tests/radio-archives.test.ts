@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { archiveLink } from "../src/shared/archives";
 import { mixcloudLink } from "../src/shared/mixcloud";
-import { providerForUrl, publicProviderMediaUrl } from "../src/shared/providers";
+import { providerForUrl, publicProviderMediaUrl, type ProviderItem } from "../src/shared/providers";
 import {
   browseArchives,
   loadArchiveList,
@@ -9,7 +9,7 @@ import {
 } from "../src/server/providers/archives";
 import { browseMixcloud } from "../src/server/providers/mixcloud";
 import { catalogueTransport } from "../src/server/providers/http";
-import { slugPattern } from "../src/server/providers/archives/station";
+import { slugPattern, wholeList } from "../src/server/providers/archives/station";
 import { createContinuationResolver } from "../src/server/continuation";
 import { providerCollectionCursor } from "../src/client/collection-pagination";
 import bailefunk from "./fixtures/archives/lyl-baile-funk.json";
@@ -53,6 +53,16 @@ const lylGraphql: Route = (url, body) => {
     data: { episodesByShow: variables.start ? [] : episodes },
   });
 };
+
+test("a whole list counts every episode it holds, though it keeps its first 500", () => {
+  const link = archiveLink("https://lyl.live/show/arsider")!;
+  const episode = (index: number) =>
+    ({ url: `https://lyl.live/episode/e${index}` }) as ProviderItem;
+  const episodes = [episode(0), ...Array.from({ length: 501 }, (_, index) => episode(index))];
+  const page = wholeList(link, undefined, { title: "Arsider" }, episodes);
+  expect(page.count).toBe(501);
+  expect(page.items).toHaveLength(500);
+});
 
 test("a station's link says what it is, from the link alone", () => {
   expect(archiveLink("https://lyl.live/shows/residents?styles=Baile%20Funk")).toEqual({
