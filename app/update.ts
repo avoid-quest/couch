@@ -314,9 +314,9 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     // Squirrel.Mac still installs an update it staged; the next check corrects the channel.
     autoUpdater.autoInstallOnAppQuit = false;
     // The new channel is saved, so the old channel's update must not install even if its file stays.
-    const staged = appOnly;
+    const pending = appOnly;
     appOnly = null;
-    if (staged)
+    if (pending)
       try {
         discardAppUpdate();
       } catch (error) {
