@@ -5,6 +5,7 @@ import type { CaptureKind, CaptureSource } from "../../../shared/capture";
 import {
   defaultLiveFrameRate,
   type LiveSelection,
+  type LiveSource,
   type LiveVideoFrameRate,
   type LiveVideoQuality,
 } from "../../../shared/live-input";
@@ -91,6 +92,16 @@ export const shareKindOf = (
           kind.capture === capture &&
           (!kind.pictures || kind.pictures === (surface === "window" ? "window" : "screen")),
       ) ?? shareKinds[0]!);
+
+/** What a running share sends, for "Sharing screen". */
+export const sharedWhat = (source: LiveSource) =>
+  source.intent === "live"
+    ? "live audio"
+    : source.kind === "system-audio"
+      ? "system audio"
+      : source.kind === "screen"
+        ? "screen"
+        : "an audio input";
 
 export const qualityLabels: Record<LiveVideoQuality, string> = {
   "720p": "720p, less bandwidth",

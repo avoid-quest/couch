@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { errorText, useSessionGate } from "@/session/session-context";
+import { sharedWhat } from "@/sections/share/share";
 
 /** In the player's top band, local capture stays visible and stoppable; the header has its capsule (sections/share). */
 export function LiveSharingStatus({ className }: { className?: string }) {
@@ -12,7 +13,7 @@ export function LiveSharingStatus({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const source = state?.liveSources?.find((item) => item.id === localLiveSourceId);
   if (!source) return null;
-  const status = `Sharing ${source.intent === "live" ? "live audio" : source.kind === "system-audio" ? "system audio" : source.kind === "screen" ? "screen" : "an audio input"}`;
+  const status = `Sharing ${sharedWhat(source)}`;
   const stop = (className?: string) => (
     <Button
       variant="ghost"

@@ -23,7 +23,13 @@ import { TvModeSettings } from "./couch/TvModeSettings";
 // admin can change them, and the server enforces it. The Couch's name is its host's row in Devices
 // (or This device's Name on the host itself).
 
-export function DevicesPage() {
+export function DevicesPage({
+  pairing,
+  onPairingShown,
+}: {
+  pairing: boolean;
+  onPairingShown: () => void;
+}) {
   const { credentials } = useShell();
   const { connected, details, host, identity, remoteControlEnabled, state } = useSessionGate();
   const scope = useSettingsScope();
@@ -44,6 +50,8 @@ export function DevicesPage() {
           }
           tvs={new Set(state?.devices?.filter((device) => device.tv).map((device) => device.id))}
           hostTv={!!(details?.tvAppliance ?? details?.tvPresentation)}
+          pairing={pairing}
+          onPairingShown={onPairingShown}
         />
       )}
       {credentials && (

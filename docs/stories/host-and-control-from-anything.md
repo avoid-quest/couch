@@ -19,7 +19,8 @@ Couch app can control it, and the same app can join another Couch instead.
 5. Watching fullscreen on a phone (in the Player on iPhone), tap the picture
    for controls, double-tap the left or right side to go back or forward ten
    seconds, or hold for **2×**. Release to return to the speed you chose.
-6. Closing the window keeps Couch hosting; **Quit Couch** stops it.
+6. Closing the window keeps Couch hosting; Couch's icon in the menu bar or tray
+   opens it, pairs a device, stops sharing and updates, and **Quit Couch** stops it.
 
 ## Done when
 
