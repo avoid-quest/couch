@@ -178,12 +178,13 @@ export function AToZRoom({
           data-nav-row
           className="flex gap-1 max-sm:-mx-(--gutter) max-sm:overflow-x-auto max-sm:px-(--gutter) sm:flex-wrap"
         >
-          {letters.map(({ letter, count }, index) => (
+          {letters.map(({ letter, count }) => (
             <li key={letter} className="shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
-                data-page-first={index === 0 || undefined}
+                // The rail starts on its first letter that holds something.
+                data-page-first={letter === filled[0]?.letter || undefined}
                 className="min-w-9 px-2 text-body font-semibold"
                 disabled={!count}
                 aria-label={`${letter}, ${count}`}

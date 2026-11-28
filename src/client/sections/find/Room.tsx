@@ -10,7 +10,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { ItemMenu, RowOptions, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf, ShelfHeading } from "@/components/Shelf";
 import { TRY_AGAIN } from "@/copy";
 import { StageTitle } from "@/components/Stage";
@@ -326,7 +326,7 @@ export function ListShelf({
       ? [{ label: "Add to Home", run: () => addToHome({ provider, url, title }) }]
       : []),
   ];
-  const menu = options.length ? <RowOptions title={title} actions={options} /> : undefined;
+  const menu = useItemMenu(options);
   return (
     <>
       {reader}
@@ -349,7 +349,7 @@ export function ListShelf({
           </p>
         </section>
       ) : !loading && !shown.length ? null : (
-        <Shelf title={title} href={href} note={note} loading={loading} options={menu}>
+        <Shelf title={title} href={href} note={note} loading={loading} menu={menu}>
           {loading ? (
             <MediaTilesSkeleton shape={frame} />
           ) : (

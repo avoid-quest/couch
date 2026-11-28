@@ -141,7 +141,8 @@ function SearchRoom({ thumbnail }: { thumbnail?: string }) {
 
 /**
  * On the TV the page's first verb (the hero's Play, a list's Play all) takes the focus once it shows and can be pressed,
- * unless the person already pressed something since what it shows (`shows`: the search, the link) began.
+ * unless the person already pressed something since what it shows (`shows`: the search, the link) began, or came Back
+ * to it (the control they left from takes the focus again: useDetailNavigation).
  */
 export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean, shows: string) {
   const pressed = useRef(false);
@@ -161,7 +162,7 @@ export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean
     };
   }, []);
   useLayoutEffect(() => {
-    if (!ready || pressed.current || !isTvPresentation()) return;
+    if (!ready || pressed.current || !isTvPresentation() || history.state?.detailFocus) return;
     page.current?.querySelector<HTMLElement>("[data-page-first]")?.focus({ preventScroll: true });
   }, [ready]);
 }
