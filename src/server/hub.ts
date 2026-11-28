@@ -2570,7 +2570,8 @@ export async function createHub(options: HubOptions) {
     requireControl(deviceId, actorId);
     const outputs = chosen(choice, actorId) ?? [outputFor(deviceId, actorId)];
     let playback = on ? servedBy(deviceId) : memberOf(deviceId);
-    if (!playback || (on && (playback.outputs.length > 1 || intentOf(playback) === "live"))) {
+    // Its Device keeps a playback only where nothing else is in its mix: a held publisher stays with its programme.
+    if (!playback || (on && (mixOf(playback).length > 1 || intentOf(playback) === "live"))) {
       if (playback && intentOf(playback) !== "live") requireProgramme(playback, actorId);
       playback = createPlayback();
       playback.createdFor = actor;
@@ -3770,12 +3771,16 @@ export async function createHub(options: HubOptions) {
     prepare: async (entry) => {
       if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
     },
-    reservePlay: (playedBy) => own(playedBy).session.reservePlay(),
-    enqueue: (entry, intent, authorize, playedBy) => {
-      const playback = mediaPlayback(playedBy, intent !== undefined),
+    // Play reserves and starts on the one Session it owns.
+    enqueue: (entry, play, authorize, playedBy) => {
+      const playback = mediaPlayback(playedBy, play),
         permitted = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
-      if (intent !== undefined)
-        playback.session.playNewEntries([entry], { intent, authorize: permitted, playedBy });
+      if (play)
+        playback.session.playNewEntries([entry], {
+          intent: playback.session.reservePlay(),
+          authorize: permitted,
+          playedBy,
+        });
       else playback.session.command({ type: "enqueue", entry }, permitted, playedBy);
     },
   });

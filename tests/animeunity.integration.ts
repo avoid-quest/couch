@@ -494,7 +494,6 @@ test("existing AnimeUnity saves match browsed identities and toggle without dupl
       throw new Error("unused");
     },
     prepare: async () => {},
-    reservePlay: () => 0,
     enqueue() {},
   });
   const send = (path: string, body?: unknown, method = body ? "POST" : "GET") =>

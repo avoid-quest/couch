@@ -602,6 +602,46 @@ test(
   },
 );
 
+const mix = (state: SessionState) =>
+  state.outputs?.map(({ deviceId, picture, sound }) => ({
+    deviceId,
+    picture,
+    sound,
+  }));
+
+test(
+  "Play on from For later reserves and starts its chosen devices on the same playback",
+  { timeout: 15_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await f.play(f.speaker, "radio", speakerId);
+      await until(() => f.speaker.state.currentEntryId === "radio");
+      await f.speaker.command({ type: "enqueue", entry: f.entry("clip") });
+      const { item } = await f.rest("/api/for-later", {
+        reference: { kind: "queue", id: "clip" },
+      });
+      await f.rest(
+        `/api/for-later/${item.id}/load?on=${speakerId}&picture=${speakerId}&sound=${phoneId}`,
+        { mode: "play" },
+      );
+      await until(
+        () => f.phone.state.currentEntryId !== null && f.phone.state.currentEntryId !== "radio",
+      );
+      assert.equal(
+        f.phone.state.queue.find((entry) => entry.id === f.phone.state.currentEntryId)?.title,
+        "clip",
+      );
+      assert.deepEqual(mix(f.phone.state), [
+        { deviceId: speakerId, picture: true, sound: false },
+        { deviceId: phoneId, picture: false, sound: true },
+      ]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 for (const [how, end] of [
   [
     "withdrawing consent",

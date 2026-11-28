@@ -370,6 +370,68 @@ test(
 );
 
 test(
+  "Play on a receiver whose playback holds a private publisher starts without it, and leaves it held there",
+  { timeout: 15_000 },
+  async () => {
+    const f = await liveFixture();
+    try {
+      await f.receiver.command({
+        type: "sharing",
+        sharing: { audio: true, video: true },
+      });
+      await f.publish("screen");
+      await f.publisher.command({
+        type: "enqueue",
+        entry: ordinary(f, "movie"),
+        playNow: true,
+        deviceId: f.publisher.id,
+      });
+      await until(() => !!f.publisher.load());
+      await f.publisher.command({
+        type: "output",
+        deviceId: f.receiver.id,
+        picture: true,
+        level: 50,
+      });
+      await f.publisher.command({
+        type: "playLive",
+        sourceId: "screen",
+        playNow: false,
+      });
+      await f.publisher.command({
+        type: "next",
+        playbackId: f.publisher.state.player.playbackId!,
+      });
+      await until(
+        () =>
+          playingNow(f.receiver) === "Publisher · Screen" &&
+          receivers(f.receiver)?.join() === f.receiver.id,
+      );
+      const screen = f.receiver.state.playback;
+      const other = await f.connect(2);
+      const played = await other.command({
+        type: "enqueue",
+        entry: ordinary(f, "clip"),
+        playNow: true,
+        deviceId: f.receiver.id,
+        outputs: [{ deviceId: f.receiver.id, picture: true, sound: true }],
+      });
+      assert.equal(played.ok, true, played.error ?? "");
+      await until(() => playingNow(other) === "clip");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.notEqual(other.state.playback, screen);
+      assert.deepEqual(receivers(other), [f.receiver.id]);
+      assert.equal(
+        f.publisher.state.playbacks?.find((playback) => playback.id === screen)?.held?.deviceId,
+        f.publisher.id,
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
   "a private receiver joining the publisher's waiting playback leaves the publisher in control of it, and no further",
   { timeout: 15_000 },
   async () => {

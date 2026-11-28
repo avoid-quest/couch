@@ -65,7 +65,6 @@ function forLater(providers: ReturnType<typeof createProviders>) {
       throw new Error("unused");
     },
     prepare: async () => {},
-    reservePlay: () => 0,
     enqueue() {},
     webMetadata: (url, collection) =>
       providerMetadata(providers.cachedItem(url, collection), !!collection),
