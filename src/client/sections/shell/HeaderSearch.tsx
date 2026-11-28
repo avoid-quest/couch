@@ -115,9 +115,12 @@ export function HeaderSearch({ className }: { className?: string }) {
     return linkTarget(pasted)?.shape === "page" ? "link:open" : "link:play";
   };
   const type = (next: string) => {
-    moved.current = false;
+    // An edit that only adds or removes spaces keeps what's chosen; any other edit hands the selection back to the top row.
+    if (next.trim() !== value.trim() || !next.trim()) {
+      moved.current = false;
+      setSelected(first(next));
+    }
     setDraft((current) => ({ ...current, value: next }));
-    setSelected(first(next));
     setOpen(true);
   };
   const show = () => {
@@ -879,7 +882,7 @@ function Typed({
   // once the keys or the pointer move, it stays.
   useLayoutEffect(() => {
     if (topValue && remote.typed === text) onTop(topValue);
-  }, [topValue, remote.typed]);
+  }, [topValue, remote.typed, text]);
   // The row whose menu is open, for this query.
   const [menu, setMenu] = useState<{ query: string; id: string } | null>(null);
   const opened = menu?.query === remote.query ? menu.id : null;
