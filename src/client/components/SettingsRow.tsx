@@ -35,7 +35,13 @@ export function SettingsRow({
       )}
       {...props}
     >
-      <FieldContent className="min-w-0 basis-60 gap-1 [overflow-wrap:anywhere]">
+      {/* A lone label takes only its own width, so a wide control still fits beside it. */}
+      <FieldContent
+        className={cn(
+          "min-w-0 gap-1 [overflow-wrap:anywhere]",
+          description ? "basis-60" : "basis-auto",
+        )}
+      >
         {htmlFor ? (
           <FieldLabel htmlFor={htmlFor} className={cn("items-center", labelLine)}>
             {label}

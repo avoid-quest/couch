@@ -90,6 +90,8 @@ export function PlaybackPage() {
             onCommand={run}
           />
         )}
+      </SettingsSection>
+      <SettingsSection title="Where it plays">
         <SettingsRow
           label="Ask every device where a shared source plays"
           htmlFor="ask-every-device"
