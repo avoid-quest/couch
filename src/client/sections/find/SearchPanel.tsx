@@ -40,7 +40,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayOn } from "@/components/PlayOn";
 import type { Action } from "../../../shared/protocol";
 import {
   linkTarget,
@@ -73,7 +73,7 @@ import { ArtLevel, useLevel } from "@/components/Level";
 import { DurationBar } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Skeleton } from "@/components/ui/skeleton";
-import { verbRow } from "@/components/DetailHeader";
+import { SaveToggle, verbRow } from "@/components/DetailHeader";
 import { StageTitle } from "@/components/Stage";
 import { useRoomLead } from "@/components/AmbientLight";
 import { useLiveSourceHits } from "./useLiveSourceHits";
@@ -82,6 +82,7 @@ import {
   hitMeta,
   hitSources,
   names,
+  pageAction,
   pressPlays,
   quickSources,
   shapeOf,
@@ -546,19 +547,28 @@ const hitRelated = (
 
 /**
  * The closest match as a hero on the room: its artwork standing as an object, its title, one meta line and its links,
- * then its main verb (focused first, on the TV too), Queue and its menu. On a phone the artwork sits beside the title, so
+ * then its main verb with where it plays (focused first, on the TV too), Save and its menu. On a phone the artwork sits beside the title, so
  * the first screen holds the shelves too.
  */
 function TopResult({ hit }: { hit: SearchHit }) {
   const { on } = usePlayOn();
   const main = hit.primary;
   const label = main.label === "Play" || main.label === "Resume" ? on(main.label) : main.label;
-  const queue = hit.actions.find(
-    (action) => action.label === "Queue" || action.label === "Queue all",
-  );
-  const rest = useItemMenu(
-    hit.actions.filter((action) => action !== queue && action.label !== main.label),
-  );
+  // What plays leads with the pill, Play and where it plays; its page stays the title's link and the menu's Details.
+  const play = hit.actions.find((action) => action.label === "Play" && action.run);
+  const playOn =
+    play &&
+    hit.actions.find((action) => action.playOn && !action.sharingDeviceId && !action.liveAudio);
+  const own = hit.actions.find((action) => action.group === "keep" && action.pressed !== undefined);
+  const rest = useItemMenu([
+    ...(play && main.label === "Open" && main.href
+      ? [{ label: "Details", group: "go", disabled: main.disabled, run: main.run }]
+      : []),
+    ...hit.actions.filter(
+      (action) =>
+        action !== play && action !== playOn && action !== own && action.label !== main.label,
+    ),
+  ]);
   const meta = hitMeta(hit);
   const level = useLevel(hitSources(hit));
   return (
@@ -599,28 +609,48 @@ function TopResult({ hit }: { hit: SearchHit }) {
         <MediaContext {...hitRelated(hit)} />
       </div>
       <div data-nav-row className={cn("col-span-2 min-w-0 md:col-span-1 md:col-start-2", verbRow)}>
-        <Button
-          data-page-first
-          data-play
-          size="lg"
-          asChild={!!main.href && !main.disabled}
-          disabled={main.disabled}
-          onClick={(event) => {
-            if (
-              main.href &&
-              (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-            )
-              return;
-            if (main.href) event.preventDefault();
-            main.run();
-          }}
-        >
-          {main.href && !main.disabled ? <a href={detailHref(main.href)}>{label}</a> : label}
-        </Button>
-        {queue && (
-          <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>
-            {queue.label}
+        {play ? (
+          <PlayPill
+            data-page-first
+            data-play
+            size="lg"
+            label="Play"
+            aria-label={on(`Play ${hit.title}`)}
+            title={hit.title}
+            thumbnail={hit.thumbnail}
+            audioOnly={playOn?.audioOnly}
+            disabled={play.disabled}
+            onClick={() => play.run?.()}
+            playOn={playOn?.playOn}
+            playOnDisabled={playOn?.disabled}
+          />
+        ) : (
+          <Button
+            data-page-first
+            data-play
+            size="lg"
+            asChild={!!main.href && !main.disabled}
+            disabled={main.disabled}
+            onClick={(event) => {
+              if (
+                main.href &&
+                (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              )
+                return;
+              if (main.href) event.preventDefault();
+              main.run();
+            }}
+          >
+            {main.href && !main.disabled ? <a href={detailHref(main.href)}>{label}</a> : label}
           </Button>
+        )}
+        {own && (
+          <SaveToggle
+            aria-label={`Save ${hit.title}`}
+            saved={!!own.pressed}
+            disabled={own.disabled}
+            onClick={() => own.run?.()}
+          />
         )}
         <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
@@ -711,7 +741,7 @@ export function HitTile({
       href={!play ? hit.primary.href : undefined}
       onClick={() => primary.run()}
       menu={[
-        ...(play && hit.primary.label !== "Play" ? [hit.primary] : []),
+        ...(play && hit.primary.label !== "Play" ? [pageAction(hit)] : []),
         ...hit.actions.filter((action) => action.label !== primary.label),
       ]}
     />
@@ -818,15 +848,7 @@ export const HitList = memo(function HitList({
               menu={
                 play || hit.primary.label === "Play"
                   ? [
-                      ...(play && hit.primary.label !== "Play"
-                        ? [
-                            {
-                              label: hit.primary.label,
-                              disabled: hit.primary.disabled,
-                              run: hit.primary.run,
-                            },
-                          ]
-                        : []),
+                      ...(play && hit.primary.label !== "Play" ? [pageAction(hit)] : []),
                       ...hit.actions.filter((action) => action.label !== "Play"),
                     ]
                   : hit.actions

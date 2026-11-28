@@ -173,6 +173,26 @@ its action is a remote's next stop below the thing it belongs to.
 hangs from the control and fits the screen; on phones a longer panel rises as a
 Sheet from the bottom, by the dock, while short menus stay Popovers.
 
+## Menus
+
+A row or tile has one press and one "…"; a Stage (an item's page, Search's top
+result, a room's lead, Continue's lead) has its main verb with where it plays
+(`PlayPill`), Save and its "…". Every other verb is in the menu, never a button
+beside it, and never the press again.
+
+An item's menu draws its groups in one order, a separator between them and no
+group labels: **Play** (Play or Resume, From start, Play next, Queue, then Play
+on…), **Keep** (Save or Remove from For later, Add {name} to Home… or Show {name}
+on Home), **Go** (Details, at most two Go to {name}, nearest first), **Share**
+(Copy link, or Share… on a phone, and Open in browser) and **This list** (Move up,
+Move down, Mark as watched, Remove from {list}, Hide). A menu keeps to nine rows:
+past that Open in browser goes, then the second Go to, then Queue beside Play
+next. What never applies is hidden; what can't run now is disabled. A label that
+opens a panel ends in "…". Copy link hands out only a public page: never Couch's
+address, a stream or a private link's secret, and nothing for Live TV or shared
+sources. On phones a menu of more than two rows is a Sheet titled with the
+item's name; the TV opens it with a held OK.
+
 ## Copy
 
 Sentence case, short: say what happened and what to do next. A problem says
@@ -180,7 +200,9 @@ Sentence case, short: say what happened and what to do next. A problem says
 sentence when it sent one; never codes, script errors or an "Error:" prefix. Parts of a line
 join with commas (`metaLine`), never middle dots. Shared strings live in
 `src/client/copy.ts`. Verbs are the same everywhere: Play, Pause, Stop, Next,
-Play next, Queue, Save, Open, Resume, From start, Remove, Hide. Couch's own words:
+Play next, Queue, Save, Open, Resume, From start, Details, Move up, Move down,
+Remove from {list} (bare Remove only where the row is in one list and has nothing
+else), Hide, Copy link. Couch's own words:
 Where it plays, Move here, Play on {name}, Remote, Share on network, Up next (the
 list), Queue (the verb), admin. Words for people follow
 [voice](product/voice.md).

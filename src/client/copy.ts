@@ -17,3 +17,7 @@ export const PAGE_PROBLEM = "Couldn't open this page.";
 /** Copy for Saved recovery actions. */
 export const savedNotice = (title: string, saved: boolean) =>
   saved ? `Saved ${title}.` : `Removed ${title} from Saved.`;
+
+/** A menu's Keep toggle says what it will do: Save, or once kept, take it out of its list. */
+export const saveLabel = (saved: boolean, list: "For later" | "Saved" = "For later") =>
+  saved ? `Remove from ${list}` : "Save";

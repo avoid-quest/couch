@@ -12,6 +12,7 @@ import { forLaterQuery } from "@/api/for-later";
 import { historyQuery } from "@/api/progress";
 import { providerPageQuery } from "@/api/providers";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import type { MenuAction } from "@/components/RowMenu";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -245,7 +246,9 @@ export function AddSectionPanel({
 }
 
 /** What a played or saved item belongs to that Home can follow: its series or programme, else its channel. */
-function itemTarget(item: Pick<QueueEntry, "collection" | "creator">): AddTarget | undefined {
+export function itemTarget(
+  item: Pick<QueueEntry, "collection" | "creator">,
+): AddTarget | undefined {
   const [outer] = collectionLinks(item.collection);
   if (outer) return { provider: outer.provider, url: outer.url, title: outer.title };
   const provider = item.creator && providerForUrl(item.creator.url);
@@ -440,6 +443,46 @@ function AddToHomeForm({ target, done }: { target: AddTarget; done: () => void }
   );
 }
 
+// A YouTube channel's tabs Home can follow, in the order a playing video belongs to them: a live one to Live streams.
+const channelTabs = (live: boolean) =>
+  live ? ["streams", "videos", "shorts"] : ["videos", "shorts", "streams"];
+
+/**
+ * The followed section a list is: the list itself, or for a YouTube channel the tab its item plays from (a live
+ * video's Live streams first).
+ */
+function followedFor(target: AddTarget, follows: HomeFollow[], live = false) {
+  const same = follows.find((follow) => follow.url === target.url);
+  if (same || target.provider !== "youtube") return same;
+  const channel = target.url.replace(/\/+$/, "");
+  return channelTabs(live)
+    .map((tab) => follows.find((follow) => follow.url === `${channel}/${tab}`))
+    .find(Boolean);
+}
+
+/**
+ * A menu's Keep row for a series, programme or channel: "Add {name} to Home…" opens Add to Home; once its list is on
+ * Home, "Show {name} on Home" takes the person to that section, showing it again where it is hidden. `entry`, for what
+ * plays, says whether it is live, so a live video finds its channel's Live streams first.
+ */
+export function useHomeAction() {
+  const { changeSection } = useShell();
+  const follows = useHomeFollows();
+  return (target: AddTarget | undefined, entry?: QueueEntry): MenuAction[] => {
+    if (!target) return [];
+    const followed = followedFor(target, follows, !!entry?.endless);
+    return [
+      followed
+        ? {
+            label: `Show ${followed.name} on Home`,
+            group: "keep",
+            run: () => goToFollow(followed.id, changeSection),
+          }
+        : { label: `Add ${target.title} to Home…`, group: "keep", run: () => addToHome(target) },
+    ];
+  };
+}
+
 /** What a playing item belongs to that Home can follow: its season or list, else its channel. */
 function entryTarget(entry: QueueEntry): AddTarget | undefined {
   const [outer, inner] = collectionLinks(entry.collection);
@@ -448,23 +491,6 @@ function entryTarget(entry: QueueEntry): AddTarget | undefined {
     return { provider: list.provider, url: list.url, title: inner ? outer!.title : list.title };
   const provider = entry.creator && providerForUrl(entry.creator.url);
   if (provider) return { provider, url: entry.creator!.url, title: entry.creator!.title };
-}
-
-// A YouTube channel's tabs Home can follow, in the order a playing video belongs to them: a live one to Live streams.
-const channelTabs = (live: boolean) =>
-  live ? ["streams", "videos", "shorts"] : ["videos", "shorts", "streams"];
-
-/**
- * The followed section a playing item's list is: its season or list itself, or for a YouTube channel the tab it plays
- * from (a live video's Live streams first).
- */
-function followedFor(entry: QueueEntry, target: AddTarget, follows: HomeFollow[]) {
-  const same = follows.find((follow) => follow.url === target.url);
-  if (same || target.provider !== "youtube" || target.url !== entry.creator?.url) return same;
-  const channel = target.url.replace(/\/+$/, "");
-  return channelTabs(!!entry.endless)
-    .map((tab) => follows.find((follow) => follow.url === `${channel}/${tab}`))
-    .find(Boolean);
 }
 
 /**
@@ -477,7 +503,7 @@ export function AddToHomeButton({ entry }: { entry: QueueEntry }) {
   const { rows } = useHomeRows();
   const target = entryTarget(entry);
   if (!target) return null;
-  const followed = followedFor(entry, target, follows);
+  const followed = followedFor(target, follows, !!entry.endless);
   if (followed) {
     const hidden = rows.some((row) => row.id === followed.id && !row.shown);
     return (

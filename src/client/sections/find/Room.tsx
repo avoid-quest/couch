@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Bookmark, ChevronLeft, HousePlus } from "lucide-react";
+import { ChevronLeft, HousePlus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { providerPageQuery } from "@/api/providers";
 import { majorityShape, providerItemShape } from "@/art-shape";
@@ -9,7 +9,8 @@ import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayOn } from "@/components/PlayOn";
+import { SaveToggle } from "@/components/DetailHeader";
 import { ItemMenu, RowOptions, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf, ShelfHeading } from "@/components/Shelf";
 import { TRY_AGAIN } from "@/copy";
@@ -409,13 +410,13 @@ export function RoomLead({
   const play =
     item.kind === "media" ? hit.actions.find((action) => action.label === "Play") : undefined;
   const playOn = hit.actions.find((action) => action.label === "Play on");
-  const own = hit.actions.find((action) => action.label === "Save" || action.label === "Saved");
+  const own = hit.actions.find((action) => action.group === "keep" && action.pressed !== undefined);
   const keep =
-    save ??
-    (own && { saved: own.label === "Saved", run: () => own.run?.(), disabled: own.disabled });
+    save ?? (own && { saved: !!own.pressed, run: () => own.run?.(), disabled: own.disabled });
+  // The pill holds Play and where it plays, the icon Save; the "…" holds the rest.
   const rest = useItemMenu(
     hit.actions.filter(
-      (action) => !["Play", "Play on", "Save", "Saved", "Open"].includes(action.label),
+      (action) => action !== play && action !== playOn && action !== own && action.label !== "Open",
     ),
   );
   const href = collectionLocation(item);
@@ -436,19 +437,18 @@ export function RoomLead({
         )}
         <div data-nav-row className="mt-1 flex flex-wrap items-center gap-2">
           {play ? (
-            <>
-              <Button data-room-lead-verb size="lg" disabled={play.disabled} onClick={press}>
-                {on("Play")}
-              </Button>
-              {playOn?.playOn && (
-                <PlayOnMenu
-                  size="lg"
-                  title={item.title}
-                  disabled={playOn.disabled}
-                  onPlay={(choice) => playOn.playOn?.(choice)}
-                />
-              )}
-            </>
+            <PlayPill
+              data-room-lead-verb
+              size="lg"
+              label="Play"
+              aria-label={on(`Play ${item.title}`)}
+              title={item.title}
+              thumbnail={item.thumbnail}
+              disabled={play.disabled}
+              onClick={press}
+              playOn={playOn?.playOn}
+              playOnDisabled={playOn?.disabled}
+            />
           ) : (
             <Button data-room-lead-verb size="lg" variant="secondary" asChild>
               <a
@@ -471,17 +471,12 @@ export function RoomLead({
             </Button>
           )}
           {keep && (
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              aria-pressed={keep.saved}
-              aria-label={keep.saved ? `Saved ${item.title}` : `Save ${item.title}`}
-              title={keep.saved ? "Saved" : "Save"}
+            <SaveToggle
+              aria-label={`Save ${item.title}`}
+              saved={keep.saved}
               disabled={keep.disabled}
               onClick={keep.run}
-            >
-              <Bookmark aria-hidden="true" className={cn(keep.saved && "fill-current")} />
-            </Button>
+            />
           )}
           <ItemMenu menu={rest} size="icon-lg" title={item.title} className="opacity-100" />
         </div>

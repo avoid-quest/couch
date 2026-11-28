@@ -11,10 +11,12 @@ import type { ComponentProps } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
-import { forLaterQuery, loadForLater } from "@/api/for-later";
+import { forLaterQuery, loadForLater, removeForLater, restoreForLater } from "@/api/for-later";
+import type { MenuAction } from "@/components/RowMenu";
 import { radioProgrammesQuery } from "@/api/radio";
 import { useStationSave } from "@/sections/home/on-air";
-import { removeFromContinue, undoProgressAction } from "@/api/progress";
+import { markWatched, removeFromContinue, undoProgressAction } from "@/api/progress";
+import { itemTarget, useHomeAction } from "@/sections/home/AddToHome";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
 import { PageHeader } from "@/components/PageHeader";
@@ -44,7 +46,7 @@ import { sourceLabel } from "@/source-label";
 import { usePlayOn } from "@/components/PlayOn";
 import { useDetailNavigation, useOwnSearch } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
-import { deviceName, savedNotice } from "@/copy";
+import { deviceName, saveLabel, savedNotice } from "@/copy";
 
 const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = (typeof kinds)[number];
@@ -274,7 +276,7 @@ function QueueDetails({ id }: { id: string }) {
           run: () => action.mutate(() => run({ type: "play", entryId: item.id })),
         }}
         save={save}
-        more={browserActions(queuePageUrl(item))}
+        more={browserActions(queuePageUrl(item), item.title)}
       />
       {radio ? (
         <RelatedRadio
@@ -298,28 +300,42 @@ export function useForLaterToggle(
   reference: () => ForLaterReference,
   action: ReturnType<typeof useDetailAction>,
 ) {
+  return useForLaterSaves(action)(url, reference);
+}
+
+/** useForLaterToggle for each item of a list or shelf. */
+export function useForLaterSaves(action: ReturnType<typeof useDetailAction>) {
   const shell = useShell();
   const { connected } = useSessionGate();
   const client = useQueryClient();
   const later = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected });
-  const saved = url ? later.data?.items.find((item) => item.url === url) : undefined;
-  return {
-    saved: !!saved,
-    disabled: !connected || !later.data || action.isPending,
-    run: () =>
-      action.mutate(async () => {
-        await (saved
-          ? apiSend(
-              shell.credentials,
-              `/api/for-later/${encodeURIComponent(saved.id)}`,
-              undefined,
-              "DELETE",
-            )
-          : apiSend(shell.credentials, "/api/for-later", { reference: reference() }));
-        await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
-      }),
+  return (url: string | undefined, reference: () => ForLaterReference) => {
+    const saved = url ? later.data?.items.find((item) => item.url === url) : undefined;
+    return {
+      saved: !!saved,
+      disabled: !connected || !later.data || action.isPending,
+      run: () =>
+        action.mutate(async () => {
+          await (saved
+            ? removeForLater(shell.credentials, saved.id)
+            : apiSend(shell.credentials, "/api/for-later", { reference: reference() }));
+          await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
+        }),
+    };
   };
 }
+
+/** A Save toggle as a menu's Keep row. */
+export const saveAction = (
+  save: { saved: boolean; disabled?: boolean; run: () => void },
+  list?: "For later" | "Saved",
+): MenuAction => ({
+  label: saveLabel(save.saved, list),
+  group: "keep",
+  pressed: save.saved,
+  disabled: save.disabled,
+  run: save.run,
+});
 
 /** What For later keeps of a played item: its page, which its saved copy plays. */
 export const historyReference = (item: HistoryItem): ForLaterReference => ({
@@ -355,6 +371,16 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
         result.expiresAt - Date.now(),
       );
   };
+  // An episode marked as watched, its series' Play goes on to the next one.
+  const mark = async (watched: boolean) => {
+    await markWatched(shell.credentials, item.mediaId, watched);
+    refresh();
+    session.offerUndo(`Marked ${item.title} as ${watched ? "watched" : "unwatched"}.`, async () => {
+      await markWatched(shell.credentials, item.mediaId, !watched);
+      refresh();
+    });
+  };
+  const homeAction = useHomeAction();
   const start = (on?: PlayOn) => shell.playHistory(item, { fromStart: item.position === 0, on });
   return (
     <>
@@ -403,11 +429,23 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
           run: (on) => action.mutate(() => play(start, on)),
         }}
         more={[
-          ...browserActions(item.url),
+          ...homeAction(itemTarget(item)),
+          ...browserActions(item.url, item.title),
+          ...(item.collection
+            ? [
+                {
+                  label: item.watched ? "Mark as unwatched" : "Mark as watched",
+                  group: "list",
+                  disabled: blocked,
+                  run: () => action.mutate(() => mark(!item.watched)),
+                },
+              ]
+            : []),
           ...(item.position && !item.watched
             ? [
                 {
                   label: "Remove from Continue",
+                  group: "list",
                   disabled: blocked,
                   run: () => action.mutate(remove),
                 },
@@ -431,27 +469,17 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
   const client = useQueryClient();
   const action = useDetailAction();
   const { play } = usePlayOn();
+  const homeAction = useHomeAction();
   const list = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected });
   const items = list.data?.items ?? [];
   const index = items.findIndex((saved) => saved.id === item.id);
   const refresh = () =>
     client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   const remove = async () => {
-    const result = await apiSend<{ undoToken?: string }>(
-      shell.credentials,
-      `/api/for-later/${encodeURIComponent(item.id)}`,
-      undefined,
-      "DELETE",
-    );
+    const result = await removeForLater(shell.credentials, item.id);
     if (result?.undoToken)
       offerUndo(savedNotice(item.title, false), async () => {
-        await apiSend(
-          shell.credentials,
-          "/api/for-later/restore",
-          { token: result.undoToken },
-          "POST",
-          10_000,
-        );
+        await restoreForLater(shell.credentials, result.undoToken!);
         await refresh();
       });
     await refresh();
@@ -502,19 +530,23 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
           run: (on) => action.mutate(() => play((on) => load("play", on), on)),
         }}
         more={[
-          ...browserActions(item.url),
+          ...homeAction(itemTarget(item)),
+          ...browserActions(item.url, item.title),
           {
             label: "Move up",
+            group: "list",
             disabled: !connected || action.isPending || index <= 0,
             run: () => action.mutate(() => move(-1)),
           },
           {
             label: "Move down",
+            group: "list",
             disabled: !connected || action.isPending || index < 0 || index >= items.length - 1,
             run: () => action.mutate(() => move(1)),
           },
           {
-            label: "Remove",
+            label: "Remove from For later",
+            group: "list",
             disabled: !connected || action.isPending,
             run: () => action.mutate(remove),
           },
@@ -604,7 +636,10 @@ function RadioDetails({ item }: { item: RadioStation }) {
           audioOnly: true,
           run: (on) => action.mutate(() => play((on) => shell.enqueueRadio(item, true, on), on)),
         }}
-        more={browserActions(programme?.programmeUrl ?? item.homepage)}
+        more={browserActions(
+          programme?.programmeUrl ?? item.homepage,
+          programme?.title || item.name,
+        )}
       >
         <RadioNext show={next} className="mt-2" />
       </DetailLayout>

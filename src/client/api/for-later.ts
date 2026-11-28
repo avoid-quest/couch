@@ -26,3 +26,14 @@ export const loadForLater = (
     "POST",
     30_000,
   );
+
+/** Takes an item out of For later; the token Core answers with restores it, as its Undo. */
+export const removeForLater = (credentials: ApiCredentials, id: string) =>
+  apiSend<{ undoToken?: string }>(
+    credentials,
+    `/api/for-later/${encodeURIComponent(id)}`,
+    undefined,
+    "DELETE",
+  );
+export const restoreForLater = (credentials: ApiCredentials, token: string) =>
+  apiSend(credentials, "/api/for-later/restore", { token }, "POST", 10_000);

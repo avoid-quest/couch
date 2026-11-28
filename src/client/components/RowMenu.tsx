@@ -3,6 +3,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type HTMLAttributes,
   type MouseEvent,
@@ -19,7 +20,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { startHold } from "@/hold";
+import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
+import { isTvPresentation } from "@/session/presentation";
 import { deviceId } from "@/session/device-id";
 import type { PlayOn } from "../../shared/protocol";
 import { ChooseWherePlays } from "./ChooseWherePlays";
@@ -29,12 +34,16 @@ import { PlayOnGroup, usePlayOn } from "./PlayOn";
  * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture;
  * thumbnail: the item's picture there; verb: its Play's word, "Resume" for an item partly played);
  * a shared source's (sharingDeviceId, liveAudio) is instead a group of the online Devices. node is its own item, such as a link.
+ * group sets it apart from the verbs of another group (docs/design.md "Menus"); now runs it in the press itself, for
+ * what the browser allows only there (the clipboard, the share sheet).
  */
 export type MenuAction = {
   label: string;
+  group?: string;
   disabled?: boolean;
   pressed?: boolean;
   run?: () => void;
+  now?: boolean;
   node?: ReactNode;
   playOn?: (on: PlayOn) => void;
   audioOnly?: boolean;
@@ -44,52 +53,101 @@ export type MenuAction = {
   liveAudio?: boolean;
 };
 
+/** An item's groups, in the order its menu shows them; other menus show their groups in the order they give them. */
+const itemGroups = ["play", "keep", "go", "share", "list"];
+
+/** The menu's rows by group, Play on… last among the play verbs, with a separator wherever the group changes. */
+function arranged(actions: MenuAction[]) {
+  const rank = (action: MenuAction) =>
+    itemGroups.indexOf(action.group ?? "") * 2 + (action.playOn ? 1 : 0);
+  return actions
+    .map((action, index) => ({ action, index }))
+    .sort((a, b) => rank(a.action) - rank(b.action) || a.index - b.index)
+    .map(({ action }, index, all) => ({
+      action,
+      separated: index > 0 && all[index - 1]!.action.group !== action.group,
+    }));
+}
+
+const sheetRow =
+  "h-auto min-h-11 w-full justify-start rounded-md px-2 py-2.5 text-left font-normal whitespace-normal";
+
 // A shared source's Play on devices are a labelled group, set apart from the verbs on either side.
 function Items({
   actions,
   on,
   select,
   choose,
+  sheet,
 }: {
   actions: MenuAction[];
   on: (label: string) => string;
-  select: (run?: () => void) => void;
+  select: (action: MenuAction) => void;
   choose: (action: MenuAction) => void;
+  sheet: boolean;
 }) {
-  return actions.map((action, index) =>
-    action.node ? (
-      <DropdownMenuItem key={action.label} asChild>
-        {action.node}
-      </DropdownMenuItem>
-    ) : action.playOn && (action.sharingDeviceId || action.liveAudio) ? (
+  const Separator = sheet ? SheetSeparator : DropdownMenuSeparator;
+  return arranged(actions).map(({ action, separated }, index, all) => {
+    const shared = action.playOn && (action.sharingDeviceId || action.liveAudio);
+    const label = action.playOn
+      ? `${action.label}…`
+      : action.label === "Play" || action.label === "Resume"
+        ? on(action.label)
+        : action.label;
+    return (
       <Fragment key={action.label}>
-        <PlayOnGroup
-          separated={index > 0}
-          disabled={action.disabled}
-          onPlay={(deviceId) => action.playOn?.({ deviceId })}
-          sharingDeviceId={action.sharingDeviceId}
-          liveAudio={action.liveAudio}
-        />
-        {index < actions.length - 1 && <DropdownMenuSeparator />}
+        {separated && !shared && <Separator />}
+        {shared ? (
+          <>
+            <PlayOnGroup
+              separated={index > 0}
+              sheet={sheet}
+              disabled={action.disabled}
+              onPlay={(deviceId) => action.playOn?.({ deviceId })}
+              sharingDeviceId={action.sharingDeviceId}
+              liveAudio={action.liveAudio}
+            />
+            {index < all.length - 1 && <Separator />}
+          </>
+        ) : sheet ? (
+          <Button
+            variant="ghost"
+            asChild={!!action.node}
+            disabled={action.disabled}
+            className={sheetRow}
+            onClick={() => (action.playOn ? choose(action) : select(action))}
+          >
+            {action.node ?? label}
+          </Button>
+        ) : action.node ? (
+          <DropdownMenuItem asChild>{action.node}</DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            disabled={action.disabled}
+            onSelect={() => (action.playOn ? choose(action) : select(action))}
+          >
+            {label}
+          </DropdownMenuItem>
+        )}
       </Fragment>
-    ) : action.playOn ? (
-      <DropdownMenuItem
-        key={action.label}
-        disabled={action.disabled}
-        onSelect={() => choose(action)}
-      >
-        {action.label}…
-      </DropdownMenuItem>
-    ) : (
-      <DropdownMenuItem
-        key={action.label}
-        disabled={action.disabled}
-        onSelect={() => select(action.run)}
-      >
-        {action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}
-      </DropdownMenuItem>
-    ),
-  );
+    );
+  });
+}
+
+const SheetSeparator = () => <Separator className="my-1" />;
+
+// Past nine rows a menu is hard to read and to walk with a remote: these go first, in turn (docs/design.md "Menus").
+const trims: ((action: MenuAction, rows: MenuAction[]) => boolean)[] = [
+  (action) => action.label === "Open in browser",
+  (action, rows) =>
+    rows.filter((row) => row.group === "go" && row.label.startsWith("Go to "))[1] === action,
+  (action, rows) => action.label === "Queue" && rows.some((row) => row.label === "Play next"),
+];
+function trimmed(actions: MenuAction[]) {
+  let rows = actions;
+  for (const trim of trims)
+    if (rows.length > 9) rows = rows.filter((action) => !trim(action, rows));
+  return rows;
 }
 
 const own = (event: { currentTarget: Element; target: EventTarget }) =>
@@ -115,23 +173,36 @@ type ItemProps = Pick<
 export function useItemMenu(actions: MenuAction[]) {
   const { devices, on, queueAllowed } = usePlayOn();
   // Play on waits for a second online Device, so it alone never makes a menu.
-  const shown = actions.filter(
-    (action) =>
-      (queueAllowed !== false || (action.label !== "Queue" && action.label !== "Play next")) &&
-      (!action.playOn ||
-        devices.some(
-          (device) =>
-            !action.liveAudio ||
-            (device.id !== action.sharingDeviceId &&
-              (device.id === deviceId() || device.sharing?.audio)),
-        )),
+  const shown = trimmed(
+    actions.filter(
+      (action) =>
+        (queueAllowed !== false || !["Queue", "Queue all", "Play next"].includes(action.label)) &&
+        (!action.playOn ||
+          devices.some(
+            (device) =>
+              !action.liveAudio ||
+              (device.id !== action.sharingDeviceId &&
+                (device.id === deviceId() || device.sharing?.audio)),
+          )),
+    ),
   );
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const press = useRef<{ release: () => boolean; x: number; y: number } | null>(null);
   const held = useRef(false);
+  // macOS opens a context menu as the right button goes down: its release, over a row, is not a choice.
+  const pressing = useRef(false);
   if (!shown.length)
-    return { shown, on, open: false, setOpen, opener, item: {} as ItemProps, target: {} };
+    return {
+      shown,
+      on,
+      open: false,
+      setOpen,
+      opener,
+      pressing,
+      item: {} as ItemProps,
+      target: {},
+    };
   // Focus comes back to what opened it: the control pressed, else the item's primary target.
   const openFrom = (item: HTMLElement, target: EventTarget) => {
     const control =
@@ -152,6 +223,10 @@ export function useItemMenu(actions: MenuAction[]) {
     // A portal's events reach the item through React, so only the item's own open its menu.
     onContextMenu: (event: MouseEvent<HTMLElement>) => {
       event.preventDefault();
+      if (event.buttons & 2) {
+        pressing.current = true;
+        window.addEventListener("pointerup", () => (pressing.current = false), { once: true });
+      }
       if (press.current) held.current = true;
       cancel();
       if (own(event)) openFrom(event.currentTarget, event.target);
@@ -193,7 +268,16 @@ export function useItemMenu(actions: MenuAction[]) {
       }
     },
   };
-  return { shown, on, open, setOpen, opener, item, target: { "data-item-menu": "" } };
+  return {
+    shown,
+    on,
+    open,
+    setOpen,
+    opener,
+    pressing,
+    item,
+    target: { "data-item-menu": "" },
+  };
 }
 
 /** Secondary verbs beside a settings row's main control. */
@@ -210,9 +294,10 @@ export function RowOptions({
 }
 
 /**
- * The item's "…" ("Options for {title}") and its one menu, a controlled DropdownMenu. It hangs from the "…", or from
- * the whole item where the "…" is hidden (a row whose page holds its verbs), so it opens in one place whatever opened
- * it. The "…" shows on touch screens, and elsewhere while the item is hovered or holds focus.
+ * The item's "…" ("Options for {title}") and its one menu. On desktops and the TV a controlled DropdownMenu hangs from
+ * the "…", or from the whole item where the "…" is hidden (a row whose page holds its verbs), so it opens in one place
+ * whatever opened it; on phones a menu of more than two rows is a Sheet rising from the bottom. The "…" shows on touch
+ * screens, and elsewhere while the item is hovered or holds focus.
  */
 export function ItemMenu({
   menu,
@@ -227,6 +312,8 @@ export function ItemMenu({
   hidden?: boolean;
   runAfterClose?: boolean;
 } & ComponentProps<typeof Button>) {
+  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const sheet = !desktop && !isTvPresentation() && menu.shown.length > 2;
   const trigger = useRef<HTMLButtonElement>(null);
   const outside = useRef(false);
   const acted = useRef(false);
@@ -240,15 +327,19 @@ export function ItemMenu({
       from.current = menu.opener.current ?? trigger.current;
       setChoosing(action);
     };
+    if (sheet) menu.setOpen(false);
   };
   // A verb runs from the item, not the closing menu, so what it records (Details' opener, Up next's removal) is the item.
-  const select = (run?: () => void) => {
+  // A Sheet's verbs run once it has given the focus back, as a settings row's do.
+  const select = (action: MenuAction) => {
     acted.current = true;
-    if (runAfterClose) deferred.current = run;
+    if (action.now) action.run?.();
+    else if (runAfterClose || sheet) deferred.current = action.run;
     else {
       (menu.opener.current ?? trigger.current)?.focus();
-      run?.();
+      action.run?.();
     }
+    if (sheet) menu.setOpen(false);
   };
   // A verb that takes its own item away (Remove, Saved) leaves focus with the item's neighbour in its list or shelf, on
   // the same control where it has one; a list with its own rule (Up next, Library) has moved it already.
@@ -272,36 +363,77 @@ export function ItemMenu({
     [],
   );
   if (!menu.shown.length) return null;
-  return (
-    <DropdownMenu
-      modal={false}
-      open={menu.open}
-      onOpenChange={(open) => {
-        if (open) menu.opener.current = null;
-        menu.setOpen(open);
-      }}
+  const closed = (event: Event) => {
+    event.preventDefault();
+    // Back to the item or its "…", unless a press went elsewhere or Remove took the row away (its list moves focus on).
+    const to = menu.opener.current ?? trigger.current;
+    if (!outside.current && to?.isConnected) to.focus();
+    outside.current = false;
+    // A settings confirmation opens after the menu releases its focus scope, so Cancel returns to the row.
+    const run = deferred.current;
+    deferred.current = undefined;
+    run?.();
+  };
+  const button = hidden ? (
+    <span
+      aria-hidden="true"
+      aria-label={`Options for ${title}`}
+      className="pointer-events-none absolute inset-0"
+    />
+  ) : (
+    <Button
+      ref={trigger}
+      data-row-options
+      variant="ghost"
+      size="icon"
+      aria-label={`Options for ${title}`}
+      className={className}
+      {...props}
     >
-      <DropdownMenuTrigger asChild>
-        {hidden ? (
-          <span
-            aria-hidden="true"
-            aria-label={`Options for ${title}`}
-            className="pointer-events-none absolute inset-0"
-          />
-        ) : (
-          <Button
-            ref={trigger}
-            data-row-options
-            variant="ghost"
-            size="icon"
-            aria-label={`Options for ${title}`}
-            className={className}
-            {...props}
-          >
-            <MoreHorizontal aria-hidden="true" />
-          </Button>
-        )}
-      </DropdownMenuTrigger>
+      <MoreHorizontal aria-hidden="true" />
+    </Button>
+  );
+  const items = (
+    <Items actions={menu.shown} on={menu.on} select={select} choose={choose} sheet={sheet} />
+  );
+  // Not part of the menu: the panel opens from what opened the menu once it has closed.
+  const panel = choosing?.playOn && (
+    <ChooseWherePlays
+      title={title}
+      thumbnail={choosing.thumbnail}
+      verb={choosing.verb}
+      audioOnly={choosing.audioOnly}
+      onPlay={choosing.playOn}
+      open
+      onOpenChange={(open) => !open && setChoosing(null)}
+      anchor={from}
+    />
+  );
+  const change = (open: boolean) => {
+    if (open) menu.opener.current = null;
+    menu.setOpen(open);
+  };
+  if (sheet)
+    return (
+      <Sheet open={menu.open} onOpenChange={change}>
+        <SheetTrigger asChild>{button}</SheetTrigger>
+        <SheetContent
+          side="bottom"
+          aria-describedby={undefined}
+          className="max-h-[85dvh] overflow-y-auto px-(--gutter) py-4"
+          onCloseAutoFocus={closed}
+        >
+          <div className="mx-auto grid w-full max-w-3xl">
+            <SheetTitle className="mb-2 pr-11 break-words">{title}</SheetTitle>
+            {items}
+          </div>
+        </SheetContent>
+        {panel}
+      </Sheet>
+    );
+  return (
+    <DropdownMenu modal={false} open={menu.open} onOpenChange={change}>
+      <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
       {/* Radix lands a keyboard or a remote (whose keys it hears) on the first verb, and leaves a pointer on the menu itself. */}
       <DropdownMenuContent
         align="end"
@@ -311,33 +443,17 @@ export function ItemMenu({
         onInteractOutside={() => {
           outside.current = true;
         }}
-        onCloseAutoFocus={(event) => {
+        onCloseAutoFocus={closed}
+        onPointerUpCapture={(event) => {
+          if (!menu.pressing.current) return;
+          menu.pressing.current = false;
           event.preventDefault();
-          // Back to the item or its "…", unless a press went elsewhere or Remove took the row away (its list moves focus on).
-          const to = menu.opener.current ?? trigger.current;
-          if (!outside.current && to?.isConnected) to.focus();
-          outside.current = false;
-          // A settings confirmation opens after the menu releases its focus scope, so Cancel returns to the row.
-          const run = deferred.current;
-          deferred.current = undefined;
-          run?.();
+          event.stopPropagation();
         }}
       >
-        <Items actions={menu.shown} on={menu.on} select={select} choose={choose} />
+        {items}
       </DropdownMenuContent>
-      {/* Not part of the menu: Radix's root draws nothing, so the panel sits here and opens from what opened the menu. */}
-      {choosing?.playOn && (
-        <ChooseWherePlays
-          title={title}
-          thumbnail={choosing.thumbnail}
-          verb={choosing.verb}
-          audioOnly={choosing.audioOnly}
-          onPlay={choosing.playOn}
-          open
-          onOpenChange={(open) => !open && setChoosing(null)}
-          anchor={from}
-        />
-      )}
+      {panel}
     </DropdownMenu>
   );
 }

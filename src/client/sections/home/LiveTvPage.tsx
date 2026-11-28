@@ -72,11 +72,13 @@ export function useChannelActions() {
     menu: [
       {
         label: "Play on",
+        group: "play",
         disabled,
         playOn: (on) => action.mutate({ channel, playNow: true, on }),
       },
       {
         label: "Queue",
+        group: "play",
         disabled: !connected || action.isPending,
         run: () => action.mutate({ channel, playNow: false }),
       },

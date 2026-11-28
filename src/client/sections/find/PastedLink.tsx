@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayOn } from "@/components/PlayOn";
+import { ItemMenu, useItemMenu } from "@/components/RowMenu";
+import { verbRow } from "@/components/DetailHeader";
+import { browserActions } from "@/original-page";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import { linkAction, linkPlays, useLinkStation, type LinkVerb } from "@/pasted-link";
@@ -14,8 +17,8 @@ import { useFirstVerb, type Props } from "./SearchPanel";
 
 /**
  * A pasted link that isn't a list, on the results page: open it as a webpage or as direct media, at a quality, then
- * Play, Queue or Play next; Open page where Couch's provider opens it. A station's page plays its station (focused
- * first on the TV), else opens in the browser.
+ * Play with where it plays, and the rest (Play next, Queue, Open page where Couch's provider opens it) in its "…". A
+ * station's page plays its station (focused first on the TV), else opens in the browser.
  */
 export function PastedLink({
   url,
@@ -81,6 +84,45 @@ export function PastedLink({
   }
   const navigation = useDetailNavigation();
   const disabled = !props.connected || pending;
+  // Open page shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage.
+  const page =
+    target && target.shape !== "station"
+      ? {
+          label: "Open page",
+          group: "go",
+          run: () => navigation.open(collectionLocation({ provider: target.provider, url })),
+        }
+      : undefined;
+  const plays = linkPlays(target) && !station;
+  const menu = useItemMenu([
+    ...(plays
+      ? [
+          {
+            label: "Play next",
+            group: "play",
+            disabled: disabled || !props.onCommand,
+            run: () => void send("next"),
+          },
+          {
+            label: "Queue",
+            group: "play",
+            disabled: disabled || !props.onCommand,
+            run: () => void send("queue"),
+          },
+        ]
+      : []),
+    ...(page && (plays || station) ? [page] : []),
+    ...(station === null ? [] : browserActions(url)),
+    ...(/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources
+      ? [
+          {
+            label: "StreamingCommunity settings",
+            group: "settings",
+            run: () => props.onManageSources?.("streaming-community"),
+          },
+        ]
+      : []),
+  ]);
   const root = useRef<HTMLElement>(null);
   useFirstVerb(root, !!station && !disabled && props.canPlay, url);
   return (
@@ -113,66 +155,40 @@ export function PastedLink({
           )}
         </SettingsSection>
       )}
-      <div className="flex flex-wrap gap-2">
-        {/* Open shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage. */}
-        {station && (
+      <div data-nav-row className={verbRow}>
+        {station ? (
           <Button
             data-page-first
+            size="lg"
             disabled={disabled || !props.canPlay}
             onClick={() => void playStation(station)}
           >
             Play {station.name}
           </Button>
-        )}
-        {station === null && (
-          <Button asChild variant="outline">
-            <a href={url} target="_blank" rel="noopener noreferrer">
-              Open in browser
-            </a>
-          </Button>
-        )}
-        {target && target.shape !== "station" && (
-          <Button
-            variant="outline"
-            onClick={() => navigation.open(collectionLocation({ provider: target.provider, url }))}
-          >
+        ) : linkPlays(target) ? (
+          <PlayPill
+            size="lg"
+            label="Play"
+            aria-label={on(`Play ${hostname + pathname}`)}
+            title={hostname + pathname}
+            disabled={disabled || !props.canPlay || !props.onCommand}
+            onClick={() => void send("play")}
+            playOn={(playOn) => void send("play", playOn)}
+          />
+        ) : page ? (
+          <Button size="lg" onClick={page.run}>
             Open page
           </Button>
-        )}
-        {linkPlays(target) && (
-          <>
-            <Button
-              disabled={disabled || !props.canPlay || !props.onCommand}
-              onClick={() => void send("play")}
-            >
-              {on("Play")}
+        ) : (
+          station === null && (
+            <Button asChild size="lg" variant="secondary">
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                Open in browser
+              </a>
             </Button>
-            <PlayOnMenu
-              title={hostname + pathname}
-              disabled={disabled || !props.canPlay || !props.onCommand}
-              onPlay={(playOn) => void send("play", playOn)}
-            />
-            <Button
-              variant="ghost"
-              disabled={disabled || !props.onCommand}
-              onClick={() => void send("queue")}
-            >
-              Queue
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={disabled || !props.onCommand}
-              onClick={() => void send("next")}
-            >
-              Play next
-            </Button>
-          </>
+          )
         )}
-        {/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && (
-          <Button variant="ghost" onClick={() => props.onManageSources?.("streaming-community")}>
-            StreamingCommunity settings
-          </Button>
-        )}
+        <ItemMenu menu={menu} size="icon-lg" title={hostname + pathname} className="opacity-100" />
       </div>
     </section>
   );

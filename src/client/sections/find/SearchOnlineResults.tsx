@@ -30,7 +30,9 @@ import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
 import type { HistoryItem } from "../../../shared/viewing";
 import { collectionLinks } from "@/collection-target";
 import { episodeLabel } from "@/media-caption";
-import { addToHome } from "@/sections/home/AddToHome";
+import { itemTarget, useHomeAction } from "@/sections/home/AddToHome";
+import { useHomeFollows } from "@/sections/home/home-follows";
+import { saveLabel } from "@/copy";
 
 // The same page whatever origin a source healed to.
 const samePage = (a: string, b: string) => {
@@ -258,6 +260,8 @@ function OnlineResults(props: Props) {
   });
   const favorites = kept.error ? null : (kept.data?.favorites ?? null);
   const later = useQuery({ ...forLaterQuery(props), enabled: props.connected, retry: false });
+  const follows = useHomeFollows();
+  const homeAction = useHomeAction();
   // The one place provider items become hits, so Hide reaches Search, source pages and Home alike.
   const { isHidden, hide } = useHidden(props, props.connected);
   // What the page shows: "More" counts these, not what is hidden.
@@ -451,7 +455,8 @@ function OnlineResults(props: Props) {
           : !!favorites?.some((entry) => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = {
-        label: saved ? "Saved" : "Save",
+        label: saveLabel(saved, item.kind === "media" ? "For later" : "Saved"),
+        group: "keep",
         pressed: saved,
         disabled: !props.connected || busy || saveUnavailable,
         run: () => save(item, saved),
@@ -480,25 +485,30 @@ function OnlineResults(props: Props) {
             ? [
                 {
                   label: "Play",
+                  group: "play",
                   disabled: !props.canPlay || busy || !props.onCommand,
                   run: () => play(item, true),
                 },
                 {
-                  label: "Play on",
-                  disabled: !props.canPlay || busy || !props.onCommand,
-                  playOn: (on: PlayOn) => play(item, true, undefined, on),
-                },
-                {
                   label: "Play next",
+                  group: "play",
                   disabled: busy || !props.onCommand,
                   run: () => play(item, false, "next"),
                 },
                 {
                   label: "Queue",
+                  group: "play",
                   disabled: busy || !props.onCommand,
                   run: () => play(item, false),
                 },
+                {
+                  label: "Play on",
+                  group: "play",
+                  disabled: !props.canPlay || busy || !props.onCommand,
+                  playOn: (on: PlayOn) => play(item, true, undefined, on),
+                },
                 saveAction,
+                ...homeAction(itemTarget(item)),
               ]
             : [
                 // An album, set or show plays whole.
@@ -506,24 +516,28 @@ function OnlineResults(props: Props) {
                   ? [
                       {
                         label: "Play all",
+                        group: "play",
                         disabled: !props.canPlay || busy || !props.onCommand,
                         run: () => play(item, true),
                       },
                       {
                         label: "Queue all",
+                        group: "play",
                         disabled: busy || !props.onCommand,
                         run: () => play(item, false),
                       },
                     ]
                   : []),
                 ...(pageSection(item) && !saved ? [] : [saveAction]),
-                {
-                  label: "Add to Home",
-                  run: () => addToHome({ provider, url: item.url, title: item.title }),
-                },
+                ...homeAction({ provider, url: item.url, title: item.title }),
               ]),
-          ...browserActions(item.url),
-          { label: "Hide", disabled: !props.connected, run: () => void hide(item) },
+          ...browserActions(item.url, item.title),
+          {
+            label: "Hide",
+            group: "list",
+            disabled: !props.connected,
+            run: () => void hide(item),
+          },
         ],
       };
     });
@@ -733,6 +747,7 @@ function OnlineResults(props: Props) {
     page,
     visible,
     favorites,
+    follows,
     isHidden,
     later.data,
     history.data,

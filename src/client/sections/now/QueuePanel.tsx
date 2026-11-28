@@ -553,8 +553,8 @@ function QueueRow({
     ...(verbs
       ? actions
       : [
-          { label: "Details", run: () => details.open(queueItemLocation(entry)) },
-          ...browserActions(queuePageUrl(entry)),
+          { label: "Details", group: "go", run: () => details.open(queueItemLocation(entry)) },
+          ...browserActions(queuePageUrl(entry), entry.title),
         ]),
     ...related,
   ]);

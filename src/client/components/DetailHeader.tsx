@@ -1,4 +1,4 @@
-import { Bookmark, Play } from "lucide-react";
+import { Bookmark } from "lucide-react";
 import {
   useId,
   useLayoutEffect,
@@ -11,7 +11,7 @@ import { Stage, StageTitle } from "@/components/Stage";
 import { ContentLink } from "@/components/ContentLink";
 import { Button } from "@/components/ui/button";
 import { ProgressLine } from "@/components/DurationBar";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { PlayPill, usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import type { ArtShape } from "@/art-shape";
 import { metaLine, withoutUrls } from "@/media-caption";
@@ -94,8 +94,9 @@ export function Description({ text, className }: { text?: string | null; classNa
 /**
  * An item or collection page's top, a Stage (Stage.tsx) as Home's hero is: the picture at the right under the header,
  * then at the bottom left the trail, the title at display size, one muted meta line ending in its links ("YouTube,
- * Blender"; its length too until it's started), how far it got as Home's progress line, then one row of verbs before the synopsis: Play (or Resume, with From start beside it), Queue, Save and Play on, with
- * anything else in one "…" menu. The row is one focus stop per verb, and its first enabled verb is where the page starts.
+ * Blender"; its length too until it's started), how far it got as Home's progress line, then one row of verbs before
+ * the synopsis: Play (or Resume) with where it plays, Save, and one "…" menu with the rest (From start, Queue, Play
+ * next, its page). The row is one focus stop per verb, and its first enabled verb is where the page starts.
  */
 export function DetailHeader({
   title,
@@ -138,21 +139,23 @@ export function DetailHeader({
   queue?: Verb;
   save?: { saved: boolean; run: () => void; disabled?: boolean };
   playOn?: { run: (on: PlayOn) => void; disabled?: boolean; audioOnly?: boolean };
-  /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
+  /** Every other verb (Play next, Remove, ordering), in the "…" menu after From start and Queue. */
   more?: MenuAction[];
   /** The page's ancestors (ContentBreadcrumb), above the title. */
   trail?: ReactNode;
   children?: ReactNode;
 }) {
-  const { on, queueAllowed } = usePlayOn();
-  const queueDisabled = queue?.disabled || queueAllowed === false;
-  const rest = useItemMenu(more);
+  const { on } = usePlayOn();
+  // The Stage holds its main verb with where it plays and Save; the "…" holds the rest, From start and Queue first.
+  const rest = useItemMenu([
+    ...(fromStart ? [{ ...fromStart, group: "play" }] : []),
+    ...(queue ? [{ ...queue, group: "play" }] : []),
+    ...more,
+  ]);
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
-  const first = [
-    !play?.disabled && play && "play",
-    !queueDisabled && queue && "queue",
-    !save?.disabled && save && "save",
-  ].find(Boolean);
+  const first = [!play?.disabled && play && "play", !save?.disabled && save && "save"].find(
+    Boolean,
+  );
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
   const started = !!position && !!duration;
   const line = metaLine(meta, duration != null && !started && formatDuration(duration));
@@ -180,43 +183,19 @@ export function DetailHeader({
       {verbs && (
         <div data-nav-row className={cn("mt-1 w-full", verbRow)}>
           {play && (
-            <Button
+            <PlayPill
               data-page-first={first === "play" || undefined}
               size="lg"
+              label={play.label}
               aria-label={on(`${play.label} ${play.aria ?? title}`)}
-              disabled={play.disabled}
-              onClick={play.run}
-            >
-              <Play aria-hidden="true" className="fill-current" />
-              {on(play.label)}
-            </Button>
-          )}
-          {fromStart && (
-            <Button variant="ghost" size="lg" disabled={fromStart.disabled} onClick={fromStart.run}>
-              {fromStart.label}
-            </Button>
-          )}
-          {queue && (
-            <Button
-              data-page-first={first === "queue" || undefined}
-              variant="ghost"
-              size="lg"
-              disabled={queueDisabled}
-              onClick={queue.run}
-            >
-              {queue.label}
-            </Button>
-          )}
-          {/* Play on waits for another device that can play it. */}
-          {playOn && (
-            <PlayOnMenu
-              size="lg"
               title={title}
               thumbnail={thumbnail}
               verb={started ? "Resume" : undefined}
-              audioOnly={playOn.audioOnly}
-              disabled={playOn.disabled}
-              onPlay={playOn.run}
+              audioOnly={playOn?.audioOnly}
+              disabled={play.disabled}
+              onClick={play.run}
+              playOn={playOn?.run}
+              playOnDisabled={playOn?.disabled}
             />
           )}
           {save && (

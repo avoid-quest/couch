@@ -1,13 +1,11 @@
 import { playbackControls } from "@/session/playback-controls";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { browserActions, queuePageUrl } from "@/original-page";
-import { useMutation } from "@tanstack/react-query";
-import { apiSend } from "@/api/client";
 import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import type { MenuAction } from "@/components/RowMenu";
 import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
-import { failed } from "@/toasts";
+import { saveAction, useDetailAction, useForLaterToggle } from "@/sections/details/ItemPage";
 
 export type QueueActionsProps = {
   credentials: Credentials;
@@ -20,75 +18,61 @@ export type QueueActionsProps = {
   lastUpcomingIndex: number;
 };
 
-/** An Up next entry's other verbs: Details, Play next, Earlier, Later, Save for later and Remove. Nothing for rows without them. */
+/**
+ * An Up next entry's other verbs: Play next, Save, Details, its page, Move up, Move down and Remove from Up next.
+ * Nothing for rows without them.
+ */
 export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
   const details = useDetailNavigation();
   const session = useOptionalSessionGate();
-  const save = useMutation({
-    mutationFn: () =>
-      apiSend(
-        props!.credentials,
-        "/api/for-later",
-        { reference: { kind: "queue", id: props!.entry.id } },
-        "POST",
-        20_000,
-      ),
-    onError: (error) => failed(`Couldn't save ${props?.entry.title}.`, error),
-  });
+  const save = useForLaterToggle(
+    props ? queuePageUrl(props.entry) : undefined,
+    () => ({ kind: "queue", id: props!.entry.id }),
+    useDetailAction(),
+  );
   if (!props || !playbackControls(session?.state).queue) return [];
   const { entry, index, queue, connected, run, firstUpcomingIndex, lastUpcomingIndex } = props;
   const upcoming = index >= firstUpcomingIndex && firstUpcomingIndex < lastUpcomingIndex;
+  const move = (beforeEntryId: string | null) =>
+    void run({ type: "move", entryId: entry.id, beforeEntryId });
   return [
-    // Details opens as any detail does, so it keeps the section (Home, the player) and Back finds the entry again.
-    ...(!entry.liveSourceId
-      ? [{ label: "Details", run: () => details.open(queueItemLocation(entry)) }]
-      : []),
     ...(upcoming && index > firstUpcomingIndex
       ? [
           {
             label: "Play next",
+            group: "play",
             disabled: !connected,
-            run: () =>
-              void run({
-                type: "move",
-                entryId: entry.id,
-                beforeEntryId: queue[firstUpcomingIndex]?.id ?? null,
-              }),
+            run: () => move(queue[firstUpcomingIndex]?.id ?? null),
           },
           {
-            label: "Earlier",
+            label: "Move up",
+            group: "list",
             disabled: !connected,
-            run: () =>
-              void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index - 1]!.id }),
+            run: () => move(queue[index - 1]!.id),
           },
         ]
       : []),
     ...(upcoming && index < lastUpcomingIndex
       ? [
           {
-            label: "Later",
+            label: "Move down",
+            group: "list",
             disabled: !connected,
-            run: () =>
-              void run({
-                type: "move",
-                entryId: entry.id,
-                beforeEntryId: queue[index + 2]?.id ?? null,
-              }),
+            run: () => move(queue[index + 2]?.id ?? null),
           },
         ]
       : []),
     ...(!entry.liveSourceId
       ? [
-          {
-            label: "Save for later",
-            disabled: !connected || save.isPending,
-            run: () => save.mutate(),
-          },
+          saveAction({ ...save, disabled: !connected || save.disabled }),
+          // Details opens as any detail does, so it keeps the section (Home, the player) and Back finds the entry again.
+          { label: "Details", group: "go", run: () => details.open(queueItemLocation(entry)) },
         ]
       : []),
-    ...browserActions(queuePageUrl(entry)),
+    ...browserActions(queuePageUrl(entry), entry.title),
     {
-      label: "Remove",
+      label: "Remove from Up next",
+      group: "list",
       disabled: !connected,
       run: () => void run({ type: "remove", entryId: entry.id }),
     },

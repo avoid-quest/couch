@@ -37,7 +37,7 @@ import { TryAgain } from "@/components/TryAgain";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
 import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
-import { addToHome } from "@/sections/home/AddToHome";
+import { itemTarget, useHomeAction, type AddTarget } from "@/sections/home/AddToHome";
 import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
 
 export function ProviderPage() {
@@ -312,10 +312,12 @@ function CollectionPage({
           collection={collection}
           canPlay={available}
           shape={shape}
-          addToHome={
-            url && !collection.single
-              ? () => addToHome({ provider, url, title: collection.title })
-              : undefined
+          home={
+            collection.single
+              ? itemTarget({ collection: collection.context, creator: collection.creator })
+              : url
+                ? { provider, url, title: collection.title }
+                : undefined
           }
           trail={
             <ContentBreadcrumb
@@ -497,15 +499,17 @@ function CollectionHeader({
   canPlay,
   shape,
   trail,
-  addToHome,
+  home: target,
 }: {
   collection: SearchCollection;
   canPlay: boolean;
   shape: ArtShape;
   trail: ReactNode;
-  addToHome?: () => void;
+  /** What Home can follow from here: the page itself, or for one item its series or channel. */
+  home?: AddTarget;
 }) {
   const disabled = !canPlay || c.disabled;
+  const home = useHomeAction()(target);
   // The trail above already links the collections holding the page; a creator that is one of them, or the page, goes.
   const creator =
     c.creator &&
@@ -542,9 +546,11 @@ function CollectionHeader({
       save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
       playOn={c.playOn && { run: c.playOn, disabled }}
       more={[
-        ...browserActions(c.url),
-        ...(c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []),
-        ...(addToHome ? [{ label: "Add to Home", run: addToHome }] : []),
+        ...(c.playNext
+          ? [{ label: "Play next", group: "play", disabled: c.disabled, run: c.playNext }]
+          : []),
+        ...home,
+        ...browserActions(c.url, c.title),
       ]}
     />
   );

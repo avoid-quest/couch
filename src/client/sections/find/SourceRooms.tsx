@@ -365,8 +365,8 @@ function SavedChannels({ items }: { items: ProviderItem[] }) {
             href={item.live ? undefined : collectionLocation(item)}
             onClick={() => (item.live ? start(item) : openProvider(item))}
             menu={[
-              ...(item.live ? [{ label: "Open", run: () => openProvider(item) }] : []),
-              ...browserActions(item.url),
+              ...(item.live ? [{ label: "Open", group: "go", run: () => openProvider(item) }] : []),
+              ...browserActions(item.url, item.title),
             ]}
           />
         </li>

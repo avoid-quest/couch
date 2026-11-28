@@ -17,8 +17,9 @@ import { useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
-import { forLaterQuery, loadForLater } from "@/api/for-later";
-import { apiSend } from "@/api/client";
+import { forLaterQuery, loadForLater, removeForLater, restoreForLater } from "@/api/for-later";
+import { savedNotice } from "@/copy";
+import { useHistoryMenu } from "./history-menu";
 import type { MenuAction } from "@/components/RowMenu";
 import { failed } from "@/toasts";
 import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
@@ -46,7 +47,7 @@ import {
 } from "./home-rows";
 import { isFollowId, useHomeFollows } from "./home-follows";
 import { FollowShelf } from "./FollowShelf";
-import { AddSectionPanel } from "./AddToHome";
+import { AddSectionPanel, itemTarget, useHomeAction } from "./AddToHome";
 import { BoardArt, BoardList } from "./HomeBoard";
 import { ContinueSection, LeadSkeleton } from "./ContinueSection";
 import { HomeOrder, SectionOptions } from "./SectionOptions";
@@ -99,6 +100,7 @@ export function HomePage() {
     connected,
     run,
     queue: queued,
+    offerUndo,
     nativeHost,
     videoQualityPreference,
   } = useSessionGate();
@@ -130,56 +132,47 @@ export function HomePage() {
   const stationMenu = useStationMenu();
   const queueItem = (title: string, work: () => Promise<unknown>) =>
     void queued(title, work).catch((reason) => failed(`Couldn't queue ${title}.`, reason));
-  const historyMenu = (item: HistoryItem, resumes: boolean): MenuAction[] => [
-    resumes
-      ? { label: "Details", run: () => details.open(itemLocation("history", item.mediaId)) }
-      : {
-          label: item.position > 0 ? "Resume" : "Play",
-          disabled: !resumable(item),
-          run: () => resume.mutate({ item, fromStart: item.position === 0 }),
-        },
-    ...(item.position > 0
-      ? [
-          {
-            label: "From start",
-            disabled: !resumable(item),
-            run: () => resume.mutate({ item, fromStart: true }),
-          },
-        ]
-      : []),
-    {
-      label: "Queue",
-      disabled: !connected,
-      run: () =>
-        queueItem(item.title, () =>
-          apiSend(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, {
-            profileId: state?.activeProfile.id,
-          }),
-        ),
-    },
-    ...browserActions(item.url),
-    {
-      label: "Play on",
-      disabled: !resumable(item) || !item.playable,
-      thumbnail: item.thumbnail,
-      verb: item.position > 0 ? "Resume" : undefined,
-      playOn: (on) => resume.mutate({ item, fromStart: item.position === 0, on }),
-    },
-  ];
+  const historyMenu = useHistoryMenu();
+  const homeAction = useHomeAction();
+  const changeFailed = (title: string) => (reason: unknown) =>
+    failed(`Couldn't change ${title}.`, reason);
   const savedMenu = (item: ForLaterItem): MenuAction[] => {
     const start = (on?: PlayOn) =>
       void play((on) => loadForLater(credentials, item.id, "play", on), on).catch((reason) =>
         failed(`Couldn't play ${item.title}.`, reason),
       );
+    const remove = async () => {
+      const result = await removeForLater(credentials, item.id);
+      void later.refetch();
+      if (result?.undoToken)
+        offerUndo(savedNotice(item.title, false), async () => {
+          await restoreForLater(credentials, result.undoToken!);
+          void later.refetch();
+        });
+    };
     return [
-      { label: "Play", disabled: !available, run: () => start() },
+      { label: "Play", group: "play", disabled: !available, run: () => start() },
       {
         label: "Queue",
+        group: "play",
         disabled: !connected,
         run: () => queueItem(item.title, () => loadForLater(credentials, item.id, "append")),
       },
-      { label: "Play on", disabled: !available, thumbnail: item.thumbnail, playOn: start },
-      ...browserActions(item.url),
+      {
+        label: "Play on",
+        group: "play",
+        disabled: !available,
+        thumbnail: item.thumbnail,
+        playOn: start,
+      },
+      ...homeAction(itemTarget(item)),
+      ...browserActions(item.url, item.title),
+      {
+        label: "Remove from For later",
+        group: "list",
+        disabled: !connected,
+        run: () => void remove().catch(changeFailed(item.title)),
+      },
     ];
   };
 
@@ -279,7 +272,7 @@ export function HomePage() {
           loading={loading(history)}
           resume={(item, options) => resume.mutate({ item, ...options })}
           resumable={resumable}
-          menu={(item) => historyMenu(item, true)}
+          menu={(item) => historyMenu(item, { press: "Resume", continues: true })}
           playing={isPlaying}
           note={history.isRefetchError && <StaleNote />}
         />
@@ -363,7 +356,7 @@ export function HomePage() {
               aria-label={`Details ${item.title}`}
               href={itemLocation("history", item.mediaId)}
               onClick={() => details.open(itemLocation("history", item.mediaId))}
-              menu={historyMenu(item, false)}
+              menu={historyMenu(item, { press: "Details" })}
             />
           </li>
         ))}
