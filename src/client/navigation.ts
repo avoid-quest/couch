@@ -28,6 +28,7 @@ const visible = (element: HTMLElement) =>
   rendered(element) &&
   !element.closest('[inert], [aria-hidden="true"]') &&
   !element.matches(':disabled, [aria-disabled="true"]');
+const sidePlayer = '[data-now-playing][data-size="side"]';
 const lastVisible = (selector: string) =>
   [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
 const navigationScope = () =>
@@ -115,10 +116,16 @@ function moveFocus(key: string) {
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const own = active.closest(navigationRow);
   const row = key === "ArrowRight" ? own : null;
+  // The side player is a column of its own: Up and Down stay in it, or beside it, and Left and Right cross over.
+  const side = active.closest(sidePlayer);
   const destinations = row
     ? controls.filter((element) => row.contains(element))
-    : !horizontal && content?.contains(active)
-      ? controls.filter((element) => !element.closest("[data-nav-rail]"))
+    : !horizontal
+      ? controls.filter(
+          (element) =>
+            !!element.closest(sidePlayer) === !!side &&
+            !(content?.contains(active) && element.closest("[data-nav-rail]")),
+        )
       : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2,
@@ -133,7 +140,7 @@ function moveFocus(key: string) {
       : Math.max(to.left - from.right, from.left - to.right);
     return gap < 0 ? 0 : gap * 2 + 1000;
   };
-  // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
+  // The header and the footer (the capsule or the dock, phone tabs) come after the page's controls, which scroll under them.
   const bar =
     key === "ArrowUp" ? ".app-header-controls" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;

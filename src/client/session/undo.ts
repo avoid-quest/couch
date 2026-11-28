@@ -1,4 +1,5 @@
 import type { Action, SessionState } from "../../shared/protocol";
+import { isRadio } from "../../shared/radio";
 
 type Resume = {
   entryId: string;
@@ -30,15 +31,41 @@ function resume(state: SessionState): Resume {
     : null;
 }
 
+const names = new Intl.ListFormat("en", { type: "conjunction" });
+
+/**
+ * Stop says where it stopped, unless that was only `here`, and that the item waits in Continue when Core keeps its
+ * place: something with a length, started and short of the 90% that counts as watched (server/progress.ts).
+ */
+function stopped(before: SessionState, here: string) {
+  const ids = [...new Set(before.outputs?.map((output) => output.deviceId) ?? [])];
+  const where = ids
+    .map((id) => before.devices?.find((device) => device.id === id)?.name)
+    .filter((name): name is string => !!name);
+  const elsewhere = where.length > 0 && !(ids.length === 1 && ids[0] === here);
+  const entry = before.queue.find((item) => item.id === before.currentEntryId);
+  const length = before.player.duration ?? entry?.duration ?? 0;
+  const kept =
+    !!entry &&
+    !entry.endless &&
+    !entry.liveSourceId &&
+    !isRadio(entry) &&
+    length > 0 &&
+    before.player.position > 1 &&
+    before.player.position / length < 0.9;
+  return `Stopped${elsewhere ? ` on ${names.format(where)}` : ""}.${kept ? " It's in Continue." : ""}`;
+}
+
 export function undoPlan(
   action: Action,
   before: SessionState,
   after: SessionState,
+  here: string,
 ): UndoPlan | null {
   if (action.type === "stop") {
     const stoppedId = resume(before)?.playbackId;
     return stoppedId && (!action.playbackId || action.playbackId === stoppedId)
-      ? { text: "Stopped.", stoppedId }
+      ? { text: stopped(before, here), stoppedId }
       : null;
   }
   if (action.type === "remove") {

@@ -16,7 +16,17 @@ import {
   type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronRight, Info, Maximize, Minimize, Music2, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Info,
+  Maximize,
+  Minimize,
+  Minimize2,
+  Music2,
+  Settings,
+  SlidersVertical,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
@@ -24,8 +34,10 @@ import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { AddToHomeButton } from "@/sections/home/AddToHome";
 import {
+  PlaybackTime,
   PlaybackTimeline,
   PlaybackTransport,
+  PlaybackVolume,
   VolumeButton,
   playbackCapabilities,
   useEndTime,
@@ -36,7 +48,7 @@ import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { useBottomBar } from "@/sections/shell/NowPlayingBar";
+import { WhereTokens, useBottomBar } from "@/sections/shell/NowPlaying";
 import { QueuePanel, UpNextButton } from "./QueuePanel";
 import { Container, DEFAULT_SEEK_STEP, Hotkey } from "@videojs/react";
 import { useCouchPlayer } from "@/components/CouchPlayer";
@@ -572,18 +584,19 @@ export function PlayerPage({
         : undefined,
     );
   };
-  // Back leads the top line on every screen: a pointer has no Back key, and on the TV a controller reaches it too.
-  const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
+  // Back leads the top line on every screen, naming where it goes: a pointer has no Back key, and on the TV a
+  // controller reaches it too. It never stops anything.
+  const backTo = playerTarget ? "Remote" : shell.playerBackLabel;
   const back = (
     <Button
       variant="ghost"
-      size="icon-lg"
-      className="-ml-2.5 size-(--player-target) shrink-0"
-      aria-label={backLabel}
-      title={backLabel}
+      className="-ml-1 h-(--player-target) shrink-0 gap-1.5 rounded-full bg-black/35 pr-4 pl-3 hover:bg-black/50"
+      aria-label={`Back to ${backTo}`}
+      title={`Back to ${backTo}. It keeps playing.`}
       onClick={shell.leavePlayer}
     >
-      <ArrowLeft aria-hidden="true" />
+      <ChevronDown aria-hidden="true" />
+      {backTo}
     </Button>
   );
   const infoButton = (
@@ -903,33 +916,34 @@ export function PlayerPage({
             </div>
           </div>
         )}
+        {/* Over a picture one quiet line: Back, the title (opening Details) and where it comes from; the TV adds its
+          clock and Info at the right. */}
         {osd && (
           <div
             data-player-heading
-            className="drag-region window-controls-inset grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-(--gutter)"
+            className="drag-region window-controls-inset flex min-h-11 items-center gap-3.5 px-(--gutter)"
           >
-            {trail && <div className="col-start-2 col-end-4 min-w-0">{trail}</div>}
-            <div className="row-start-2">{back}</div>
+            {back}
             <h1
               title={title}
-              className="row-start-2 min-w-0 line-clamp-2 text-2xl leading-tight font-semibold tracking-[-.02em] break-words md:text-3xl"
+              className="min-w-0 shrink-0 basis-auto truncate text-sm font-semibold max-w-[50%]"
             >
               {linkedTitle}
             </h1>
-            <div className="row-start-2 flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
-              {sharing && <LiveSharingStatus />}
-              {!radio && <PlayerEndTime state={state} />}
-              {tvPresentation && <DigitalClock />}
-              {tvPresentation && <span className="self-center">{infoButton}</span>}
-            </div>
             {(byline || context) && (
-              <div className="col-start-2 col-end-4 flex min-w-0 items-baseline gap-x-3 text-base text-muted-foreground [&_[data-media-context]]:text-base">
+              <div className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden text-sm whitespace-nowrap text-muted-foreground [&_[data-media-context]]:text-sm">
                 <PlaysOnLine at={at} overPicture>
                   {byline && <p className="min-w-0 truncate">{byline}</p>}
                   {context}
                 </PlaysOnLine>
               </div>
             )}
+            <div className="ml-auto flex shrink-0 items-baseline gap-4 text-base text-muted-foreground tabular-nums">
+              {sharing && <LiveSharingStatus />}
+              {tvPresentation && !radio && <PlayerEndTime state={state} />}
+              {tvPresentation && <DigitalClock />}
+              {tvPresentation && <span className="self-center">{infoButton}</span>}
+            </div>
           </div>
         )}
       </div>
@@ -1142,26 +1156,47 @@ export function PlayerPage({
                     className="player-transport"
                   />
                 )}
-                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-                  {/* A phone has its own volume keys, as YouTube's and Netflix's phone players assume, and Where it plays leads
-                    with the same Volume, so the narrowest row leaves it out and keeps one line. */}
-                  {state && (
-                    <VolumeButton
+                {/* Volume's level and the time follow the transport, as YouTube's do. A phone has its own volume keys,
+                  as YouTube's and Netflix's phone players assume, and Where it plays leads with the same Volume, so
+                  the narrowest row leaves it out and keeps one line. */}
+                {state && !livePlayback(state) && (
+                  <div data-player-lead className="flex min-w-0 items-center gap-2 max-sm:hidden">
+                    <PlaybackVolume
                       state={state}
                       connected={connected}
                       run={run}
-                      className={livePlayback(state) ? undefined : "max-sm:hidden"}
+                      showValue={false}
+                      className="w-32 min-w-0 flex-none gap-0"
                     />
+                    <PlaybackTime state={state} className="text-muted-foreground" />
+                  </div>
+                )}
+                <div data-player-tools className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                  {state && livePlayback(state) && (
+                    <VolumeButton state={state} connected={connected} run={run} />
+                  )}
+                  {/* Where it plays, said as the devices it plays on: the Mixer opens from it. */}
+                  {state && !livePlayback(state) && (
+                    <WhereItPlays
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className="mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 pr-3 pl-3.5 font-medium hover:bg-white/20 max-sm:hidden"
+                    >
+                      <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
+                        <WhereTokens state={state} compact />
+                      </span>
+                      <SlidersVertical aria-hidden="true" />
+                    </WhereItPlays>
                   )}
                   {state && !livePlayback(state) && (
-                    <WhereItPlays state={state} connected={connected} run={run} />
+                    <WhereItPlays
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      className="sm:hidden"
+                    />
                   )}
-                  <UpNextButton
-                    ref={queueTrigger}
-                    state={state}
-                    aria-expanded={queueOpen}
-                    onClick={() => setQueueOpen(!queueOpen)}
-                  />
                   {/* Subtitles and Audio lead the gear's menu, then speed, quality, chapters and delay, as YouTube's; C still
                     turns subtitles on and off. It opens over the picture above the gear. */}
                   {!livePlayback(state) && (
@@ -1203,9 +1238,14 @@ export function PlayerPage({
                   )}
                   {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                     already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}
-                  {!tvPresentation ? (
+                  <UpNextButton
+                    ref={queueTrigger}
+                    state={state}
+                    aria-expanded={queueOpen}
+                    onClick={() => setQueueOpen(!queueOpen)}
+                  />
+                  {!tvPresentation && (
                     <Button
-                      data-player-last
                       variant="ghost"
                       size="icon-lg"
                       disabled={!canFullscreen}
@@ -1219,15 +1259,19 @@ export function PlayerPage({
                         <Maximize aria-hidden="true" />
                       )}
                     </Button>
-                  ) : (
-                    !artworkStage && (
-                      <span
-                        data-player-last
-                        aria-hidden="true"
-                        className="size-(--player-target) shrink-0"
-                      />
-                    )
                   )}
+                  {/* Back to the side player: the last slot, as the side player's Open player is its first. Phones have Back. */}
+                  <Button
+                    data-player-last
+                    variant="ghost"
+                    size="icon-lg"
+                    className="max-sm:hidden"
+                    aria-label="Back to the side"
+                    title="Back to the side. It keeps playing."
+                    onClick={shell.leavePlayer}
+                  >
+                    <Minimize2 aria-hidden="true" />
+                  </Button>
                 </div>
               </div>
             </div>

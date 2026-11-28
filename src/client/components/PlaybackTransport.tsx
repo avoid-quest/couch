@@ -125,8 +125,15 @@ export function PlaybackTimeline({
   connected,
   pageFirst = false,
   compact = false,
+  said = false,
   className,
-}: Omit<Props, "run"> & { pageFirst?: boolean; compact?: boolean; className?: string }) {
+}: Omit<Props, "run"> & {
+  pageFirst?: boolean;
+  compact?: boolean;
+  /** Says what is left in words, "2:14 left, ends 19:09", as the side player does. */
+  said?: boolean;
+  className?: string;
+}) {
   const playbackClock = usePlaybackClock();
   const media = useMedia();
   const player = state.player;
@@ -262,10 +269,17 @@ export function PlaybackTimeline({
         </span>
         <span className="shrink-0">
           {!live && length ? (
-            <>
-              <Time.Value type="remaining" negativeSign="−" />
-              <span data-end-time> ends {formatEndTime(remaining)}</span>
-            </>
+            said ? (
+              <>
+                <Time.Value type="remaining" negativeSign="" /> left,
+                <span data-end-time> ends {formatEndTime(remaining)}</span>
+              </>
+            ) : (
+              <>
+                <Time.Value type="remaining" negativeSign="−" />
+                <span data-end-time> ends {formatEndTime(remaining)}</span>
+              </>
+            )
           ) : null}
         </span>
       </div>
@@ -273,17 +287,36 @@ export function PlaybackTimeline({
   );
 }
 
+/** "23:13 / 25:27", where the timeline shows: the full player's row says it beside Volume. */
+export function PlaybackTime({
+  state,
+  className,
+}: {
+  state: ClientSessionState;
+  className?: string;
+}) {
+  const playbackClock = usePlaybackClock();
+  const current = state.queue.find((entry) => entry.id === state.currentEntryId);
+  if (!current || !playbackControls(state).seek) return null;
+  const length = playbackClock.duration || current.duration || 0;
+  if (current.endless || isRadio(current) || !length) return null;
+  return (
+    <span data-player-time className={cn("text-sm whitespace-nowrap tabular-nums", className)}>
+      <Time.Value type="current" /> / <Time.Value type="duration" />
+    </span>
+  );
+}
+
 const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean) =>
   failed ? "Try again" : button.ended ? "Replay" : button.paused ? "Play" : "Pause";
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar and the remote pad,
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, Now playing and the remote pad,
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * `moreClassName` styles Next, and Stop while it plays: the now-playing bar hides them on phones, and keeps Stop in reach
- * while what it shows is paused, ended or failed. The full player's quiet bar (`quiet`) reads Play/Pause, Next, then Stop
- * with its name, as YouTube's and Twitch's players lead with Play and Next.
+ * Now playing and the full player (`quiet`) read Play/Pause, Next, then Stop with its name, as YouTube's and Twitch's
+ * players lead with Play and Next.
  */
 export function PlaybackTransport({
   state,
@@ -291,13 +324,11 @@ export function PlaybackTransport({
   run,
   pageFirst = false,
   className,
-  moreClassName,
   participation = true,
   quiet = false,
 }: Props & {
   pageFirst?: boolean;
   className?: string;
-  moreClassName?: string;
   participation?: boolean;
   quiet?: boolean;
 }) {
@@ -321,7 +352,6 @@ export function PlaybackTransport({
       (player.status === "error" ||
         (player.status === "loading" && state.radioRetry?.retryAt != null)) &&
       !!current;
-  const resting = ended || failed || player.status === "paused";
   const enabled = [
     ended || failed ? available && programme : transportReady && pausable,
     stoppable,
@@ -335,7 +365,6 @@ export function PlaybackTransport({
       size={quiet ? "default" : "icon-lg"}
       className={cn(
         transportInk,
-        !resting && moreClassName,
         // The narrowest phones trim its padding, so its name still fits the band's row.
         quiet && "h-(--player-target) max-[23rem]:gap-1 max-[23rem]:px-2",
       )}
@@ -357,7 +386,7 @@ export function PlaybackTransport({
       data-page-first={first(2)}
       variant="ghost"
       size="icon-lg"
-      className={cn(transportInk, moreClassName)}
+      className={transportInk}
       aria-label="Next"
       title="Next"
       disabled={!enabled[2]}
@@ -578,11 +607,11 @@ export function PlaybackVolume({
 /**
  * Where a player control's panel opens (Volume, Where it plays, the gear's menu): from its own button, growing up from
  * the button's outer edge (its right edge in the right half of the screen, its left edge in the left), so the panel
- * is plainly that button's. In the band and the now-playing bar it clears their whole row, timeline included. Read as
- * the panel opens.
+ * is plainly that button's. In the band, the capsule and the dock it clears their whole row, timeline included. Read
+ * as the panel opens.
  */
 export function toolPanel(trigger: HTMLElement | null): {
-  side: "top";
+  side: "top" | "right";
   align: "start" | "end";
   sideOffset?: number;
 } {
@@ -591,25 +620,35 @@ export function toolPanel(trigger: HTMLElement | null): {
     align = at.left + at.width / 2 < window.innerWidth / 2 ? "start" : "end",
     row = trigger.closest<HTMLElement>("[data-player-band], [data-now-playing]");
   if (!row) return { side: "top", align };
+  // The side player stands the window's height at its left edge: its panels open past its right edge, level with
+  // the control's top.
+  if (row.matches('[data-size="side"]'))
+    return {
+      side: "right",
+      align: "start",
+      sideOffset: row.getBoundingClientRect().right - at.right + 12,
+    };
   return { side: "top", align, sideOffset: at.top - row.getBoundingClientRect().top + 8 };
 }
 
-/** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
+/** The band's volume for Live audio: a speaker that opens the slider and Mute in a Popover. */
+/** Whether this device shares the Live audio it looks at: its own sound is the source, with no volume to set here. */
+export function sharesLive(state: ClientSessionState) {
+  const sourceId = state.playbacks?.find(
+    (playback) => playback.id === state.playback,
+  )?.liveSourceId;
+  return !!state.liveSources?.some(
+    (source) =>
+      source.id === sourceId && source.intent === "live" && heldOutOf(source) === deviceId(),
+  );
+}
+
 export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
   const trigger = useRef<HTMLButtonElement>(null);
   // Controlled, so it places itself as it opens (toolPanel).
   const [open, setOpen] = useState(false);
   const tv = isTvPresentation();
-  const sourceId = state.playbacks?.find(
-    (playback) => playback.id === state.playback,
-  )?.liveSourceId;
-  if (
-    state.liveSources?.some(
-      (source) =>
-        source.id === sourceId && source.intent === "live" && heldOutOf(source) === deviceId(),
-    )
-  )
-    return null;
+  if (sharesLive(state)) return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

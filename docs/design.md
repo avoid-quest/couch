@@ -14,11 +14,11 @@ branch. Phones keep a bottom tab bar for thumb reach.
   custom.
 - **Flat.** Pages, rows, tiles and menus have no Cards or bordered panels: open
   typography, whitespace and divided rows. A tile is a picture and a caption.
-  Only what floats casts a shadow: the now-playing bar, toasts, an object on the
-  Stage, Up next over the picture.
+  Only what floats casts a shadow: Now playing, toasts, an object on the Stage,
+  Up next over the picture.
 - **Show only what people need.** No filler copy, no headers or labels that
-  repeat the screen, nothing said twice (the bar holds the transport, so nothing
-  else repeats it while something plays).
+  repeat the screen, nothing said twice (Now playing holds the transport, so
+  nothing else repeats it while something plays).
 - **Show the whole picture.** Artwork keeps its true shape, never cropped into a
   band or used as a backdrop.
 - **Real content only.** Browse pages show what a source returns; Couch picks
@@ -37,9 +37,14 @@ branch. Phones keep a bottom tab bar for thumb reach.
   `/api/artwork`), set dark enough that ink keeps 7:1, with a static grain.
   Artwork colour is the only colour besides danger's red. Video keeps black bars
   and no artwork light.
-- **Glass** (`.bar-glass`): the now-playing bar is a capsule floating over the
-  page, its backdrop blurred and tinted with the artwork's tone. Besides the
-  player's Up next panel, it's the one backdrop filter on a page.
+- **Now playing** (`NowPlaying.tsx`, `.now-playing`): while something plays it
+  stands at the left of every screen on desktops and the TV, a panel the
+  window's height that the page steps beside (`--side-player`). **Minimise
+  player** folds it to a capsule at the bottom left, for this window only; a
+  phone keeps it as a dock above its tabs. Play/Pause, Next and a labelled Stop
+  start from its bottom-left corner at every size, the full player's too. Its
+  surface is tinted by the artwork's light, with `.now-playing-light` left for
+  the room's light behind it.
 - **Stage** (`components/Stage.tsx`): opens Home and every Details page
   (`DetailHeader`), reaching under the header in its picture's room. The picture
   stands whole at the right as an **object** with a shadow, or as a **mark**

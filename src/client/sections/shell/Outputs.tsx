@@ -83,28 +83,30 @@ export const subscribeDesktop = (onChange: () => void) => {
 };
 export const isDesktop = () => window.matchMedia(desktopQuery).matches;
 
+type TriggerProps = {
+  className?: string;
+  label?: string;
+  /** The trigger's own content (the side player's Where it plays box, the full player's pill), in place of its icon. */
+  children?: ReactNode;
+};
+
 /**
- * Where it plays: the mixer for one Couch's devices, its own button in the now-playing bar and the player band.
- * The Volume, the counts, then every device's row, the playback's first. The rules are the model's (session/where-it-plays.ts).
+ * Where it plays: the mixer for one Couch's devices, opened from the player wherever it stands (the side player, its
+ * capsule, the phone's dock, the full player). The Volume, the counts, then every device's row, the playback's first.
+ * The rules are the model's (session/where-it-plays.ts).
  */
-export function WhereItPlays(props: Props & { className?: string; label?: string }) {
+export function WhereItPlays(props: Props & TriggerProps) {
   // A new playback starts closed, with its own order.
   return <Panel key={props.state.playback} {...props} />;
 }
 
 // From the band or the bar its Popover opens above the whole row, clear of the timeline, as their menus do (toolPanel).
-function Panel({
-  state,
-  connected,
-  run,
-  className,
-  label,
-}: Props & { className?: string; label?: string }) {
+function Panel({ state, connected, run, className, label, children }: Props & TriggerProps) {
   const button = useRef<HTMLButtonElement>(null);
   const tv = isTvPresentation();
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
   // Radix's controlled open state: a changed defaultOpen would not open a mounted panel. The session remembers the
-  // closed request, so the now-playing bar and Now Playing each open it at most once. Core's request opens every
+  // closed request, so Now playing and the full player each open it at most once. Core's request opens every
   // window viewing the playback; this window's own request opens only here.
   const gate = useContext(SessionGateContext);
   const [opened, setOpened] = useState(false);
@@ -137,14 +139,18 @@ function Panel({
     <Button
       ref={button}
       variant="ghost"
-      size={label ? "default" : "icon-lg"}
+      size={label || children ? "default" : "icon-lg"}
       className={className}
       disabled={!state.playback}
-      aria-label="Where it plays"
+      aria-label={children ? undefined : "Where it plays"}
       title="Where it plays"
     >
-      <SlidersVertical aria-hidden="true" />
-      {label}
+      {children ?? (
+        <>
+          <SlidersVertical aria-hidden="true" />
+          {label}
+        </>
+      )}
     </Button>
   );
   const body = (close?: ReactNode) => (

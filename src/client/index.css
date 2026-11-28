@@ -10,7 +10,7 @@
 @import "@fontsource-variable/mona-sans/wdth.css";
 
 @layer components {
-  /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (now-playing bar, phone tabs). */
+  /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (the capsule or the dock, phone tabs). */
   html {
     background: var(--background);
     scroll-padding-top: calc(var(--top-bar, 0px) * var(--interface-scale) + 1rem);
@@ -504,6 +504,8 @@
   .app-header-sharing {
     grid-column: 1 / -1;
   }
+}
+@media (min-width: 640px) and (max-width: 959px), (min-width: 640px) and (pointer: coarse) {
   body:not(.tv-presentation) .app-header-controls:has([data-search-open]) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -516,29 +518,21 @@
     grid-column: 1;
   }
 }
+/* A phone's header: the Couch and Share on the first line, the search field across the second; the sections are the
+   tabs at the bottom. */
 @media (max-width: 639px) {
   body:not(.tv-presentation) .app-header-controls {
-    grid-template-columns: 2.75rem 2.75rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 2.75rem;
     column-gap: 0.5rem;
   }
-  body:not(.tv-presentation) .app-header-couch button {
-    width: 2.75rem;
-    margin-left: 0;
-    padding-inline: 0;
+  body:not(.tv-presentation) .app-header-couch {
+    grid-area: 1 / 1;
   }
-  body:not(.tv-presentation) .app-header-couch button > span {
-    display: none;
+  body:not(.tv-presentation) .app-header-share-entry {
+    grid-area: 1 / 2;
   }
-  body:not(.tv-presentation) .app-header-controls:has([data-search-filled]) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  body:not(.tv-presentation)
-    .app-header-controls:has([data-search-filled])
-    :is(.app-header-couch, .app-header-share-entry) {
-    display: none;
-  }
-  body:not(.tv-presentation) .app-header-controls:has([data-search-filled]) .app-header-search {
-    grid-column: 1;
+  body:not(.tv-presentation) .app-header-search {
+    grid-area: 2 / 1 / auto / -1;
   }
 }
 .tv-presentation .app-header-controls {
@@ -560,7 +554,8 @@
 .tv-presentation .app-header-sharing {
   grid-column: 1 / -1;
 }
-@container header (width < 60rem) {
+/* Beside the side player too the TV keeps one row; only a narrower header puts the tabs on their own. */
+@container header (width < 52rem) {
   .tv-presentation .app-header-controls {
     grid-template-columns: minmax(0, 1fr) 2.75rem minmax(0, 2fr) auto;
   }
@@ -678,7 +673,7 @@ html:has(body.tv-presentation),
   min-height: 0;
   height: calc(100dvh / var(--interface-scale));
 }
-/* The footer (now-playing bar, phone tabs) is fixed, not sticky, so the shell keeps room for it (AppShell.tsx). */
+/* The footer (the capsule or the dock, phone tabs) is fixed, not sticky, so the shell keeps room for it (AppShell.tsx). */
 .app-shell:not(:has(.player-page)) {
   padding-bottom: var(--bottom-bar, 0px);
 }
@@ -711,7 +706,7 @@ html:has(body.tv-presentation),
 :root {
   --player-surface: rgb(0 0 0 / 75%);
 }
-/* The band's and the now-playing bar's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
+/* The band's and Now playing's control target: 44px, growing with the interface only to 2.25rem (54px at 1920 wide). */
 :root {
   --player-target: max(44px, 2.25rem);
 }
@@ -788,11 +783,11 @@ html:has(body.tv-presentation),
 /* Every player timeline (the band's, the bar's) thickens under a pointer and while it is dragged, as YouTube's. Over a
    picture it is a thin line whose unplayed part is translucent white, and its thumb shows only while a pointer or focus
    is on it. The hover time sits on the panel surface. */
-:is(.player-timeline, .bar-timeline) [data-slot="slider-track"] {
+.player-timeline [data-slot="slider-track"] {
   @apply motion-safe:transition-[height];
 }
 @media (hover: hover) {
-  :is(.player-timeline, .bar-timeline):is(:hover, :has(:active))
+  .player-timeline:is(:hover, :has(:active))
     [data-slot="slider"]:not([data-disabled])
     [data-slot="slider-track"] {
     height: 0.375rem;
@@ -804,48 +799,80 @@ html:has(body.tv-presentation),
 .player-timeline [data-slot="slider-track"] {
   background: rgb(255 255 255 / 25%);
 }
-/* The now-playing bar (NowPlayingBar.tsx; docs/design.md, Glass): a capsule of glass tinted with the playing artwork's
-   tone, floating over the page with a shadow under it. The backdrop is blurred, saturated and halved in brightness
-   before the tone (80%) lies over it, so its ink keeps 7:1 over anything that scrolls under it, white included. The
-   tone cross-fades over 600 ms when what plays changes. It is the one backdrop filter on a page (Up next over the player's room is the other). */
-.bar-glass {
-  border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--tone) 80%, transparent);
-  -webkit-backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  backdrop-filter: blur(28px) saturate(1.5) brightness(0.5);
-  box-shadow: var(--float-shadow);
-  transition: --tone 0.6s var(--ease-out);
+/* Now playing (NowPlaying.tsx): the side player, its capsule and the phone's dock are one surface, a panel lifted off
+   the room, tinted by the playing artwork's light (roomStyle) and holding its own light layer, .now-playing-light,
+   for the lit room to fill. --fill is the quiet ground of its boxes and pills. */
+:root {
+  --side-player-width: 21.25rem;
 }
-@media (max-width: 39.99rem) {
-  .bar-glass {
-    border-radius: 1rem;
-  }
+.tv-presentation {
+  --side-player-width: 19.75rem;
 }
-@media (prefers-reduced-motion: reduce) {
-  .bar-glass {
-    transition: none;
-  }
+/* Content steps right of the side player. --side-player is the content's left edge, unset (0) with no side player,
+   minimised or on a phone, so what floats over the content can centre on it. */
+.app-shell[data-side-player] {
+  --side-player: calc(var(--side-player-width) + 1.5rem);
+  padding-left: var(--side-player);
 }
-/* The bar's timeline runs along its top edge between its corners: a rounded line whose played part glows a little,
-   that thickens and shows its handle under a pointer, with a hit area taller than the line, centred on it. */
-.bar-timeline [data-slot="slider"] {
-  padding-block: 0.5rem;
+/* The side player takes the macOS window controls' corner; the header beside it starts at the gutter. */
+.app-shell[data-side-player] .app-header-controls.window-controls-inset {
+  padding-left: var(--gutter);
 }
-.bar-timeline [data-slot="slider-track"] {
+.now-playing {
+  --fill: rgb(255 255 255 / 8%);
+  --fill-2: rgb(255 255 255 / 15%);
+  isolation: isolate;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--light-a, var(--bar)) 24%, var(--bar)),
+    color-mix(in oklab, var(--light-b, var(--bar)) 16%, var(--background))
+  );
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 7.5%),
+    0 1.875rem 4.375rem -1.875rem rgb(0 0 0 / 90%);
+}
+.now-playing-light {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.side-where {
+  background: var(--fill);
+}
+.side-where:hover {
+  background: var(--fill-2);
+}
+/* Play/Pause leads every size as the one solid control; Stop is a named pill beside Next. */
+:is(.now-transport, .player-transport) button[data-play-button] {
+  width: 2.875rem;
+  height: 2.875rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 18%);
-  overflow: visible;
+  background: var(--foreground);
+  color: var(--background);
 }
-.bar-timeline :is([data-slot="slider-range"], [data-slot="slider-buffered"]) {
-  border-radius: inherit;
+:is(.now-capsule, .now-dock) .now-transport button[data-play-button] {
+  width: 2.75rem;
+  height: 2.75rem;
 }
-.bar-timeline [data-slot="slider-range"] {
-  box-shadow: 0 0 0.5rem rgb(255 255 255 / 55%);
+:is(.now-transport, .player-transport) button[data-play-button] svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  opacity: 1;
 }
-.bar-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] {
-  scale: 0;
+:is(.now-transport, .player-transport) button[aria-label="Stop"] {
+  margin-left: 0.25rem;
+  border-radius: 999px;
+  background: var(--fill, rgb(255 255 255 / 8%));
 }
-:is(.player-timeline, .bar-timeline) [data-slot="slider-thumb"] {
+:is(.now-transport, .player-transport) button[aria-label="Stop"]:hover {
+  background: var(--fill-2, rgb(255 255 255 / 15%));
+}
+:is(.now-transport, .player-transport) button[aria-label="Stop"] svg {
+  width: 0.8125rem;
+  height: 0.8125rem;
+}
+.player-timeline [data-slot="slider-thumb"] {
   @apply motion-safe:transition-[scale];
 }
 .player-video-controls .player-timeline:not(:hover, :focus-within) [data-slot="slider-thumb"] {
@@ -1048,7 +1075,7 @@ html:has([data-slot="popover-content"]) .player-next-up {
    bar's order (Volume, Where it plays, Up next, the gear, then the last slot: fullscreen here, Open player there). */
 .player-control-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   grid-auto-flow: dense;
   align-items: center;
   gap: 0.5rem 1rem;
@@ -1065,9 +1092,24 @@ html:has([data-slot="popover-content"]) .player-next-up {
   justify-self: start;
   margin-left: -0.625rem;
 }
-.player-control-row > [data-player-tools] {
+.player-control-row > [data-player-lead] {
   grid-column: 2;
+}
+.player-control-row > [data-player-tools] {
+  grid-column: -1;
   justify-self: end;
+}
+/* From the bar's breakpoint up the timeline runs the band's whole width, and its time sits in the row (data-player-lead). */
+@media (width >= 40rem) {
+  .player-band .player-timeline:has([role="slider"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .player-band .player-timeline:has([role="slider"]) > .relative {
+    grid-column: 1;
+  }
+  .player-band .player-timeline [data-time-labels] {
+    display: none;
+  }
 }
 @media (min-width: 960px) {
   /* The artwork has the room; Up next, summoned from its button, is a panel over the room above the band ending at its
@@ -1138,23 +1180,6 @@ html:has([data-slot="popover-content"]) .player-next-up {
 }
 .player-control-row:has(> [data-live-participation]) > [data-player-tools] {
   grid-column: 2;
-}
-/* Live's status can be a full error sentence. Keep it out of the bar's intrinsic-width transport column. */
-[data-now-playing]:has(> [data-live-participation]) {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-}
-@media (width < 40rem) {
-  [data-now-playing]:has(> [data-live-participation]) {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  [data-now-playing]:has(> [data-live-participation]) > [data-live-participation] {
-    grid-row: 2;
-    grid-column: 1 / -1;
-  }
-  [data-now-playing]:has(> [data-live-participation]) > [data-bar-tools] {
-    grid-row: 1;
-    grid-column: 2;
-  }
 }
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace {

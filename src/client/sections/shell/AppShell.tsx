@@ -14,6 +14,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ErrorInfo,
   type PropsWithChildren,
   type ReactNode,
@@ -37,7 +38,7 @@ import {
 } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
+import { NowPlaying, useBottomBar, type PlayerSize } from "./NowPlaying";
 import { CouchPlayer } from "@/components/CouchPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { HeaderSearch } from "./HeaderSearch";
@@ -722,9 +723,26 @@ function ShellChrome({ children }: PropsWithChildren) {
     (active || player?.status === "error" || player?.status === "ended") &&
     !playerVisible &&
     !remoteVisible;
-  // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
+  // Now playing stands at the side on desktops and the TV, folds to a capsule there when this window minimises it, and
+  // is the dock above a phone's tabs.
+  const phone =
+    useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false) && !tvPresentation;
+  const [minimised, setMinimised] = useState(false);
+  const playerSize: PlayerSize = phone ? "dock" : minimised ? "mini" : "side";
+  const sidePlayer = paired && nowPlaying && !!state && playerSize === "side";
+  // The footer holds the capsule or the dock and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
-  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying);
+  useBottomBar(footer, paired && !setupPending && !onPlayer, nowPlaying && !sidePlayer);
+  const nowPlayingView = state && (
+    <NowPlaying
+      state={state}
+      connected={connected}
+      run={run}
+      size={playerSize}
+      onOpen={shell.openPlayer}
+      onSize={(size) => setMinimised(size === "mini")}
+    />
+  );
   const header = useRef<HTMLElement>(null);
   useTopBar(header, paired && !setupPending);
 
@@ -751,6 +769,7 @@ function ShellChrome({ children }: PropsWithChildren) {
         tvPresentation && "tv-shell",
         !paired && "drag-region",
       )}
+      data-side-player={sidePlayer || undefined}
     >
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && paired && (
@@ -832,6 +851,7 @@ function ShellChrome({ children }: PropsWithChildren) {
               )}
             </header>
           )}
+          {sidePlayer && nowPlayingView}
           <AppPage>
             {onPlayer && error && (
               <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3">
@@ -866,14 +886,7 @@ function ShellChrome({ children }: PropsWithChildren) {
               ref={footer}
               className={cn("app-footer fixed inset-x-0 bottom-0 z-20", onPlayer && "hidden")}
             >
-              {nowPlaying && state && (
-                <NowPlayingBar
-                  state={state}
-                  connected={connected}
-                  run={run}
-                  onOpen={shell.openPlayer}
-                />
-              )}
+              {nowPlaying && !sidePlayer && nowPlayingView}
               <SectionTabs bar className="hidden bg-background touch:flex tv:hidden" />
             </div>
           )}
@@ -885,6 +898,15 @@ function ShellChrome({ children }: PropsWithChildren) {
     </div>
   );
 }
+
+// Where the phone's layout starts (the touch variant, index.css): bottom tabs, and Now playing as their dock.
+const phoneLayout = "(max-width: 959px), (pointer: coarse)";
+const subscribePhoneLayout = (onChange: () => void) => {
+  const media = window.matchMedia(phoneLayout);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+const isPhoneLayout = () => window.matchMedia(phoneLayout).matches;
 
 function AppPage({ children }: PropsWithChildren) {
   const { nativeHost, tvPresentation } = useSessionGate();
@@ -970,10 +992,10 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
             >
               <Icon
                 aria-hidden="true"
-                className={cn("size-5", !bar && "@min-[60rem]/header:hidden tv:hidden")}
+                className={cn("size-5", !bar && "@min-[52rem]/header:hidden tv:hidden")}
               />
               <span
-                className={cn(!bar && "sr-only @min-[60rem]/header:not-sr-only tv:not-sr-only")}
+                className={cn(!bar && "sr-only @min-[52rem]/header:not-sr-only tv:not-sr-only")}
               >
                 {name}
               </span>

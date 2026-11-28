@@ -909,12 +909,13 @@ export function connectRenderer(listener: (state: PlayerState) => void) {
 }
 
 // Shows the picture inside `parent` (a React 19 ref callback). Moving the element within
-// one task keeps it playing.
+// one task keeps it playing. The side player and the full player hand it to each other in
+// either order, so a parent gives it back only while it still holds it.
 export function renderInto(parent: HTMLElement | null) {
   if (!parent) return;
   parent.append(video);
   return () => {
-    holder.append(video);
+    if (video.parentElement === parent) holder.append(video);
   };
 }
 
