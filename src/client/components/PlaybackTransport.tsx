@@ -277,11 +277,12 @@ const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean)
   failed ? "Try again" : button.ended ? "Replay" : button.paused ? "Play" : "Pause";
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar, Home's hero and the remote pad,
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar and the remote pad,
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
+ * `moreClassName` styles Next, and Stop while it plays: the now-playing bar hides them on phones, and keeps Stop in reach
+ * while what it shows is paused, ended or failed, so a programme left behind can be put away there.
  */
 export function PlaybackTransport({
   state,
@@ -317,6 +318,7 @@ export function PlaybackTransport({
       (player.status === "error" ||
         (player.status === "loading" && state.radioRetry?.retryAt != null)) &&
       !!current;
+  const resting = ended || failed || player.status === "paused";
   const enabled = [
     ended || failed ? available && programme : transportReady && pausable,
     stoppable,
@@ -358,7 +360,7 @@ export function PlaybackTransport({
         data-page-first={first(1)}
         variant="ghost"
         size="icon-lg"
-        className={cn(transportInk, moreClassName)}
+        className={cn(transportInk, !resting && moreClassName)}
         aria-label="Stop"
         title="Stop"
         disabled={!enabled[1]}

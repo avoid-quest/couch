@@ -710,7 +710,6 @@ function ShellChrome({ children }: PropsWithChildren) {
   const remoteVisible = useMatches({
     select: (matches) => matches.some((match) => match.routeId === "/remote"),
   });
-  // Home's top item is what plays, with its own transport, whenever something does.
   const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;

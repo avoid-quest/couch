@@ -53,7 +53,7 @@ export function keptOrder<T>(
 /**
  * A row's order, taken once its data is ready, so nothing moves under the focus while Home stays open.
  * It leaves out the item that led Home then and the one that leads it now (`except`, the hero's): the hero's item is
- * never in a shelf too, so a hero that changes (after Stop) takes its item out of the shelf below.
+ * never in a shelf too, so a hero that changes (after Resume) takes its item out of the shelf below.
  */
 export function useKeptOrder<T>(
   items: T[],

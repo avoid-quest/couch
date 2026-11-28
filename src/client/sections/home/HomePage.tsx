@@ -1,10 +1,9 @@
-import { livePlayback, playbackControls } from "@/session/playback-controls";
+import { playbackControls } from "@/session/playback-controls";
 import { DetailSkeleton, MediaTilesSkeleton } from "@/components/LoadingMedia";
-import { MediaContext, mediaSubtitle } from "@/components/MediaContext";
-import { playbackStatus } from "@/playback-status";
+import { MediaContext } from "@/components/MediaContext";
 import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { Play, X } from "lucide-react";
@@ -29,15 +28,11 @@ import { QueuePanel, entryShape } from "@/sections/now/QueuePanel";
 import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
-import { sourceLabel } from "@/source-label";
-import { playsOn } from "@/session/device-id";
-import { PlaysOnLine } from "@/sections/shell/PlaysOnLine";
 import { returnLostFocus } from "@/sections/shell/NowPlayingBar";
 import { TRY_AGAIN } from "@/copy";
 import { formatDuration, formatRuntime, formatEndTime } from "@/time-format";
 import {
   avoidRadioPlaylistId,
-  isRadio,
   radioHost,
   radioShowLabels,
   stationSources,
@@ -48,7 +43,7 @@ import type { HistoryItem, HistorySelection } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
-import { useOnAir, useStationMenu, useStationShow } from "./on-air";
+import { useOnAir, useStationMenu } from "./on-air";
 import { boardRows, homeRowLabels, useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 import { Board, BoardArt, BoardList } from "./HomeBoard";
 import {
@@ -97,13 +92,12 @@ const continueCaption = (item: HistoryItem) => {
 };
 
 type Hero =
-  | { kind: "playing" }
   | { kind: "continue"; item: HistoryItem }
   | { kind: "radio"; station: RadioStation; show: RadioProgrammeDetails };
 
 /**
- * Home is the evening's departures board: one large item on top (what you control playing now, else the
- * first thing to continue, else the first station on air), then shelves of tiles, each headed by the
+ * Home is the evening's departures board: one large item on top (the first thing to continue, else the first
+ * station on air, never what plays: that is the now-playing bar's), then shelves of tiles, each headed by the
  * clock time it matters at. Each device picks which shelves it shows and in what order.
  */
 export function HomePage() {
@@ -213,59 +207,49 @@ export function HomePage() {
 
   const past = history.data?.items ?? [];
   const unfinished = past.filter((item) => item.position > 0 && !item.watched);
-  const firstOnAir = allStations.find((station) => onAir(station.id));
+  const playingMedia = current && past.find((item) => item.queueEntryId === current.id)?.mediaId;
+  // What plays is the now-playing bar's alone, so the Stage leads with something else.
+  const firstUnfinished = unfinished.find((item) => item.mediaId !== playingMedia);
+  const firstOnAir = allStations.find((station) => onAir(station.id) && !playingStation(station));
   // The hero waits for what decides it (undefined), so it never swaps under the focus; null when there is nothing to lead with.
   const hero: Hero | null | undefined = !state
     ? undefined
-    : current
-      ? { kind: "playing" }
-      : hasRow("continue") && history.isPending
-        ? undefined
-        : hasRow("continue") && unfinished[0]
-          ? { kind: "continue", item: unfinished[0] }
-          : radioPending
-            ? undefined
-            : // A hidden Radio's queries are off, but their cache (and recents) still hold stations on air.
-              hasRow("radio") && firstOnAir
-              ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
-              : null;
-  const playingMedia = current && past.find((item) => item.queueEntryId === current.id)?.mediaId;
-  // Play replaces the hero's verbs with its playing title. Hand over lost focus,
-  // as page entry would, unless the user moved elsewhere while playback started.
-  const leading = useRef(false);
-  const playHero = (item: HistoryItem, fromStart: boolean) => {
-    leading.current = true;
-    resume.mutate(
-      { item, fromStart },
-      {
-        onSettled: (ok) => {
-          if (!ok) leading.current = false;
-        },
-      },
-    );
-  };
-  const playRadioHero = (station: RadioStation) => {
-    leading.current = true;
-    void shell.enqueueRadio(station, true).then((ok) => {
-      if (!ok) leading.current = false;
-    });
-  };
-  useEffect(() => {
-    if (hero?.kind !== "playing" || !leading.current) return;
-    leading.current = false;
-    if (document.activeElement === document.body)
-      document.querySelector<HTMLElement>("[data-home-hero] [data-page-first]")?.focus();
-  }, [hero?.kind]);
+    : hasRow("continue") && history.isPending
+      ? undefined
+      : hasRow("continue") && firstUnfinished
+        ? { kind: "continue", item: firstUnfinished }
+        : radioPending
+          ? undefined
+          : // A hidden Radio's queries are off, but their cache (and recents) still hold stations on air.
+            hasRow("radio") && firstOnAir
+            ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
+            : null;
+  const playHero = (item: HistoryItem, fromStart: boolean) => resume.mutate({ item, fromStart });
+  const playRadioHero = (station: RadioStation) => void shell.enqueueRadio(station, true);
   // Shelves keep the order Home opened with, less the item that led it then, so nothing moves under the focus: a station that starts playing stays where it is, marked Playing.
   const historyReady = hero !== undefined && !history.isPending;
   const continued = useKeptOrder(
-    unfinished,
+    unfinished.filter((item) => item.mediaId !== playingMedia),
     (item) => item.mediaId,
     historyReady,
     hero?.kind === "continue" ? hero.item.mediaId : playingMedia,
   );
+  // One programme can be in history twice, under the source it played from each time (a catalogue that moved, a link
+  // pasted in another form): Played recently leaves out what Continue shows, by its page or by what its tile says.
+  const shownAs = (item: HistoryItem) => {
+    const caption = mediaCaption(item);
+    return `${caption.title}\n${caption.lead ?? ""}`;
+  };
+  const continuing = hasRow("continue") ? unfinished : [];
+  const continuingPages = new Set(continuing.map((item) => item.url).filter(Boolean));
+  const continuingTitles = new Set(continuing.map(shownAs));
   const recent = useKeptOrder(
-    past.filter((item) => !(item.position > 0 && !item.watched)),
+    past.filter(
+      (item) =>
+        !(item.position > 0 && !item.watched) &&
+        !(item.url && continuingPages.has(item.url)) &&
+        !continuingTitles.has(shownAs(item)),
+    ),
     (item) => item.mediaId,
     historyReady,
     playingMedia,
@@ -278,16 +262,13 @@ export function HomePage() {
     hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id,
   ).slice(0, shelfLength);
   const onAirPending = favorites.isPending || builtIn.isPending;
-  const continuingUrls = new Set(
-    hasRow("continue") ? unfinished.map((item) => item.url).filter(Boolean) : [],
-  );
   const currentUrl = current?.source.startsWith("web:") ? current.source.slice(4) : undefined;
   const savedMedia = useKeptOrder(
     later.data?.items.filter(
       (item) =>
         item.kind !== "radio" &&
         !item.endless &&
-        !continuingUrls.has(item.url) &&
+        !continuingPages.has(item.url) &&
         (!currentUrl || item.url !== currentUrl),
     ) ?? [],
     (item) => item.id,
@@ -320,20 +301,6 @@ export function HomePage() {
   const saved = (provider: ProviderId) =>
     sourceFavorites.data?.favorites.filter((item) => item.provider === provider) ?? [];
 
-  const live = !!(current?.endless || current?.kind === "radio");
-  const at = playsOn(state);
-  const show = useStationShow();
-  // A station without its show reads Radio, as the player does, never its stream's host.
-  const status = playbackStatus(state, connected);
-  const playing = current && mediaCaption({ ...current, title: show?.title || current.title });
-  const playingMeta = metaLine(
-    playing?.lead,
-    current && mediaSubtitle({ ...current, subtitle: playing?.subtitle }),
-    ...radioShowLabels(show),
-    radioHost(show),
-    current && !isRadio(current) && sourceLabel(current.source),
-    !livePlayback(state) && !status.quiet && status.label,
-  );
   const heroCaption =
     hero?.kind === "continue"
       ? {
@@ -342,38 +309,7 @@ export function HomePage() {
         }
       : undefined;
 
-  const lead = !hero ? null : hero.kind === "playing" ? (
-    current &&
-    playing && (
-      <HomeHero
-        at={at}
-        context={
-          <MediaContext
-            collection={current.collection}
-            creator={current.creator}
-            radio={
-              isRadio(current) && current.source.startsWith("radio:")
-                ? { id: current.source.slice(6), title: current.title }
-                : undefined
-            }
-          />
-        }
-        thumbnail={show?.artworkUrl ?? current.thumbnail}
-        shape={entryShape(current)}
-        title={playing.title}
-        meta={playingMeta}
-        progress={
-          live ? (
-            <RadioProgress show={show} />
-          ) : (
-            <PlayingProgress current={current} speed={state?.player.speed || 1} />
-          )
-        }
-        // The now-playing bar below holds the transport, so the playing Stage holds none: its title and picture open the player.
-        open={() => shell.changeSection("Now")}
-      />
-    )
-  ) : hero.kind === "continue" && heroCaption ? (
+  const lead = !hero ? null : hero.kind === "continue" && heroCaption ? (
     <HomeHero
       context={<MediaContext collection={hero.item.collection} creator={hero.item.creator} />}
       thumbnail={hero.item.thumbnail}
@@ -725,22 +661,7 @@ export function HomePage() {
   );
 }
 
-// Only the progress and timetable subscribe to playback time; a tick must not render Home's shelves and artwork.
-function PlayingProgress({ current, speed }: { current: QueueEntry; speed: number }) {
-  const clock = usePlaybackClock();
-  const now = useDurationClock();
-  const length = clock.duration || knownLength(current);
-  if (!length) return null;
-  const remaining = Math.max(0, length - clock.position) / speed;
-  return (
-    <ProgressLine
-      position={clock.position}
-      duration={length}
-      label={`${formatDuration(remaining)} left, ends ${formatEndTime(remaining, now)}`}
-    />
-  );
-}
-
+// Only the timetable subscribes to playback time; a tick must not render Home's shelves and artwork.
 function UpcomingBoard({
   cursor,
   pageFirst,
@@ -857,9 +778,8 @@ function UpNextRow({
 }
 
 /**
- * The board's top line, Home's Stage (Stage.tsx): a compact whole picture beside its title, one muted meta line and its links, how far it got, then its verbs. Its verbs are a row, so Up and Down
- * pass between it and the shelves. While something plays (`open`), the now-playing bar holds the transport, so the
- * Stage has no verbs: its title is the one stop and opens the player, as its picture does under a pointer.
+ * The board's top line, Home's Stage (Stage.tsx): a compact whole picture beside its title, one muted meta line and its
+ * links, how far it got, then its verbs. Its verbs are a row, so Up and Down pass between it and the shelves.
  */
 function HomeHero({
   thumbnail,
@@ -867,9 +787,7 @@ function HomeHero({
   title,
   meta,
   context,
-  at = null,
   progress,
-  open,
   children,
 }: {
   thumbnail?: string;
@@ -877,23 +795,18 @@ function HomeHero({
   title: string;
   meta?: string;
   context?: ReactNode;
-  at?: ReturnType<typeof playsOn>;
   progress?: ReactNode;
-  open?: () => void;
   children?: ReactNode;
 }) {
   const router = useRouter();
-  // Stop from anywhere replaces the playing title: return its lost focus as the bar does.
-  const titleFocused = useRef(false);
-  useLayoutEffect(() => {
-    if (open)
-      return () => {
-        if (titleFocused.current) {
-          titleFocused.current = false;
-          returnLostFocus(router);
-        }
-      };
-  }, [!!open, router]);
+  // Resume can leave nothing to lead with: return the focus its button had, as the now-playing bar does.
+  const focusWithin = useRef(false);
+  useLayoutEffect(
+    () => () => {
+      if (focusWithin.current) returnLostFocus(router);
+    },
+    [router],
+  );
   return (
     <Stage
       data-home-hero
@@ -902,40 +815,21 @@ function HomeHero({
       thumbnail={thumbnail ?? ""}
       shape={shape}
       title={title}
-      onPicture={open}
+      onFocusCapture={() => {
+        focusWithin.current = true;
+      }}
+      onBlurCapture={() => {
+        focusWithin.current = false;
+      }}
     >
-      {open ? (
-        <div data-nav-row className="w-full">
-          <StageTitle as="h2" title={title}>
-            <button
-              type="button"
-              data-page-first
-              aria-label={`Open player: ${title}`}
-              className="cursor-pointer rounded-sm text-left [font:inherit] [letter-spacing:inherit]"
-              onFocus={() => {
-                titleFocused.current = true;
-              }}
-              onBlur={() => {
-                titleFocused.current = false;
-              }}
-              onClick={open}
-            >
-              {title}
-            </button>
-          </StageTitle>
-        </div>
-      ) : (
-        <StageTitle as="h2" title={title} />
-      )}
+      <StageTitle as="h2" title={title} />
       {/* The meta line and its links read as one block under the title. */}
       {(meta || context) && (
         <div className="home-hero-meta flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <PlaysOnLine at={at}>
-            {meta && (
-              <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>
-            )}
-            {context}
-          </PlaysOnLine>
+          {meta && (
+            <p className="text-sm leading-relaxed break-words text-muted-foreground">{meta}</p>
+          )}
+          {context}
         </div>
       )}
       {progress}
