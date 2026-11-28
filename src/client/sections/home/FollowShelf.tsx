@@ -68,6 +68,15 @@ export function FollowShelf({
     newest?.page && newest.page.items.length < shelfLength ? newest.page.previousCursor : undefined;
   const summary = lastCursor ? newest : opening;
   const loading = !summary || summary.loading || (!!previousCursor && (!before || before.loading));
+  // While its source fails, the section asks again every minute, so it shows again once the source answers.
+  const retry = useRef<() => void>(undefined);
+  retry.current = opening?.error ? opening.retry : summary?.error ? summary.retry : undefined;
+  const failing = !!retry.current;
+  useEffect(() => {
+    if (!failing) return;
+    const timer = setInterval(() => retry.current?.(), 60_000);
+    return () => clearInterval(timer);
+  }, [failing]);
   const [renaming, setRenaming] = useState<HTMLElement | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => revealFollow(follow.id), [follow.id]);
@@ -166,7 +175,12 @@ export function FollowShelf({
           href={href}
           options={menu}
           problem={`Couldn't load ${follow.list} from ${source}.`}
-          detail={(opening?.error ? opening : summary)?.errorMessage}
+          detail={[
+            (opening?.error ? opening : summary)?.errorMessage,
+            `${follow.name} shows again once ${source} answers.`,
+          ]
+            .filter(Boolean)
+            .join(" ")}
           retry={opening?.error ? opening.retry : summary?.retry}
         />
       ) : !loading && !shelved.length ? (
