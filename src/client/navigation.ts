@@ -152,6 +152,14 @@ function moveFocus(key: string) {
             !(content?.contains(active) && element.closest("[data-nav-rail]")),
         )
       : controls;
+  let strip = row ? active.parentElement : null;
+  while (
+    strip &&
+    row?.contains(strip) &&
+    !["auto", "scroll"].includes(getComputedStyle(strip).overflowX)
+  )
+    strip = strip.parentElement;
+  if (strip && !row?.contains(strip)) strip = null;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2,
     cy = from.y + from.height / 2;
@@ -205,7 +213,13 @@ function moveFocus(key: string) {
       return { element, forward, beside, score: forward + penalty + (last(element) ? 100_000 : 0) };
     })
     .filter((candidate) => candidate.forward > 1 && !candidate.beside)
-    .sort((a, b) => a.score - b.score);
+    // Right walks a line that scrolls sideways (Home's Browse doors) to its end before what stands beside it, though
+    // that is nearer than a door still scrolled out of sight.
+    .sort(
+      (a, b) =>
+        (strip ? Number(!strip.contains(a.element)) - Number(!strip.contains(b.element)) : 0) ||
+        a.score - b.score,
+    );
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
   // score. The header and the footer still come last: the page scrolls under the sticky header.

@@ -266,7 +266,9 @@ export function BrowseLine({ options, first = false }: { options: ReactNode; fir
   const details = useDetailNavigation();
   const failing = useFailingSources();
   return (
+    // One row for a remote: Right from the last door goes on to the "…".
     <section
+      data-nav-row
       aria-labelledby="home-browse"
       className="-mx-(--gutter) flex min-w-0 border-y pr-(--gutter)"
     >
@@ -274,7 +276,6 @@ export function BrowseLine({ options, first = false }: { options: ReactNode; fir
         Browse
       </h2>
       <ul
-        data-nav-row
         aria-labelledby="home-browse"
         className="flex min-w-0 flex-1 overflow-x-auto pl-(--gutter) [scrollbar-width:none]"
       >
