@@ -280,7 +280,7 @@ export function HomePage() {
         item.kind !== "radio" &&
         !item.endless &&
         !continuing.has(identity) &&
-        item.url !== currentUrl &&
+        (!currentUrl || item.url !== currentUrl) &&
         (!identity || identity !== playingIdentity)
       );
     }) ?? [],
