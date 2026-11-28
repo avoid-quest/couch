@@ -194,6 +194,9 @@ test("a Windows installer tried at Quit counts as refused if Couch starts on the
   available = "0.3.1";
   await updates.check();
   expect(updates.state().status).toBe("ready");
+  // Even when Quit lands during a later check, the installer it runs is remembered.
+  void updates.check();
+  expect(updates.state().status).toBe("checking");
   app.emit("quit", {}, 0);
   app.removeAllListeners();
   const checked = requests.length;
@@ -203,6 +206,13 @@ test("a Windows installer tried at Quit counts as refused if Couch starts on the
   expect(requests.length).toBe(checked);
   expect(reopened.state()).toMatchObject({ status: "error", available: null });
   expect(reopened.state().error).toContain("Windows blocked the update");
+});
+
+test("a refused release that later installed is offered again", async () => {
+  appRelease({});
+  writeFileSync(join(temporary, "update-blocked"), app.getVersion());
+  start();
+  expect(existsSync(join(temporary, "update-blocked"))).toBe(false);
 });
 
 test("a damaged app.asar download is discarded", async () => {

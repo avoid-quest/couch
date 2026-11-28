@@ -1,7 +1,7 @@
 import { app, Notification } from "electron";
 import updater from "electron-updater";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -140,7 +140,12 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     }).show();
   };
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
-  autoUpdater.on("update-downloaded", ({ version }) => ready(version));
+  // The installer electron-updater runs at Quit, whatever Settings shows meanwhile.
+  let staged: string | null = null;
+  autoUpdater.on("update-downloaded", ({ version }) => {
+    staged = version;
+    ready(version);
+  });
   // Smart App Control refuses unsigned installers that Couch starts, not ones people open:
   // the launch fails with UNKNOWN, which the patched updater keeps through its elevation
   // retry. Only someone at this computer can install that release, so it stops counting
@@ -151,6 +156,11 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
   let blocked: string | null = null;
   try {
     blocked = readFileSync(blockedPath, "utf8").trim();
+    // That release installed after all, so a later return to it shouldn't stay refused.
+    if (blocked === app.getVersion()) {
+      blocked = null;
+      rmSync(blockedPath);
+    }
   } catch {}
   autoUpdater.on("error", (error: Error & { code?: string }) => {
     if (state.status !== "installing") return;
@@ -184,8 +194,7 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
         );
       // electron-updater starts the installer as Couch exits, too late to hear a refusal.
       // If Couch then starts on this version again, that release counts as refused.
-      if (state.status === "ready" && state.available && autoUpdater.autoInstallOnAppQuit)
-        remember(state.available);
+      if (staged && autoUpdater.autoInstallOnAppQuit) remember(staged);
     });
 
   async function install(expected: string, delay: number, interrupt = false) {
