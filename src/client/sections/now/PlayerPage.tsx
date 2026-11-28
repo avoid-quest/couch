@@ -27,7 +27,6 @@ import {
   PlaybackTransport,
   VolumeButton,
   playbackCapabilities,
-  toolPanel,
   useEndTime,
 } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
@@ -283,11 +282,11 @@ export function PlayerPage({
   const retry =
     state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   // The controls stay up on a toast's action, which Back returns to them, or while one of their Popovers or Sheets is
-  // open (Volume, Where it plays), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
+  // open (Volume, Where it plays, the TV's playback picker), as YouTube's stay up under an open menu; off the TV also while the keyboard is in
   // them. On the TV they hide wherever focus is, and the next key brings them back on Pause.
   const idle = () => {
     const opened = document.querySelector(
-      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"]',
+      '[data-slot="popover-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"], [data-slot="dropdown-menu-content"][data-state="open"]',
     );
     if (
       opened ||
@@ -673,10 +672,14 @@ export function PlayerPage({
   ) : (
     title
   );
-  // Up next over a picture grows from its button, as the band's Popovers do; it ends at the tools' edge as they do.
-  const queueOrigin = queueOpen
-    ? `calc(100% - ${(queueTrigger.current?.offsetWidth ?? 0) / 2 - (toolPanel(queueTrigger.current).alignOffset ?? 0)}px) 100%`
-    : undefined;
+  // Up next hangs from its button, as the band's Popovers do (toolPanel): it ends at the button's right edge and grows
+  // from it.
+  const queueAnchor = queueOpen &&
+    root.current &&
+    queueTrigger.current?.offsetWidth && {
+      end: rightGap(root.current, queueTrigger.current),
+      origin: `calc(100% - ${queueTrigger.current.offsetWidth / 2}px) 100%`,
+    };
   const settings =
     player && state?.preferences && playbackControls(state).programme
       ? {
@@ -1024,7 +1027,14 @@ export function PlayerPage({
               (osd || queueBeside) &&
                 "duration-150 ease-out motion-safe:animate-in fade-in-0 zoom-in-90",
             )}
-            style={osd || queueBeside ? { transformOrigin: queueOrigin } : undefined}
+            style={
+              (osd || queueBeside) && queueAnchor
+                ? ({
+                    transformOrigin: queueAnchor.origin,
+                    "--queue-end": `${queueAnchor.end}px`,
+                  } as CSSProperties)
+                : undefined
+            }
           >
             <QueuePanel
               state={state}
@@ -1103,11 +1113,12 @@ export function PlayerPage({
             !shown && "opacity-0",
           )}
         >
-          {/* The timeline, then the now-playing bar's own row: Play/Pause, Stop and Next in the middle, and at the right the
-            bar's tools in its order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback
-            gear, then the last slot: fullscreen here, bottom right as on every player, where the bar has Open player. So
-            each sits at the bar's x. Every control is a ghost icon (icon-lg) at the band's target (--player-target); those
-            at the row's ends pull back (-2.5) so their glyphs line up with the timeline's times. */}
+          {/* The timeline, then one quiet row along the bottom, as YouTube's and Twitch's players: at the left Play/Pause,
+            Next and a labelled Stop, nothing over the middle of the picture, and at the right the bar's tools in its
+            order, sound first, then content, then view: Volume, Where it plays, Up next and the Playback gear, then the
+            last slot: fullscreen here, bottom right as on every player, where the bar has Open player. Every control is a
+            ghost at the band's target (--player-target); those at the row's ends pull back (-2.5) so their glyphs line
+            up with the timeline's times. */}
           <div className="grid gap-1">
             {state && <PlaybackTimeline state={state} connected={connected} pageFirst compact />}
             <div
@@ -1123,6 +1134,7 @@ export function PlayerPage({
                     connected={connected}
                     run={run}
                     pageFirst
+                    quiet
                     className="player-transport"
                   />
                 )}
@@ -1220,6 +1232,12 @@ export function PlayerPage({
       )}
     </section>
   );
+}
+
+/** The gap from a box's right edge to the page's, in CSS pixels: rects are zoomed (--interface-scale), offsets aren't. */
+function rightGap(page: HTMLElement, box: HTMLElement) {
+  const outer = page.getBoundingClientRect();
+  return ((outer.right - box.getBoundingClientRect().right) * page.offsetWidth) / outer.width;
 }
 
 // The station's next show by the guide's own clock, so a broadcast boundary moves it on without re-rendering the player.

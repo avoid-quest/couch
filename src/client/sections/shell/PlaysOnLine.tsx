@@ -64,7 +64,8 @@ function PlaybackPicker({
       </>
     );
   };
-  if (desktop && !tvPresentation)
+  // Its menu hangs from it on desktops and the TV; a phone's Sheet rises from the bottom.
+  if (desktop || tvPresentation)
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>

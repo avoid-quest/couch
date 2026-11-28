@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import { visibleToasts } from "@/toasts";
+import { phoneQuery, visibleToasts } from "@/toasts";
 import { OctagonXIcon } from "lucide-react";
 import { buttonVariants } from "./button";
 
@@ -11,13 +11,14 @@ const offset = {
   left: "var(--gutter)",
   right: "var(--gutter)",
   top: "calc(var(--player-top, var(--top-bar, 3.5rem)) + 1rem)",
+  // Undo shows in the corner nearest its control (toasts.ts); at the bottom it clears the bar or the band.
+  bottom: "calc(var(--bottom-bar, 0px) + .5rem)",
 };
 const mobileOffset = {
   left: "var(--gutter)",
   right: "var(--gutter)",
   bottom: "calc(var(--bottom-bar, 0px) + .5rem)",
 };
-const phoneQuery = "(max-width: 600px)";
 const subscribePhone = (onChange: () => void) => {
   const media = window.matchMedia(phoneQuery);
   media.addEventListener("change", onChange);
