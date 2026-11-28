@@ -5,7 +5,7 @@ import { majorityShape, providerItemShape } from "@/art-shape";
 import { MediaTilesSkeleton } from "@/components/LoadingMedia";
 import { MediaTile } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
-import { Shelf } from "@/components/Shelf";
+import { Shelf, ShelfProblem } from "@/components/Shelf";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { collectionLocation } from "@/detail-navigation";
@@ -69,11 +69,13 @@ function RoomSkeleton() {
  */
 export function RaiPlayRoom({
   page,
+  summary,
   title,
   url,
   context,
 }: {
   page?: ProviderPage;
+  summary?: SearchResultSummary;
   title: string;
   url: string;
   context?: MediaCollection;
@@ -82,6 +84,8 @@ export function RaiPlayRoom({
   useSeededPages("raiplay", [room?.lead, ...(room?.shelves ?? [])]);
   const shelves = room?.shelves.filter((shelf) => shelf.item) ?? [];
   const { shown, more } = useInstalments(shelves.length);
+  // Once RaiPlay has answered, a failure is the page's problem below and a page with no lists says so; neither waits.
+  const settled = !!summary && !summary.loading;
   // A section's doors (its genres) say where they were opened from.
   const here = url ? { title, url } : undefined;
   return (
@@ -93,7 +97,7 @@ export function RaiPlayRoom({
           provider="raiplay"
           context={context}
           actions={
-            url && title ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined
+            url && page ? <AddRoomToHome provider="raiplay" url={url} title={title} /> : undefined
           }
         />
         <DoorLine
@@ -101,21 +105,27 @@ export function RaiPlayRoom({
           doors={room?.doors.map((door) => doorOf(door, here)) ?? []}
         />
       </div>
-      {!room ? (
+      {!settled && !room ? (
         <RoomSkeleton />
+      ) : settled && !summary.error && !room?.lead && !shelves.length ? (
+        <p role="status" className="text-body text-muted-foreground">
+          RaiPlay lists nothing {url ? `under ${title}` : "here"} today.
+        </p>
       ) : (
-        <>
-          {room.lead?.item && <ListLead provider="raiplay" url={room.lead.item.url} />}
-          {shelves.slice(0, shown).map((shelf) => (
-            <ListShelf
-              key={shelf.item!.url}
-              provider="raiplay"
-              url={shelf.item!.url}
-              title={shelf.title || shelf.item!.title}
-            />
-          ))}
-          {more}
-        </>
+        room && (
+          <>
+            {room.lead?.item && <ListLead provider="raiplay" url={room.lead.item.url} />}
+            {shelves.slice(0, shown).map((shelf) => (
+              <ListShelf
+                key={shelf.item!.url}
+                provider="raiplay"
+                url={shelf.item!.url}
+                title={shelf.title || shelf.item!.title}
+              />
+            ))}
+            {more}
+          </>
+        )
       )}
     </div>
   );
@@ -168,9 +178,9 @@ export function AToZRoom({
         provider="raiplay"
         context={context}
         meta={page && `${items.length.toLocaleString()} ${noun}`}
-        actions={title && <AddRoomToHome provider="raiplay" url={url} title={title} />}
+        actions={page && <AddRoomToHome provider="raiplay" url={url} title={title} />}
       />
-      {!page && <RoomSkeleton />}
+      {!page && (!summary || summary.loading) && <RoomSkeleton />}
       <nav ref={rail} aria-label="Jump to a letter">
         <ul
           data-nav-row
@@ -439,6 +449,8 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
   const sections = room.sections.map((section, index) => ({
     ...section,
     page: pages[index]?.data,
+    failed: pages[index]?.error,
+    retry: () => void pages[index]?.refetch(),
   }));
   useSeededPages(
     "raiplay",
@@ -482,6 +494,15 @@ export function KindRoom({ kind }: { kind: keyof typeof kindRooms }) {
             title={section.label}
             note={`RaiPlay, ${first.title}`}
             href={collectionLocation({ provider: "raiplay", url: section.url })}
+          />
+        ) : section.failed ? (
+          <ShelfProblem
+            key={section.url}
+            title={section.label}
+            href={collectionLocation({ provider: "raiplay", url: section.url })}
+            problem={`Couldn't load RaiPlay's ${section.label}.`}
+            detail={section.failed.message}
+            retry={section.retry}
           />
         ) : (
           connected && !section.page && <ShelfSkeleton key={section.url} title={section.label} />

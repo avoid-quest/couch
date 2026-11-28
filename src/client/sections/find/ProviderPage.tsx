@@ -256,14 +256,20 @@ function CollectionPage({
   const lettered =
     !!page?.letters || (provider === "raiplay" && path.startsWith("/genere/") && !page);
   const catalogueRoom = posterCatalogue && !url;
-  // A section's name waits for its page, so the source's name doesn't stand in for it first.
-  const roomTitle = page || !url ? collection.title : "";
+  // A section's name waits for its page, so the source's name doesn't stand in for it first, unless the page failed.
+  const roomTitle = page || !url || summary?.error ? collection.title : "";
   if (raiplayRoom || twitchRoom || lettered)
     return (
       <section data-page="Collection" className="min-w-0">
         {reader}
         {raiplayRoom ? (
-          <RaiPlayRoom page={page} title={roomTitle} url={url} context={search.context} />
+          <RaiPlayRoom
+            page={page}
+            summary={summary}
+            title={roomTitle}
+            url={url}
+            context={search.context}
+          />
         ) : twitchRoom ? (
           <TwitchRoom onNow={page?.items} />
         ) : (
