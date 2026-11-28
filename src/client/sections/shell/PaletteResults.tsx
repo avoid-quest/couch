@@ -9,7 +9,7 @@ import { usePlayOn } from "@/components/PlayOn";
 import { metaLine } from "@/media-caption";
 import { cn } from "@/lib/utils";
 import { startHold } from "@/hold";
-import { canReturn, searchRelevance } from "@/search";
+import { canReturn, searchRelevance, type SearchKind } from "@/search";
 import type { SearchScope } from "@/search-palette";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/shell-context";
@@ -30,11 +30,18 @@ import {
 import { providerNames, type ProviderId } from "../../../shared/providers";
 
 // While typing, the palette asks only the quick sources, never one that takes a yt-dlp slot from playback; See all
-// results asks the rest. A source the person chose is asked whatever it is, since it's the only one.
+// results asks the rest. A source the person chose is asked whatever it is, since it's the only one, and so are a
+// kind's own where no quick source leads it: the catalogues for films and series, and YouTube for videos (Twitch's
+// channels are mostly fans').
 const allProviders = Object.keys(providerNames) as ProviderId[];
-const fastProviders = allProviders.filter((provider) =>
-  quickSources.includes(providerNames[provider]),
-);
+const kindSources: Partial<Record<SearchKind, string[]>> = {
+  films: ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity", "RaiPlay"],
+  videos: ["YouTube"],
+};
+function paletteSources(scope: SearchScope) {
+  if (scope.source !== "All") return [scope.source];
+  return (scope.kind && kindSources[scope.kind]) || quickSources;
+}
 // A source's first few hits keep the palette a glance, and hold an artist's top four songs, as Spotify leads with.
 const perSource = 4;
 // The sources are asked once typing pauses a quarter second, from three characters, so a word in progress asks nobody.
@@ -62,9 +69,9 @@ export function usePaletteHits(text: string, scope: SearchScope, moved: boolean)
   const [settled] = useDebouncedValue(text.trim(), { wait: pause });
   const query = settled.length >= shortest ? settled : "";
   const providers = query
-    ? (scope.source === "All" ? fastProviders : allProviders).filter(
+    ? allProviders.filter(
         (provider) =>
-          (scope.source === "All" || scope.source === providerNames[provider]) &&
+          paletteSources(scope).includes(providerNames[provider]) &&
           canReturn(providerNames[provider], scope.kind),
       )
     : [];
