@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, HousePlus } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { providerPageQuery } from "@/api/providers";
 import { majorityShape, providerItemShape } from "@/art-shape";
@@ -11,7 +11,7 @@ import { mediaSubtitle } from "@/components/MediaContext";
 import { MediaTile } from "@/components/MediaTile";
 import { PlayPill, usePlayOn } from "@/components/PlayOn";
 import { SaveToggle } from "@/components/DetailHeader";
-import { ItemMenu, RowOptions, useItemMenu, type MenuAction } from "@/components/RowMenu";
+import { ItemMenu, RowOptions, useItemMenu } from "@/components/RowMenu";
 import { Shelf, ShelfHeading } from "@/components/Shelf";
 import { TRY_AGAIN } from "@/copy";
 import { StageTitle } from "@/components/Stage";
@@ -20,7 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { metaLine } from "@/media-caption";
 import type { SearchScope } from "@/search-palette";
-import { addToHome } from "@/sections/home/AddToHome";
+import { useHomeAction, type AddTarget } from "@/sections/home/AddToHome";
+import { browserActions } from "@/original-page";
 import { DoorBody, doorClass } from "@/sections/home/HomeSources";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
@@ -115,17 +116,15 @@ export function RoomHead({
   );
 }
 
-/** Follows the room's list on Home, as Add to Home does for any list. */
-export function AddRoomToHome({ provider, url, title }: Parameters<typeof addToHome>[0]) {
-  return (
-    <Button
-      variant="secondary"
-      onClick={(event) => addToHome({ provider, url, title }, event.currentTarget)}
-    >
-      <HousePlus aria-hidden="true" />
-      Add to Home
-    </Button>
-  );
+/** A room's or a shelf's "…": Add it to Home (or Show it on Home), and its page beyond Couch. */
+function useRoomOptions(target: AddTarget | undefined) {
+  const homeAction = useHomeAction();
+  return target ? [...homeAction(target), ...browserActions(target.url, target.title)] : [];
+}
+
+/** The room's own "…", at the end of its head. */
+export function RoomOptions(target: AddTarget) {
+  return <RowOptions title={target.title} actions={useRoomOptions(target)} />;
 }
 
 export type Door = { label: string; meta?: string; href?: string; onPress?: () => void };
@@ -296,7 +295,7 @@ const shelfLength = 24;
 
 /**
  * One of a source's lists as a shelf, read from its own address (seeded by the room when its page carried it). Its
- * heading opens the list (or `href`, another room); its "…" adds it to Home. `note` is a muted word after the heading.
+ * heading opens the list (or `href`, another room); its "…" adds it to Home and holds its page. `note` is a muted word after the heading.
  */
 export function ListShelf({
   provider,
@@ -322,11 +321,7 @@ export function ListShelf({
     shown.map(({ item }) => providerItemShape(providerNames[provider], item)),
     "video",
   );
-  const options: MenuAction[] = [
-    ...(followable && url
-      ? [{ label: "Add to Home", run: () => addToHome({ provider, url, title }) }]
-      : []),
-  ];
+  const options = useRoomOptions(followable && url ? { provider, url, title } : undefined);
   const menu = options.length ? <RowOptions title={title} actions={options} /> : undefined;
   return (
     <>

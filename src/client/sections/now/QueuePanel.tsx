@@ -8,7 +8,7 @@ import { isRadio } from "../../../shared/radio";
 import { playbackStatus } from "@/playback-status";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type Ref } from "react";
+import { useLayoutEffect, useRef, useState, type ComponentProps, type Ref } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -22,10 +22,8 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ListMusic, Play, X } from "lucide-react";
@@ -131,7 +129,6 @@ export function QueuePanel({
   closeRef,
 }: Props) {
   const playbackClock = usePlaybackClock();
-  const autoplayId = useId();
   const [saveOpen, setSaveOpen] = useState(false);
   const [listName, setListName] = useState("");
   const keep = useMutation({
@@ -189,7 +186,6 @@ export function QueuePanel({
     };
   };
   const autoplay = state?.autoplay;
-  // The switch shows only where Autoplay has something to continue; Settings → Playback always holds it.
   const autoplayList = useAutoplayList(credentials, state?.playback, autoplay);
   const autoplayUpcoming = autoplayList.entries;
   // The list takes its rows' majority shape, as Home's Up next does; a row of another shape is contained in that frame.
@@ -198,6 +194,42 @@ export function QueuePanel({
     current ? entryShape(current) : "video",
   );
   const autoplayFinding = !!autoplay?.enabled && !!autoplay.pending && !autoplayUpcoming.length;
+  const listActions = [
+    ...(upNext.length
+      ? [
+          {
+            label: "Save as list…",
+            group: "up-next",
+            run: () => {
+              keep.reset();
+              setListName("");
+              setSaveOpen(true);
+            },
+          },
+          {
+            label: "Clear Up next",
+            group: "up-next",
+            run: () => {
+              panelRef.current
+                ?.querySelector<HTMLElement>("#queue-title")
+                ?.focus({ preventScroll: true });
+              void run({ type: "clearUpNext" });
+            },
+          },
+        ]
+      : []),
+    // Only where Autoplay has something to continue; Settings → Playback always holds it.
+    ...(autoplay?.upcoming.length
+      ? [
+          {
+            label: autoplay.enabled ? "Turn off Autoplay" : "Turn on Autoplay",
+            group: "autoplay",
+            disabled: autoplaySave.isPending,
+            run: () => autoplaySave.mutate(!autoplay.enabled),
+          },
+        ]
+      : []),
+  ];
 
   const keepUpNext = async () => {
     if (!connected || keeping || !upNext.length || !listName.trim()) return;
@@ -261,11 +293,11 @@ export function QueuePanel({
             : null;
         }}
       >
-        {/* The heading row stays while the list scrolls under it: the title, Autoplay's switch, then its Close. Under a sheet's own header only the switch shows. */}
+        {/* The heading row stays while the list scrolls under it: the title, its "…", then its Close. Under a sheet's own header only the "…" shows. */}
         <div
           className={cn(
             "flex min-h-11 shrink-0 items-center justify-between gap-4",
-            !titled && !autoplay?.upcoming.length && "sr-only",
+            !titled && !listActions.length && "sr-only",
           )}
         >
           <h2
@@ -275,22 +307,11 @@ export function QueuePanel({
           >
             Up next
           </h2>
-          {autoplay && autoplay.upcoming.length > 0 && (
-            <div className="ml-auto flex items-center gap-3">
-              <Label
-                htmlFor={autoplayId}
-                className="touch:min-h-11 text-sm font-normal text-muted-foreground"
-              >
-                Autoplay
-              </Label>
-              <Switch
-                id={autoplayId}
-                checked={autoplay.enabled}
-                disabled={!connected || autoplaySave.isPending}
-                onCheckedChange={(value) => autoplaySave.mutate(value)}
-              />
-            </div>
-          )}
+          {/* Up next's menu: Save as list…, Clear Up next (undone from its toast as Remove is) and Autoplay. Clear's
+              "…" goes with the list, so the focus waits on the heading. */}
+          <span className="ml-auto flex">
+            <RowOptions title="Up next" disabled={!connected} actions={listActions} />
+          </span>
           {onClose && (
             <Button
               ref={closeRef}
@@ -305,7 +326,16 @@ export function QueuePanel({
             </Button>
           )}
         </div>
-        <DialogContent aria-describedby={undefined}>
+        {/* Opened from Up next's "…", which takes the focus back as it closes. */}
+        <DialogContent
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            const options = panelRef.current?.querySelector<HTMLElement>("[data-row-options]");
+            if (!options) return;
+            event.preventDefault();
+            options.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Save as list</DialogTitle>
           </DialogHeader>
@@ -369,7 +399,7 @@ export function QueuePanel({
           )}
           {upNext.length || autoplayUpcoming.length || autoplayFinding ? (
             <div className="grid gap-2">
-              {/* The list's status line, with the verb that saves it. */}
+              {/* The list's status line; its verbs are the heading's "…". */}
               {upNext.length > 0 && (
                 <>
                   <div className="flex items-center justify-between gap-4">
@@ -377,37 +407,6 @@ export function QueuePanel({
                       {upNext.length} to play
                       {doneIn == null ? "" : `, until ${formatEndTime(doneIn)}`}
                     </h3>
-                    <div className="-mr-2.5 flex items-center">
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          disabled={!connected}
-                          onClick={() => {
-                            keep.reset();
-                            setListName("");
-                          }}
-                        >
-                          Save as list
-                        </Button>
-                      </DialogTrigger>
-                      {/* Up next's menu: Clear Up next, undone from its toast as Remove is. Its "…" goes with
-                          the list, so the focus waits on the heading. */}
-                      <RowOptions
-                        title="Up next"
-                        disabled={!connected}
-                        actions={[
-                          {
-                            label: "Clear Up next",
-                            run: () => {
-                              panelRef.current
-                                ?.querySelector<HTMLElement>("#queue-title")
-                                ?.focus({ preventScroll: true });
-                              void run({ type: "clearUpNext" });
-                            },
-                          },
-                        ]}
-                      />
-                    </div>
                   </div>
                   <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">
                     {upNext.map((entry, index) => {

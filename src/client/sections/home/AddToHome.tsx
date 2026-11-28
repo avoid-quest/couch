@@ -48,11 +48,9 @@ import { addHomeFollow, setHomeSectionShown } from "./home-rows";
 export type AddTarget = { provider: ProviderId; url: string; title: string };
 const opened = "couch.add-to-home";
 
-/** Opens Add to Home for `target` from the control `from` (by default the one holding focus), from any menu or page. */
-export const addToHome = (target: AddTarget, from?: HTMLElement) =>
-  window.dispatchEvent(
-    new CustomEvent<AddTarget & { from?: HTMLElement }>(opened, { detail: { ...target, from } }),
-  );
+/** Opens Add to Home for `target` from the control holding focus, where a closed menu returns it. */
+const addToHome = (target: AddTarget) =>
+  window.dispatchEvent(new CustomEvent<AddTarget>(opened, { detail: target }));
 
 /** The control a panel opens from: the one given, else the one holding focus, where a closed menu returns it. */
 export const panelAnchor = (from?: HTMLElement) =>
@@ -169,8 +167,7 @@ export function AddToHomePanel() {
   const [open, setOpen] = useState<{ target: AddTarget; anchor: HTMLElement | null } | null>(null);
   useEffect(() => {
     const show = (event: Event) => {
-      const { from, ...target } = (event as CustomEvent<AddTarget & { from?: HTMLElement }>).detail;
-      setOpen({ target, anchor: panelAnchor(from) });
+      setOpen({ target: (event as CustomEvent<AddTarget>).detail, anchor: panelAnchor() });
     };
     window.addEventListener(opened, show);
     return () => window.removeEventListener(opened, show);
@@ -327,7 +324,7 @@ function SectionPicks({
       )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
         <p className="min-w-0 flex-1 basis-52 text-meta text-muted-foreground">
-          Anything else: find it with Search, then use Add to Home in its menu or on its page.
+          Anything else: find it with Search, then add it to Home from its "…".
         </p>
         <Button variant="ghost" onClick={search}>
           <Search aria-hidden="true" />
