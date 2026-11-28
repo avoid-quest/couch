@@ -685,9 +685,9 @@ test("Play all on a Bandcamp fan's list reads a spare release in place of an alb
       .join("\n");
   });
   const page = await fans.start("https://bandcamp.com/fan");
-  expect(page.items).toHaveLength(8);
+  expect(page.items).toHaveLength(4);
   const more = await page.more;
-  expect(more?.items).toHaveLength(492);
+  expect(more?.items).toHaveLength(496);
   expect(more?.items.at(-1)?.title).toBe("spare 241");
   expect(more?.short).toBe(false);
 });

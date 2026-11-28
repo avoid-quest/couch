@@ -139,7 +139,7 @@ redirects refused. **Play all** and **Queue all** on a fan page page through the
 (100 releases a request) until its releases hold 500 tracks, plus four spare releases
 that replace an album that fails, then read the albums a few per extraction, two at
 once, each album's tracks in order, all within 30 seconds. Play all starts on the
-first page's first eight albums and adds the rest to the same Autoplay once read;
+first page's first four albums and adds the rest to the same Autoplay once read;
 what was read when the time runs out is what plays. When that is under 500 tracks
 and the fan has more, the Device that pressed Play all says how many play.
 

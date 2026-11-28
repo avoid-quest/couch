@@ -22,16 +22,18 @@ const albumGroup = 8;
 // yt-dlp runs three extractions at once for all of Core; a fan list takes two, so playback and searches always keep
 // one and Bandcamp sees no burst.
 const albumLanes = 2;
+// Play all starts on the first page's first few albums, as many as one extraction reads in a few seconds.
+const headAlbums = 4;
 // Releases read past those that fill the list by Bandcamp's counts, so an album that fails to read is replaced.
 const spareReleases = 4;
 /** The rest of a fan's list, after its first albums, and whether it ends under 500 tracks while the fan has more. */
 export type FanListRest = { items: ProviderItem[]; short: boolean };
 
-/** The releases up to the first group of albums: they play while the rest is read. */
+/** The releases up to the first few albums: they play while the rest is read. */
 function headOf(releases: Release[]) {
   let albums = 0;
   const end = releases.findIndex(
-    (release) => release.item.kind === "collection" && ++albums > albumGroup,
+    (release) => release.item.kind === "collection" && ++albums > headAlbums,
   );
   return end === -1 ? releases : releases.slice(0, end);
 }
@@ -44,13 +46,17 @@ function wanted(listed: Release[]) {
   return tracks < maxTracks ? Infinity : index + spareReleases;
 }
 
-/** Runs tasks so that at most `count` are underway at once, the rest in the order they came. */
+/** Runs tasks so that at most `count` are underway at once, the rest in the order they came, `first` ones first. */
 function lanes(count: number) {
   let running = 0;
   const waiting: (() => void)[] = [];
-  return async <T>(task: () => Promise<T>): Promise<T> => {
+  return async <T>(task: () => Promise<T>, first = false): Promise<T> => {
     if (running < count) running++;
-    else await new Promise<void>((resolve) => waiting.push(resolve));
+    else
+      await new Promise<void>((resolve) => {
+        if (first) waiting.unshift(resolve);
+        else waiting.push(resolve);
+      });
     try {
       return await task();
     } finally {
@@ -262,21 +268,23 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
       : result;
   }
 
-  async function extract(albums: ProviderItem[], signal: AbortSignal) {
-    const output = await lane(() =>
-      run(
-        [
-          "--use-extractors",
-          "bandcamp:album,end",
-          "--flat-playlist",
-          "--dump-single-json",
-          "--playlist-items",
-          `1:${maxTracks}`,
-          "--",
-          ...albums.map((album) => album.url),
-        ],
-        { signal },
-      ),
+  async function extract(albums: ProviderItem[], signal: AbortSignal, first: boolean) {
+    const output = await lane(
+      () =>
+        run(
+          [
+            "--use-extractors",
+            "bandcamp:album,end",
+            "--flat-playlist",
+            "--dump-single-json",
+            "--playlist-items",
+            `1:${maxTracks}`,
+            "--",
+            ...albums.map((album) => album.url),
+          ],
+          { signal },
+        ),
+      first,
     );
     return albumTracks(output, albums);
   }
@@ -285,16 +293,17 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
   async function group(
     albums: ProviderItem[],
     signal: AbortSignal,
+    first: boolean,
   ): Promise<Map<string, ProviderItem[]>> {
     try {
-      return await extract(albums, signal);
+      return await extract(albums, signal, first);
     } catch (error) {
       // Past the deadline, the albums read so far are the list.
       if (signal.aborted) return new Map();
       if (!(error instanceof ExtractionError)) throw error;
       if (albums.length === 1) return new Map();
     }
-    const read = await Promise.all(albums.map((album) => group([album], signal)));
+    const read = await Promise.all(albums.map((album) => group([album], signal, first)));
     return new Map(read.flatMap((tracks) => [...tracks]));
   }
 
@@ -304,13 +313,13 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
   const albumsOf = (chosen: Release[]) =>
     chosen.flatMap(({ item }) => (item.kind === "collection" ? [item] : []));
 
-  /** Albums' tracks, read a group at a time in the two lanes. */
-  async function read(albums: ProviderItem[], signal: AbortSignal) {
+  /** Albums' tracks, read a group at a time in the two lanes; the `first` albums, the ones that play at once, go first. */
+  async function read(albums: ProviderItem[], signal: AbortSignal, first = false) {
     const groups = Array.from({ length: Math.ceil(albums.length / albumGroup) }, (_, index) =>
       albums.slice(index * albumGroup, (index + 1) * albumGroup),
     );
     return new Map(
-      (await Promise.all(groups.map((albums) => group(albums, signal)))).flatMap((read) => [
+      (await Promise.all(groups.map((albums) => group(albums, signal, first)))).flatMap((read) => [
         ...read,
       ]),
     );
@@ -331,7 +340,7 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
     const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(loadTime)]);
     const first = await firstPage(run, fan, deadline);
     const head = headOf(first.releases);
-    const headRead = read(albumsOf(head), deadline);
+    const headRead = read(albumsOf(head), deadline, true);
     const rest = (async () => {
       const listed = [...first.releases];
       let cursor = first.nextCursor;
@@ -350,8 +359,6 @@ export function createBandcampFans(run: typeof runYtDlp = runYtDlp) {
         cursor = page.nextCursor;
       }
       const chosen = listed.slice(head.length, wanted(listed));
-      // The first albums take the lanes first, even when one of them is read again on its own.
-      await headRead.catch(() => {});
       const tracks = await read(albumsOf(chosen), deadline);
       signal?.throwIfAborted();
       return { chosen, tracks, unread: !!cursor || head.length + chosen.length < listed.length };
