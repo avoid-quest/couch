@@ -4,6 +4,7 @@ import { useSessionGate } from "@/session/session-context";
 import { playbackControls } from "@/session/playback-controls";
 import { showShare } from "@/sections/share/share-view";
 import { useShell } from "@/sections/shell/shell-context";
+import { leftLive } from "@/toasts";
 import type { SearchHit } from "./SearchOnlineResults";
 import { heldOutOf, liveTitle, type LiveSource } from "../../../shared/live-input";
 
@@ -62,7 +63,10 @@ export function useLiveSourceHits(query: string): SearchHit[] {
               ? {
                   label: "Leave",
                   disabled: !connected,
-                  run: () => void run({ type: "leave", playbackId: playback.id }),
+                  run: () =>
+                    void run({ type: "leave", playbackId: playback.id }).then((done) => {
+                      if (done) leftLive(liveTitle(source), play);
+                    }),
                 }
               : playback
                 ? {
