@@ -3,7 +3,7 @@ import { artShape, type ArtShape } from "@/art-shape";
 import { mediaSubtitle } from "@/components/MediaContext";
 import { collectionSubtitle, metaLine } from "@/media-caption";
 import { formatDay, formatRuntime } from "@/time-format";
-import { foldCopies, searchRelevance } from "../../search";
+import { canReturn, foldCopies, searchRelevance, type SearchKind } from "../../search";
 import { spotifyLink } from "../../../shared/providers";
 import { stationSources } from "../../../shared/radio";
 import type { SearchHit, SearchResultSummary } from "./SearchOnlineResults";
@@ -27,12 +27,32 @@ export const sourceOrder = [
   "AnimeSaturn",
   "AnimeUnity",
 ];
-export const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
+const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 /** The sources that answer within a second or two over plain HTTP, never taking a yt-dlp slot. */
 export const quickSources = ["Radio archives", "Mixcloud", "Spotify", "Bandcamp", "Twitch"];
 
 export const names = (sources: string[]) =>
   sources.length > 1 ? `${sources.slice(0, -1).join(", ")} and ${sources.at(-1)}` : sources[0];
+
+type GroupId = Exclude<SearchKind, "audio"> | "channels";
+const kindOf = (group: GroupId): SearchKind => (group === "channels" ? "videos" : group);
+// RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
+const groupOf = (hit: SearchHit): GroupId =>
+  (catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List") ||
+  (hit.source === "RaiPlay" && !!hit.collection)
+    ? "films"
+    : hit.kind === "Radio"
+      ? "radio"
+      : hit.kind === "Stream"
+        ? "live"
+        : hit.kind === "Music"
+          ? "music"
+          : hit.collection
+            ? "channels"
+            : "videos";
+/** Whether a hit is of the chosen kind, as both the palette and the results show it: audio is what a source plays as sound. */
+export const inKind = (hit: SearchHit, kind?: SearchKind) =>
+  !kind || (kind === "audio" ? canReturn(hit.source, kind) : kindOf(groupOf(hit)) === kind);
 
 /** A hit's own artwork shape (art-shape.ts). */
 export const shapeOf = (hit: SearchHit): ArtShape =>

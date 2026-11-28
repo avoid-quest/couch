@@ -8,7 +8,6 @@ import {
   linkOf,
   searchLocation,
   searchRelevance,
-  type SearchKind,
   type SearchRouteState,
 } from "../../search";
 import {
@@ -78,10 +77,10 @@ import { StageTitle } from "@/components/Stage";
 import { roomStyle, useArtworkLight } from "@/components/AmbientLight";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 import {
-  catalogues,
   hitContext,
   hitMeta,
   hitSources,
+  inKind,
   names,
   pressPlays,
   quickSources,
@@ -117,22 +116,6 @@ type Entry = [source: string, summary: SearchResultSummary];
 
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
-type GroupId = Exclude<SearchKind, "audio"> | "channels";
-const kindOf = (group: GroupId): SearchKind => (group === "channels" ? "videos" : group);
-// RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
-const groupOf = (hit: SearchHit): GroupId =>
-  (catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List") ||
-  (hit.source === "RaiPlay" && !!hit.collection)
-    ? "films"
-    : hit.kind === "Radio"
-      ? "radio"
-      : hit.kind === "Stream"
-        ? "live"
-        : hit.kind === "Music"
-          ? "music"
-          : hit.collection
-            ? "channels"
-            : "videos";
 // One source's tiles wrap as ProviderPage's posters do, each as wide as its column.
 const gridColumns = {
   poster: "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]",
@@ -256,11 +239,8 @@ export function SearchPanel(props: Props) {
   const isFound = (hit: SearchHit) =>
     close(hit) && (kind !== "audio" || canReturn(hit.source, kind));
   const found = hits.filter(isFound);
-  const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
-  const inKind = (hit: SearchHit, of = kind) =>
-    !of || (of === "audio" ? canReturn(hit.source, of) : kindOfHit(hit) === of);
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
-  const scoped = within(filter).filter((hit) => inScope(hit.source) && inKind(hit));
+  const scoped = within(filter).filter((hit) => inScope(hit.source) && inKind(hit, kind));
   const relevant = scoped.filter(close);
   const loose = scoped.filter((hit) => !close(hit));
   // The closest match leads and holds still for the query and kind, so nothing moves under the focus while browsing.
