@@ -60,7 +60,9 @@ const holdNowPlaying = (hold: "playing" | "paused" | null) => {
     }
     return;
   }
-  silence ??= Object.assign(new Audio(), { loop: true });
+  // At volume 0, unmuted, Chromium still counts the element as media for Now Playing but opens no audio stream, so
+  // the computer can still sleep while a controller window holds it.
+  silence ??= Object.assign(new Audio(), { loop: true, volume: 0 });
   silence.src ||= silentSource ??= silentWav();
   if (hold === "playing") void silence.play().catch(() => {});
   else silence.pause();
