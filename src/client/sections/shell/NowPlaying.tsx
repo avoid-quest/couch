@@ -153,7 +153,8 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
       <aside
         {...shell}
         className={cn(
-          "now-playing lit-panel side-player fixed top-3 bottom-3 z-30 flex w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]",
+          // As tall as what it holds, up to the window: with nothing up next it leaves no empty half.
+          "now-playing lit-panel side-player fixed top-3 z-30 flex max-h-[calc(100dvh-1.5rem)] w-(--side-player-width) flex-col overflow-hidden rounded-[1.625rem]",
           side === "left" ? "left-3" : "right-3",
         )}
       >

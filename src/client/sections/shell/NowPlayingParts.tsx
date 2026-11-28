@@ -153,7 +153,7 @@ export function UpNext({
   useUncut(list, "[data-up-next-row]", ids);
   const { available } = playbackCapabilities(state, connected);
   // Offered as the full player's Up next button is: while there is anything to show, played rows included.
-  if (!hasUpNext(state)) return <div className="flex-1" />;
+  if (!hasUpNext(state)) return null;
   const heading =
     "-mx-2 h-auto min-h-0 justify-start self-start px-2 py-1 font-heading text-sm font-semibold";
   return (

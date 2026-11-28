@@ -316,8 +316,8 @@ const slotLabel = (button: { ended: boolean; paused: boolean }, failed: boolean)
  * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
- * Now playing and the full player (`quiet`) read Play/Pause, Next, then Stop with its name, as YouTube's and Twitch's
- * players lead with Play and Next.
+ * Now playing and the full player (`quiet`) read Play/Pause, Next, then Stop, as YouTube's and Twitch's players lead
+ * with Play and Next. Every one is an icon of one size, named by its label and tooltip.
  */
 export function PlaybackTransport({
   state,
@@ -363,23 +363,14 @@ export function PlaybackTransport({
     <Button
       data-page-first={first(1)}
       variant="ghost"
-      size={quiet ? "default" : "icon-lg"}
-      className={cn(
-        transportInk,
-        // The narrowest phones trim its padding, so its name still fits the band's row.
-        quiet && "h-(--player-target) max-[23rem]:gap-1 max-[23rem]:px-2",
-      )}
+      size="icon-lg"
+      className={transportInk}
       aria-label="Stop"
       title="Stop"
       disabled={!enabled[1]}
       onClick={() => void run({ type: "stop" })}
     >
-      <Square
-        aria-hidden="true"
-        data-icon={quiet ? "inline-start" : undefined}
-        className="fill-current"
-      />
-      {quiet && <span>Stop</span>}
+      <Square aria-hidden="true" className="fill-current" />
     </Button>
   );
   const next = (

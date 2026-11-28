@@ -333,7 +333,7 @@ function MixerTransport({ state, connected, run }: Props) {
   const timed = !!current && !current.endless && !isRadio(current) && !!current.duration;
   return (
     // Play/Pause leads as a round white key and Stop wears its own fill, as at the player's foot.
-    <div className="-mx-4 grid shrink-0 gap-1 border-t px-4 pt-2 [&_[aria-label=Stop]]:bg-secondary [&_[data-play-button]]:mr-1 [&_[data-play-button]]:size-11 [&_[data-play-button]]:bg-foreground [&_[data-play-button]]:text-background [&_[data-play-button]_svg]:opacity-100 [&_[data-time-labels]]:hidden">
+    <div className="-mx-4 grid shrink-0 gap-1 border-t px-4 pt-2 [&_[data-time-labels]]:hidden">
       <PlaybackTimeline state={state} connected={connected} />
       <div data-nav-row className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <PlaybackTransport state={state} connected={connected} run={run} quiet />

@@ -26,7 +26,6 @@ import {
   Minimize,
   Music2,
   Settings,
-  SlidersVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -1226,16 +1225,13 @@ export function PlayerPage({
                       className={
                         narrow
                           ? undefined
-                          : "mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 pr-3 pl-3.5 font-medium hover:bg-white/20"
+                          : "mr-1 h-(--player-target) max-w-[min(22rem,40vw)] gap-2.5 rounded-full bg-white/10 px-3.5 font-medium hover:bg-white/20"
                       }
                     >
                       {!narrow && (
-                        <>
-                          <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
-                            <WhereTokens state={state} compact />
-                          </span>
-                          <SlidersVertical aria-hidden="true" />
-                        </>
+                        <span className="flex min-w-0 gap-3 overflow-hidden text-sm">
+                          <WhereTokens state={state} compact />
+                        </span>
                       )}
                     </WhereItPlays>
                   )}
