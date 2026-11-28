@@ -143,7 +143,7 @@ function SearchRoom({ thumbnail }: { thumbnail?: string }) {
  * On the TV the page's first verb (the hero's Play, a list's Play all) takes the focus once it shows and can be pressed,
  * unless the person already pressed something here.
  */
-function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean) {
+export function useFirstVerb(page: RefObject<HTMLElement | null>, ready: boolean) {
   const pressed = useRef(false);
   useEffect(() => {
     const press = () => {

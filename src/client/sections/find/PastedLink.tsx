@@ -9,11 +9,12 @@ import { createId } from "@/session/session";
 import { useShell } from "@/sections/shell/shell-context";
 import { supportsWebVideoQuality, videoQualityOptions } from "@/video-quality";
 import { linkTarget, type VideoQuality } from "../../../shared/providers";
-import type { Props } from "./SearchPanel";
+import { useFirstVerb, type Props } from "./SearchPanel";
 
 /**
  * A pasted link that isn't a list, on the results page: open it as a webpage or as direct media, at a quality, then
- * Play, Queue or Play next; Open page where Couch's provider opens it. A station's page plays its station.
+ * Play, Queue or Play next; Open page where Couch's provider opens it. A station's page plays its station (focused
+ * first on the TV), else opens in the browser.
  */
 export function PastedLink({
   url,
@@ -68,42 +69,54 @@ export function PastedLink({
   }
   const navigation = useDetailNavigation();
   const disabled = !props.connected || pending;
+  const root = useRef<HTMLElement>(null);
+  useFirstVerb(root, !!station && !disabled && props.canPlay);
   return (
-    <section className="max-w-3xl space-y-4">
+    <section ref={root} className="max-w-3xl space-y-4">
       <h1 className="sr-only">{hostname + pathname}</h1>
-      <SettingsSection>
-        <SettingsRow label="Open as">
-          <ChoiceGroup
-            label="Open link as"
-            value={mode}
-            onValueChange={setMode}
-            disabled={disabled}
-            options={[
-              { value: "Webpage", label: "Webpage" },
-              { value: "Direct media", label: "Direct media" },
-            ]}
-          />
-        </SettingsRow>
-        {mode === "Webpage" && supportsWebVideoQuality(url) && (
-          <SettingsRow label="Quality">
+      {target?.shape !== "station" && (
+        <SettingsSection>
+          <SettingsRow label="Open as">
             <ChoiceGroup
-              label="Video quality"
-              value={quality}
-              onValueChange={onQualityChange}
+              label="Open link as"
+              value={mode}
+              onValueChange={setMode}
               disabled={disabled}
-              options={videoQualityOptions}
+              options={[
+                { value: "Webpage", label: "Webpage" },
+                { value: "Direct media", label: "Direct media" },
+              ]}
             />
           </SettingsRow>
-        )}
-      </SettingsSection>
+          {mode === "Webpage" && supportsWebVideoQuality(url) && (
+            <SettingsRow label="Quality">
+              <ChoiceGroup
+                label="Video quality"
+                value={quality}
+                onValueChange={onQualityChange}
+                disabled={disabled}
+                options={videoQualityOptions}
+              />
+            </SettingsRow>
+          )}
+        </SettingsSection>
+      )}
       <div className="flex flex-wrap gap-2">
         {/* Open shows only where Couch's provider opens the link; a Twitch VOD still plays as a webpage. */}
         {station && (
           <Button
+            data-page-first
             disabled={disabled || !props.canPlay}
             onClick={() => void shell.enqueueRadio(station, true).then((ok) => ok && onDone())}
           >
             Play {station.name}
+          </Button>
+        )}
+        {station === null && (
+          <Button asChild variant="outline">
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              Open in browser
+            </a>
           </Button>
         )}
         {target && target.shape !== "station" && (
