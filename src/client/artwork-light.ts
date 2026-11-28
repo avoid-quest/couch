@@ -47,6 +47,18 @@ function atLuminance(colour: Rgb, target: number): Rgb {
 }
 
 /**
+ * The colour a little more vivid: each channel pushed from its grey by half again in linear light, which keeps its
+ * luminance, clamped to what a screen can show. An averaged picture reads paler than its brightest pixels; the lamp
+ * takes this so it glows in the picture's own colour, as the prototype's hand-picked lamps do.
+ */
+function vivid(colour: Rgb, lift = 1.5): Rgb {
+  const grey = luminance(colour);
+  return colour.map((channel) =>
+    encoded(Math.max(0, Math.min(1, grey + (linear(channel) - grey) * lift))),
+  ) as unknown as Rgb;
+}
+
+/**
  * How bright each colour may be. The item light hugs the artwork and is gone a few rem out; at its brightest white ink
  * keeps 7:1 over it (1.05 / 7 − 0.05 = 0.1). The lamps are as bright as the stills the design was drawn from; the room
  * mixes them into its dark at most at 40% and 34% (index.css, Room), where ink and its 70% keep 4.5:1.
@@ -125,7 +137,7 @@ function pickLight(pixels: ArrayLike<number>): [Rgb, Rgb] | null {
 export const lightFrom = (key: string, [a, b]: [Rgb, Rgb]): Light => ({
   key,
   a: atLuminance(a, peak),
-  lamp: atLuminance(a, lampPeak),
+  lamp: atLuminance(vivid(a), lampPeak),
   spill: atLuminance(b, spillPeak),
 });
 
