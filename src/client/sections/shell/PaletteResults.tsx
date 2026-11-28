@@ -31,12 +31,12 @@ import { providerNames, type ProviderId } from "../../../shared/providers";
 
 // While typing, the palette asks only the quick sources, never one that takes a yt-dlp slot from playback; See all
 // results asks the rest. A source the person chose is asked whatever it is, since it's the only one, and so are a
-// kind's own where no quick source leads it: the catalogues for films and series, and YouTube for videos (Twitch's
-// channels are mostly fans').
+// kind's own where no quick source leads it: the catalogues for films and series, and YouTube beside Twitch for videos
+// (an exact YouTube channel then outranks a fan's Twitch channel for the top row).
 const allProviders = Object.keys(providerNames) as ProviderId[];
 const kindSources: Partial<Record<SearchKind, string[]>> = {
   films: ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity", "RaiPlay"],
-  videos: ["YouTube"],
+  videos: ["YouTube", "Twitch"],
 };
 function paletteSources(scope: SearchScope) {
   if (scope.source !== "All") return [scope.source];

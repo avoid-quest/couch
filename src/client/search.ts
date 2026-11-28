@@ -197,10 +197,16 @@ export function searchRelevance(query: string, typing = false) {
       const title = searchWords(hit.title);
       const reads = (parts: string[]) =>
         parts.length === words.length && parts.every((part, index) => matches(part, words[index]!));
+      // Or the artist's words anywhere ("davis miles kind of blue"), the rest the whole title in order.
+      const rest = words.filter((word) => !artist.includes(word));
+      const around =
+        artist.every((part) => words.includes(part)) &&
+        rest.length === title.length &&
+        rest.every((word, index) => matches(title[index]!, word));
       return (
         !!artist.length &&
         !!title.length &&
-        (reads([...artist, ...title]) || reads([...title, ...artist]))
+        (reads([...artist, ...title]) || reads([...title, ...artist]) || around)
       );
     },
   };

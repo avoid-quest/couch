@@ -173,3 +173,9 @@ test("a known host pasted without its scheme is its https link, and words never 
   for (const words of ["devi tensione", "dj.ale", "example.com/a", "soundcloud"])
     expect(linkOf(words)).toBeUndefined();
 });
+
+test("an artist's name in another order still credits their release", () => {
+  const { credited } = searchRelevance("Davis, Miles Kind of Blue");
+  expect(credited({ title: "Kind Of Blue", meta: "Miles Davis" })).toBe(true);
+  expect(credited({ title: "Kind of Blue (Side Two)", meta: "someone" })).toBe(false);
+});
