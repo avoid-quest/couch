@@ -35,7 +35,7 @@ import { collectionLinks } from "@/collection-target";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TryAgain } from "@/components/TryAgain";
 import { useSettingsScope } from "@/sections/settings/settings-scope";
-import type { ProviderId } from "../../../shared/providers";
+import { pageSection, type ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 import { addToHome } from "@/sections/home/AddToHome";
 import { AToZRoom, CatalogueRoomHead, RaiPlayRoom, TwitchRoom } from "./SourceRooms";
@@ -245,8 +245,11 @@ function CollectionPage({
     ) : (
       <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
     );
-  // A source's own front page and its sections are rooms (docs/design.md, Room), as is a list it files by letter.
-  const raiplayRoom = provider === "raiplay" && (!url || path.startsWith("/tipologia/"));
+  // A source's own front page and its sections are rooms (docs/design.md, Room), as is a list it files by letter; one
+  // of a section's lists (its #block=) is a list.
+  const raiplayRoom =
+    provider === "raiplay" &&
+    (!url || (path.startsWith("/tipologia/") && !pageSection({ provider, url })));
   const twitchRoom = provider === "twitch" && !url;
   const lettered =
     !!page?.letters || (provider === "raiplay" && path.startsWith("/genere/") && !page);
