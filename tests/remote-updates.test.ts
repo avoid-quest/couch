@@ -257,6 +257,9 @@ test("the TV status file and native reply boundary agree on every recorded outco
     updates.receive({ requestId: id, state: reply });
     expect(await result).toEqual(reply);
   }
+  expect(parseUpdateOutcome("at=2026-11-28T01:31:39UTC\noutcome=rolled-back")?.at).toBe(
+    Date.parse("2026-11-28T01:31:39Z"),
+  );
   expect(parseUpdateOutcome("at=garbled\noutcome=waiting")).toBeNull();
   expect(parseUpdateOutcome("at=2026-10-06T00:00:00Z\noutcome=unknown")).toBeNull();
   const legacy = parseUpdateOutcome("at=2026-10-06T00:00:00Z\noutcome=waiting\nversion=\n");

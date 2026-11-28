@@ -1,3 +1,6 @@
+import { mediaAddress } from "./media-diagnostics";
+import { reportPlaybackFailure } from "./sentry";
+
 const hostOf = (url = "") => {
   try {
     return new URL(url).hostname;
@@ -61,7 +64,14 @@ export function logPlaybackError(
   where: string,
   source: string | undefined,
   message: string,
+  report = true,
 ) {
+  if (report)
+    reportPlaybackFailure(
+      where,
+      mediaAddress(source?.replace(/^web:/, "") ?? "").host,
+      safePlaybackError(message),
+    );
   console.log(
     `${new Date().toISOString()} player error ${id.slice(0, 8)} ${where} host=${hostOf(source)}: ${safePlaybackError(message)}`.replace(
       /[\p{Cc}\u2028\u2029]/gu,

@@ -3,7 +3,13 @@ import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { ExtractionError, resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import {
+  ExtractionError,
+  resolveWithYtDlp,
+  runYtDlp,
+  UnavailableError,
+  type YtDlpOptions,
+} from "./yt-dlp";
 import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
@@ -108,7 +114,7 @@ function headers(value: unknown): Record<string, string> {
 
 function selectedSource(info: Metadata): string {
   if (info.has_drm === true)
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
   if (
     info.protocol !== undefined &&
     !["http", "https", "m3u8", "m3u8_native"].includes(String(info.protocol))
@@ -178,12 +184,12 @@ async function rejectDrm(info: Metadata, signal?: AbortSignal) {
       playlist,
     )
   )
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
 }
 
 export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
   if (info.has_drm === true)
-    throw new Error("This item requires DRM playback, which is not supported.");
+    throw new UnavailableError("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (
     !Array.isArray(selected) ||

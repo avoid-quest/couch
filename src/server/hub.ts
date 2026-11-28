@@ -118,6 +118,8 @@ import {
   playbackDelivery,
 } from "../shared/playback-policy";
 import { logPlaybackError, safePlaybackError } from "./playback-log";
+import { reportPlaybackFailure } from "./sentry";
+import { UnavailableError } from "./yt-dlp";
 import type { DisplayAction, DisplayState } from "../shared/display";
 import type { CompressorSettings } from "../shared/compressor";
 
@@ -512,6 +514,8 @@ export async function createHub(options: HubOptions) {
   };
   // One resolution per item and codec family: screens and the group's sound share it, also while
   // it runs, and Core's relay renews its link when it expires (pass-through.ts).
+  // Web resolution failures the resolver already reported; a screen waiting on the same one only logs it.
+  const reported = new WeakSet<Error>();
   const sharedResolution = (
     playback: Playback,
     entry: QueueEntry,
@@ -1653,7 +1657,13 @@ export async function createHub(options: HubOptions) {
             safePlaybackError(error instanceof Error ? error.message : "").trim() ||
             "Couch couldn't prepare this picture.";
           send(tab, playerCommand({ type: "stop" }));
-          logPlaybackError(playback.id, `on ${nameOf(deviceOf(tab))}`, entry.source, screen.error);
+          logPlaybackError(
+            playback.id,
+            `on ${nameOf(deviceOf(tab))}`,
+            entry.source,
+            screen.error,
+            !(error instanceof UnavailableError) && !reported.has(error),
+          );
           broadcast();
         },
       );
@@ -3461,7 +3471,16 @@ export async function createHub(options: HubOptions) {
       );
     },
   };
-  const mpv = createMpv((player) => mpvPlayback?.session.observe(player));
+  // mpv stays in "error" while it keeps playing (a refused compressor) and publishes every second.
+  let mpvFailure = "";
+  const mpv = createMpv((player) => {
+    const failure =
+      mpvPlayback && player.status === "error" ? `${player.playbackId} ${player.error}` : "";
+    if (mpvPlayback && failure && failure !== mpvFailure)
+      logPlaybackError(mpvPlayback.id, "mpv", mpvPlayback.media?.source, player.error ?? "");
+    mpvFailure = failure;
+    mpvPlayback?.session.observe(player);
+  });
   const passThrough = createPassThrough((playbackId) => !!playing(playbackId));
   const repacks = createRepacks((playbackId) => {
     const playback = playing(playbackId);
@@ -3517,10 +3536,17 @@ export async function createHub(options: HubOptions) {
           output,
         );
       } catch (error) {
+        const message = safePlaybackError(error instanceof Error ? error.message : "Unknown error");
         logMediaDiagnostic("resolve-failed", playbackId, {
           canceled: signal.aborted,
-          error: safePlaybackError(error instanceof Error ? error.message : "Unknown error"),
+          error: message,
         });
+        const timedOut =
+          signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
+        if ((!signal.aborted || timedOut) && !(error instanceof UnavailableError)) {
+          reportPlaybackFailure("resolve", mediaAddress(entry.source.slice(4)).host, message);
+          if (error instanceof Error) reported.add(error);
+        }
         throw error;
       }
     }
