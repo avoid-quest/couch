@@ -1,6 +1,11 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { RowOptions, type MenuAction } from "@/components/RowMenu";
+import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
+import { isTvPresentation } from "@/session/presentation";
 import { controlBox, undoable } from "@/toasts";
 import { settingsPagePath } from "../../../shared/settings-pages";
 import { moveHomeSection, setHomeSectionShown, type HomeSectionId } from "./home-rows";
@@ -101,7 +106,10 @@ function useSectionActions(id: HomeSectionId, name: string): MenuAction[] {
   ];
 }
 
-/** A Home section's "…", at the end of its heading's line; a followed section's adds Rename and Remove. */
+/**
+ * A Home section's "…", at the end of its heading's line; a followed section's adds Rename and Remove. Its menu hangs
+ * from it on desktops and the TV; a phone's Sheet rises from the bottom.
+ */
 export function SectionOptions({
   id,
   name,
@@ -114,21 +122,75 @@ export function SectionOptions({
   remove?: MenuAction;
 }) {
   const router = useRouter();
-  const actions = useSectionActions(id, name);
+  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const actions = [
+    ...(rename ? [rename] : []),
+    ...useSectionActions(id, name),
+    ...(remove ? [remove] : []),
+    {
+      label: "Edit Home",
+      run: () => void router.navigate({ to: settingsPagePath("home") }),
+    },
+  ];
   return (
     <span data-section-options={id} className="ml-auto flex shrink-0">
-      <RowOptions
-        title={name}
-        actions={[
-          ...(rename ? [rename] : []),
-          ...actions,
-          ...(remove ? [remove] : []),
-          {
-            label: "Edit Home",
-            run: () => void router.navigate({ to: settingsPagePath("home") }),
-          },
-        ]}
-      />
+      {desktop || isTvPresentation() ? (
+        <RowOptions title={name} actions={actions} />
+      ) : (
+        <OptionsSheet title={name} actions={actions} />
+      )}
     </span>
+  );
+}
+
+/** A phone's section menu. A verb runs once the Sheet has given the focus back to the "…", as the menu's do. */
+function OptionsSheet({ title, actions }: { title: string; actions: MenuAction[] }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const chosen = useRef<() => void>(undefined);
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button
+          ref={trigger}
+          data-row-options
+          variant="ghost"
+          size="icon"
+          aria-label={`Options for ${title}`}
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent
+        side="bottom"
+        aria-describedby={undefined}
+        className="max-h-[85dvh] overflow-y-auto px-(--gutter) py-4"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          trigger.current?.focus();
+          const run = chosen.current;
+          chosen.current = undefined;
+          run?.();
+        }}
+      >
+        <div className="mx-auto grid w-full max-w-3xl gap-1">
+          <SheetTitle className="mb-2 pr-11">{title}</SheetTitle>
+          {actions.map((action) => (
+            <Button
+              key={action.label}
+              variant="ghost"
+              disabled={action.disabled}
+              className="h-auto justify-start rounded-md px-2 py-3 text-left"
+              onClick={() => {
+                chosen.current = action.run;
+                setOpen(false);
+              }}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
