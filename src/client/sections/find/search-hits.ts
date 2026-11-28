@@ -125,7 +125,7 @@ function useHeldOrder(key: string, ranked: string[]) {
 /**
  * One search's hits as Search shows them: each source in the order it answered (the strongest first among those
  * answering together; a source never moves once shown), each in its own order, each recording once (foldCopies), every
- * press playing what plays.
+ * press playing what plays. `within` is what a source's own search shows: copies fold only among the sources in scope.
  */
 export function useSourceHits(
   key: string,
@@ -139,8 +139,13 @@ export function useSourceHits(
     .filter((source) => summaries[source]?.hits?.length)
     .sort((a, b) => best(b) - best(a));
   const order = useHeldOrder(key, answered);
-  const hits = foldCopies(order.flatMap((source) => summaries[source]!.hits!)).map(pressPlays);
-  return { order, hits };
+  const within = (scope: string) =>
+    foldCopies(
+      order
+        .filter((from) => scope === "All" || from === scope)
+        .flatMap((from) => summaries[from]!.hits!),
+    ).map(pressPlays);
+  return { order, hits: within("All"), within };
 }
 
 // Radio archives asks every station, each within 3 s (archives/index.ts), so the quick sources have all answered by then;

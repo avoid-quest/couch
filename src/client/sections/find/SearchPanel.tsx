@@ -248,19 +248,19 @@ export function SearchPanel(props: Props) {
   const pending = (source: string) => !summaries[source] || summaries[source].loading;
   // What the search asked for, and what merely came back: a hit is close when it mentions every word of the query.
   const { close } = searchRelevance(query);
-  const { order, hits } = useSourceHits(resultsKey, summaries, query);
+  const { order, hits, within } = useSourceHits(resultsKey, summaries, query);
   const focusedHit = useRef<string | null>(null);
   // The kind and source are the header field's scope, chosen before or after the results. The filters come from what
   // was found, so no choice made here can come up empty: a kind is offered once it has a hit, and inside a kind, a
   // source once it has a hit of it. A scope chosen in the field shows too, and says so when it holds nothing.
-  const found = hits.filter(
-    (hit) => close(hit) && (kind !== "audio" || canReturn(hit.source, kind)),
-  );
+  const isFound = (hit: SearchHit) =>
+    close(hit) && (kind !== "audio" || canReturn(hit.source, kind));
+  const found = hits.filter(isFound);
   const kindOfHit = (hit: SearchHit) => kindOf(groupOf(hit));
   const inKind = (hit: SearchHit, of = kind) =>
     !of || (of === "audio" ? canReturn(hit.source, of) : kindOfHit(hit) === of);
   const asking = sourceOrder.filter((source) => inScope(source) && pending(source));
-  const scoped = hits.filter((hit) => inScope(hit.source) && inKind(hit));
+  const scoped = within(filter).filter((hit) => inScope(hit.source) && inKind(hit));
   const relevant = scoped.filter(close);
   const loose = scoped.filter((hit) => !close(hit));
   // The closest match leads and holds still for the query and kind, so nothing moves under the focus while browsing.
@@ -309,10 +309,8 @@ export function SearchPanel(props: Props) {
   // and videos, so it shows only when chosen.
   const current: SearchScope = { kind, source: filter };
   const holds = (state: SearchScope) =>
-    found.filter(
-      (hit) =>
-        (state.source === "All" || hit.source === state.source) &&
-        (!state.kind || inKind(hit, state.kind)),
+    (state.source === "All" ? found : within(state.source).filter(isFound)).filter(
+      (hit) => !state.kind || inKind(hit, state.kind),
     ).length;
   const chips = [
     {
