@@ -14,6 +14,7 @@ mock.module("../src/client/session/session-context", () => ({
     liveSharing: { setCaptureInput: async () => {} },
     setError() {},
   }),
+  useOptionalSessionGate: () => undefined,
   errorText: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 const preference = { save() {}, error: undefined };

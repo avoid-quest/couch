@@ -1,18 +1,12 @@
-import { useRef, useState, type ComponentProps } from "react";
-import { CircleAlert, MoreHorizontal } from "lucide-react";
+import { useState, type ComponentProps } from "react";
+import { CircleAlert } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { liveAudioSettingsQuery } from "@/api/settings";
 import { useNativeInputBufferPreference, useNativeInputChannelPreference } from "@/audio-settings";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { TryAgain } from "@/components/TryAgain";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowOptions } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -35,11 +29,9 @@ import { viewerLine, type Viewer } from "./share";
 
 export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
   const { run, connected } = useSessionGate();
-  const list = useRef<HTMLUListElement>(null);
-  const removing = useRef(false);
   const [pending, setPending] = useState<string | null>(null);
   return (
-    <ul ref={list} tabIndex={-1} aria-label="Listeners" className="grid">
+    <ul aria-label="Listeners" className="grid">
       {viewers.map((viewer) => (
         <li key={viewer.device.id} className="flex items-center gap-3 border-t py-2">
           <div className="grid min-w-0 flex-1 gap-0.5">
@@ -60,43 +52,24 @@ export function LiveListeners({ viewers }: { viewers: Viewer[] }) {
               {viewerLine(viewer, undefined)}
             </span>
           </div>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={!connected || pending === viewer.device.id}
-                aria-label={`Options for ${viewer.device.name}`}
-              >
-                <MoreHorizontal aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              data-tv-local-only
-              align="end"
-              onCloseAutoFocus={(event) => {
-                if (removing.current) {
-                  event.preventDefault();
-                  list.current?.focus();
-                  removing.current = false;
-                }
-              }}
-            >
-              <DropdownMenuItem
-                onSelect={() => {
-                  removing.current = true;
+          {/* Remove leaves the focus on the next listener's "…", as any row's menu does. */}
+          <RowOptions
+            title={viewer.device.name}
+            disabled={!connected || pending === viewer.device.id}
+            actions={[
+              {
+                label: "Remove",
+                run: () => {
                   setPending(viewer.device.id);
                   void run({
                     type: "removeLiveListener",
                     playbackId: viewer.playbackId,
                     deviceId: viewer.device.id,
                   }).finally(() => setPending(null));
-                }}
-              >
-                Remove
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                },
+              },
+            ]}
+          />
         </li>
       ))}
       {!viewers.length && (
