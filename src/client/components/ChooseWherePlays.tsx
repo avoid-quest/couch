@@ -195,7 +195,7 @@ function Choose({
   );
 }
 
-/** A device's row: its name plays there at once with everything it can; its Picture and Sound choose for Play. */
+/** A device's row: its name, marked with Play, plays there at once with everything it can; its Picture and Sound choose for Play. */
 function ChoiceDevice({
   row,
   chosen,
@@ -210,6 +210,20 @@ function ChoiceDevice({
   onOnly: () => void;
 }) {
   const { device, picture, sound } = row;
+  // One channel it can't play here says why on the row, where touch and remote users see it; the item's own
+  // lack (No picture, No sound) is every row's, so it says nothing.
+  const lockedOne = (
+    [
+      ["Picture", picture],
+      ["Sound", sound],
+    ] as const
+  ).filter(
+    ([, control]) =>
+      control.reason && control.reason !== "No picture" && control.reason !== "No sound",
+  );
+  const note =
+    lockedOne.length === 1 ? `${lockedOne[0]![0]}: ${lockedOne[0]![1].reason}` : undefined;
+  const detail = [row.status, note].filter(Boolean).join(" · ");
   const toggle = (
     channel: "picture" | "sound",
     control: ChoiceRow["picture"],
@@ -243,14 +257,15 @@ function ChoiceDevice({
         title={`Play on ${device.name}`}
         disabled={!connected || (!picture.enabled && !sound.enabled)}
         onClick={onOnly}
-        className="-ml-2.5 grid h-auto min-h-11 justify-start justify-items-start gap-0 rounded-md px-2.5 py-1 text-left font-normal whitespace-normal"
+        className="-ml-2.5 h-auto min-h-11 justify-start gap-2.5 rounded-md px-2.5 py-1 text-left font-normal whitespace-normal"
       >
-        <span className="text-base [overflow-wrap:anywhere]">{device.name}</span>
-        {row.status && (
-          <span className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-            {row.status}
-          </span>
-        )}
+        <Play aria-hidden="true" className="shrink-0 text-muted-foreground" />
+        <span className="grid min-w-0">
+          <span className="text-base [overflow-wrap:anywhere]">{device.name}</span>
+          {detail && (
+            <span className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{detail}</span>
+          )}
+        </span>
       </Button>
       {toggle(
         "picture",

@@ -9,7 +9,7 @@ phone or laptop meanwhile, and later move it to the TV.
 
 1. On an item, **Play on…** → my device (marked **This device**). The TV keeps
    playing its own thing. Or I choose each device's picture and sound there,
-   then **Play**; the line beside it says what stops or keeps playing.
+   then **Play**; the line beside it says what pauses or keeps playing.
 2. While more than one thing plays, the player's **on {device}** lists them all.
    I pick the one I control. **Play** and **Play on** control what they start.
 3. Later, in my player's **Where it plays**, the TV's row → **Move here**.

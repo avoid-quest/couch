@@ -430,30 +430,31 @@ export const onlyChoice = (row: ChoiceRow): Choice => ({
   [row.device.id]: { picture: row.picture.enabled, sound: row.sound.enabled },
 });
 
-const chosenIds = (rows: ChoiceRow[], choice: Choice) =>
-  rows
-    .filter((row) => choice[row.device.id]?.picture || choice[row.device.id]?.sound)
-    .map((row) => row.device.id);
+/** What a choice still plays: each device's chosen channels it can play now, so one that went offline or stopped lending drops out. */
+const current = (rows: ChoiceRow[], choice: Choice): Choice =>
+  Object.fromEntries(
+    rows.flatMap(({ device, picture, sound }) => {
+      const chosen = {
+        picture: !!choice[device.id]?.picture && picture.enabled,
+        sound: !!choice[device.id]?.sound && sound.enabled,
+      };
+      return chosen.picture || chosen.sound ? [[device.id, chosen]] : [];
+    }),
+  );
 
 /**
  * The Play on request for a choice: this device leads where it plays, else the first screen, else the first speaker.
- * A device alone with everything it can play needs no outputs, as Play on has always sent it.
+ * It names every channel chosen, so Core plays exactly that, even on one device.
  */
 export function playOnOf(rows: ChoiceRow[], choice: Choice): PlayOn | undefined {
-  const ids = chosenIds(rows, choice);
+  const now = current(rows, choice),
+    ids = Object.keys(now);
   const lead =
     ids.find((id) => rows.find((row) => row.device.id === id)?.mine) ??
-    ids.find((id) => choice[id]!.picture) ??
+    ids.find((id) => now[id]!.picture) ??
     ids[0];
   if (!lead) return undefined;
-  const row = rows.find((item) => item.device.id === lead)!;
-  const whole =
-    ids.length === 1 &&
-    choice[lead]!.picture === row.picture.enabled &&
-    choice[lead]!.sound === row.sound.enabled;
-  return whole
-    ? { deviceId: lead }
-    : { deviceId: lead, outputs: ids.map((deviceId) => ({ deviceId, ...choice[deviceId]! })) };
+  return { deviceId: lead, outputs: ids.map((deviceId) => ({ deviceId, ...now[deviceId]! })) };
 }
 
 const names = (ids: string[], rows: ChoiceRow[]) =>
@@ -462,11 +463,13 @@ const names = (ids: string[], rows: ChoiceRow[]) =>
   );
 
 /**
- * The line beside Play: what it changes first ("Blob stops on Kitchen laptop", "Blob keeps playing on Living room
- * TV"), then where it plays. A device that leaves another playback leaves it whole, picture and sound.
+ * The line beside Play: what it changes first ("Blob pauses on Kitchen laptop and waits for a device", "Blob keeps
+ * playing on Living room TV"), then where it plays. A device that leaves another playback leaves it whole, picture
+ * and sound.
  */
-export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], choice: Choice) {
-  const ids = chosenIds(rows, choice);
+export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], chosen: Choice) {
+  const choice = current(rows, chosen),
+    ids = Object.keys(choice);
   if (!ids.length)
     return { ready: false, lines: ["Choose a screen or speakers.", "Nothing plays until Play."] };
   const pictures = ids.filter((id) => choice[id]!.picture),
@@ -488,7 +491,9 @@ export function choiceSummary(state: ClientSessionState, rows: ChoiceRow[], choi
       .filter((id) => !taken.includes(id));
     return rest.length
       ? [`${title} keeps playing on ${names(rest, rows)}.`]
-      : [`${title} stops${taken.length === 1 ? ` on ${names(taken, rows)}` : ""}.`];
+      : [
+          `${title} pauses${taken.length === 1 ? ` on ${names(taken, rows)}` : ""} and waits for a device.`,
+        ];
   });
   return { ready: true, lines: changes.length ? [changes.join(" "), where] : [where] };
 }
