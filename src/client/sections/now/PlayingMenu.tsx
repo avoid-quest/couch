@@ -2,6 +2,7 @@ import { useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { radioStationQuery } from "@/api/radio";
 import { useRelatedMenu } from "@/components/MediaContext";
+import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { saveLabel } from "@/copy";
 import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -65,7 +66,10 @@ export function PlayingMenu({
   const actions: MenuAction[] = !current
     ? []
     : [
-        ...(!current.endless && player.seekable && positionAt(clock) > fromStartAfter
+        // Only where this viewer may seek, as the timeline is.
+        ...(!current.endless &&
+        playbackCapabilities(state, connected).seekable &&
+        positionAt(clock) > fromStartAfter
           ? [
               {
                 label: "From start",
