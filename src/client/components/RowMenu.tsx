@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
   type ComponentProps,
   type HTMLAttributes,
+  type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
@@ -28,7 +29,7 @@ import { isTvPresentation } from "@/session/presentation";
 import { deviceId } from "@/session/device-id";
 import type { PlayOn } from "../../shared/protocol";
 import { ChooseWherePlays } from "./ChooseWherePlays";
-import { PlayOnGroup, usePlayOn } from "./PlayOn";
+import { ChooseDevice, PlayOnGroup, usePlayOn } from "./PlayOn";
 
 /**
  * One verb in a menu. playOn makes it "Play on…", which opens Choose where it plays (audioOnly: it has no picture;
@@ -53,13 +54,20 @@ export type MenuAction = {
   liveAudio?: boolean;
 };
 
-/** An item's groups, in the order its menu shows them; other menus show their groups in the order they give them. */
+/**
+ * An item's groups, in the order its menu shows them, and the play verbs' order; a menu's own groups (a list's, a
+ * setting's) follow in the order it gives them, as do the groups of other menus.
+ */
 const itemGroups = ["play", "keep", "go", "share", "list"];
+const playVerbs = ["Play", "Resume", "Play all", "From start", "Play next", "Queue", "Queue all"];
 
 /** The menu's rows by group, Play on… last among the play verbs, with a separator wherever the group changes. */
 function arranged(actions: MenuAction[]) {
-  const rank = (action: MenuAction) =>
-    itemGroups.indexOf(action.group ?? "") * 2 + (action.playOn ? 1 : 0);
+  const rank = (action: MenuAction) => {
+    const group = itemGroups.indexOf(action.group ?? "");
+    const verb = action.playOn ? playVerbs.length : playVerbs.indexOf(action.label);
+    return (group < 0 ? itemGroups.length : group) * 100 + (action.group === "play" ? verb + 1 : 0);
+  };
   return actions
     .map((action, index) => ({ action, index }))
     .sort((a, b) => rank(a.action) - rank(b.action) || a.index - b.index)
@@ -79,16 +87,18 @@ function Items({
   select,
   choose,
   sheet,
+  listed,
 }: {
   actions: MenuAction[];
   on: (label: string) => string;
   select: (action: MenuAction) => void;
   choose: (action: MenuAction) => void;
   sheet: boolean;
+  listed: boolean;
 }) {
   const Separator = sheet ? SheetSeparator : DropdownMenuSeparator;
   return arranged(actions).map(({ action, separated }, index, all) => {
-    const shared = action.playOn && (action.sharingDeviceId || action.liveAudio);
+    const shared = listed && sharedPlayOn(action);
     const label = action.playOn
       ? `${action.label}…`
       : action.label === "Play" || action.label === "Resume"
@@ -103,7 +113,7 @@ function Items({
               separated={index > 0}
               sheet={sheet}
               disabled={action.disabled}
-              onPlay={(deviceId) => action.playOn?.({ deviceId })}
+              onPlay={(deviceId) => select({ ...action, run: () => action.playOn?.({ deviceId }) })}
               sharingDeviceId={action.sharingDeviceId}
               liveAudio={action.liveAudio}
             />
@@ -136,7 +146,12 @@ function Items({
 
 const SheetSeparator = () => <Separator className="my-1" />;
 
-// Past nine rows a menu is hard to read and to walk with a remote: these go first, in turn (docs/design.md "Menus").
+const sharedPlayOn = (action: MenuAction) =>
+  !!action.playOn && !!(action.sharingDeviceId || action.liveAudio);
+
+// Past nine rows a menu is hard to read and to walk with a remote: these go first, in turn, then the rows past the
+// ninth (docs/design.md "Menus").
+const menuRows = 9;
 const trims: ((action: MenuAction, rows: MenuAction[]) => boolean)[] = [
   (action) => action.label === "Open in browser",
   (action, rows) =>
@@ -146,8 +161,14 @@ const trims: ((action: MenuAction, rows: MenuAction[]) => boolean)[] = [
 function trimmed(actions: MenuAction[]) {
   let rows = actions;
   for (const trim of trims)
-    if (rows.length > 9) rows = rows.filter((action) => !trim(action, rows));
-  return rows;
+    if (rows.length > menuRows) rows = rows.filter((action) => !trim(action, rows));
+  if (rows.length <= menuRows) return rows;
+  const kept = new Set(
+    arranged(rows)
+      .slice(0, menuRows)
+      .map(({ action }) => action),
+  );
+  return rows.filter((action) => kept.has(action));
 }
 
 const own = (event: { currentTarget: Element; target: EventTarget }) =>
@@ -172,20 +193,20 @@ type ItemProps = Pick<
  */
 export function useItemMenu(actions: MenuAction[]) {
   const { devices, on, queueAllowed } = usePlayOn();
+  const fits = (action: MenuAction) => (device: (typeof devices)[number]) =>
+    !action.liveAudio ||
+    (device.id !== action.sharingDeviceId && (device.id === deviceId() || device.sharing?.audio));
   // Play on waits for a second online Device, so it alone never makes a menu.
   const shown = trimmed(
     actions.filter(
       (action) =>
         (queueAllowed !== false || !["Queue", "Queue all", "Play next"].includes(action.label)) &&
-        (!action.playOn ||
-          devices.some(
-            (device) =>
-              !action.liveAudio ||
-              (device.id !== action.sharingDeviceId &&
-                (device.id === deviceId() || device.sharing?.audio)),
-          )),
+        (!action.playOn || devices.some(fits(action))),
     ),
   );
+  // A shared source's devices are the menu's rows while they fit in nine; past that "Play on…" opens them by themselves.
+  const shared = shown.find(sharedPlayOn);
+  const listed = !shared || shown.length - 1 + devices.filter(fits(shared)).length <= menuRows;
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const press = useRef<{ release: () => boolean; x: number; y: number } | null>(null);
@@ -195,13 +216,14 @@ export function useItemMenu(actions: MenuAction[]) {
   if (!shown.length)
     return {
       shown,
+      listed,
       on,
       open: false,
       setOpen,
       opener,
       pressing,
       item: {} as ItemProps,
-      target: {},
+      target: {} as { onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void },
     };
   // Focus comes back to what opened it: the control pressed, else the item's primary target.
   const openFrom = (item: HTMLElement, target: EventTarget) => {
@@ -270,13 +292,23 @@ export function useItemMenu(actions: MenuAction[]) {
   };
   return {
     shown,
+    listed,
     on,
     open,
     setOpen,
     opener,
     pressing,
     item,
-    target: { "data-item-menu": "" },
+    target: {
+      "data-item-menu": "",
+      // macOS browsers send no contextmenu for Shift+F10, so the primary target opens its menu itself.
+      onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+        if (event.key !== "F10" || !event.shiftKey) return;
+        event.preventDefault();
+        opener.current = event.currentTarget;
+        setOpen(true);
+      },
+    },
   };
 }
 
@@ -394,21 +426,40 @@ export function ItemMenu({
     </Button>
   );
   const items = (
-    <Items actions={menu.shown} on={menu.on} select={select} choose={choose} sheet={sheet} />
-  );
-  // Not part of the menu: the panel opens from what opened the menu once it has closed.
-  const panel = choosing?.playOn && (
-    <ChooseWherePlays
-      title={title}
-      thumbnail={choosing.thumbnail}
-      verb={choosing.verb}
-      audioOnly={choosing.audioOnly}
-      onPlay={choosing.playOn}
-      open
-      onOpenChange={(open) => !open && setChoosing(null)}
-      anchor={from}
+    <Items
+      actions={menu.shown}
+      on={menu.on}
+      select={select}
+      choose={choose}
+      sheet={sheet}
+      listed={menu.listed}
     />
   );
+  // Not part of the menu: the panel opens from what opened the menu once it has closed.
+  const panel =
+    choosing?.playOn && sharedPlayOn(choosing) ? (
+      <ChooseDevice
+        title={title}
+        sharingDeviceId={choosing.sharingDeviceId}
+        liveAudio={choosing.liveAudio}
+        onPlay={(deviceId) => choosing.playOn?.({ deviceId })}
+        onOpenChange={(open) => !open && setChoosing(null)}
+        anchor={from}
+      />
+    ) : (
+      choosing?.playOn && (
+        <ChooseWherePlays
+          title={title}
+          thumbnail={choosing.thumbnail}
+          verb={choosing.verb}
+          audioOnly={choosing.audioOnly}
+          onPlay={choosing.playOn}
+          open
+          onOpenChange={(open) => !open && setChoosing(null)}
+          anchor={from}
+        />
+      )
+    );
   const change = (open: boolean) => {
     if (open) menu.opener.current = null;
     menu.setOpen(open);
