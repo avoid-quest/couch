@@ -52,7 +52,7 @@ import { InputLevel, useInputStream } from "./InputLevel";
 import { LiveMetadataEditor } from "./LiveMetadata";
 import { LiveSettings } from "./LiveOperator";
 import { SharingPill } from "./ShareControl";
-import { openShareFull } from "./share-view";
+import { openShareFull, useShareView } from "./share-view";
 import {
   frameRateLabels,
   qualityLabels,
@@ -91,10 +91,9 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
       void run({ type: "selectPlayback", playbackId: playback.id });
   }, [playback?.id]);
   const routes = useRoutes(sharing);
-  // A native input's level, read from the same device as the browser names it.
-  const meter = useInputStream(sharing?.meterId);
+  // One input level at a time: the full share's while it stands over the side player.
+  const { full } = useShareView();
   if (!sharing || !source) return null;
-  const input = sharing.input ?? meter ?? undefined;
   const parts = shareParts(
     state,
     sharing,
@@ -102,7 +101,7 @@ export function SharePlayer({ state, size, side, onSize }: Props) {
     run,
     changed,
     playback?.id === state.playback,
-    input,
+    size === "full" || !full,
   );
   const shell = { "data-now-playing": "", "data-share-player": "", "data-tv-local-only": "" };
   const audience = (
@@ -280,7 +279,7 @@ function shareParts(
   run: (action: Action) => Promise<boolean>,
   changed: () => void,
   selected: boolean,
-  input: MediaStream | undefined,
+  meter: boolean,
 ) {
   const source = sharing.source;
   const live = source.intent === "live";
@@ -321,7 +320,7 @@ function shareParts(
         what={what}
         capture={live ? capture : undefined}
         live={live}
-        input={source.kind === "microphone" ? input : undefined}
+        meter={meter && source.kind === "microphone"}
       />
     ),
     where: (
@@ -454,14 +453,14 @@ function ShareHeading({
   what,
   capture,
   live,
-  input,
+  meter,
 }: {
   sharing: LiveSharing;
   title: string;
   what: string;
   capture?: string;
   live: boolean;
-  input?: MediaStream;
+  meter: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const source = sharing.source;
@@ -476,7 +475,7 @@ function ShareHeading({
         <span className={cn(live && "text-foreground")}>{what}</span>
         {capture && <span>{capture}</span>}
       </p>
-      {input && <InputLevel stream={input} muted={sharing.muted} className="my-1" />}
+      {meter && <ShareLevel sharing={sharing} />}
       {live && (
         <Button
           variant="ghost"
@@ -490,6 +489,15 @@ function ShareHeading({
       )}
     </div>
   );
+}
+
+/**
+ * The input's level: the share's own sound, or for a native input the same device as the browser names it, opened only
+ * while this level shows.
+ */
+function ShareLevel({ sharing }: { sharing: LiveSharing }) {
+  const read = useInputStream(sharing.input ? null : sharing.meterId);
+  return <InputLevel stream={sharing.input ?? read} muted={sharing.muted} className="my-1" />;
 }
 
 /** Where it plays: the Mixer of the share's Playback once anyone plays it; Live audio's count of listeners. */
