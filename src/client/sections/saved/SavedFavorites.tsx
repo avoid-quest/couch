@@ -255,6 +255,7 @@ export function SavedFavorites({
             label: "Play on",
             disabled: !connected || !canPlay || pending,
             playOn: (on) => void enqueue(favorite, true, on),
+            audioOnly: favorite.kind === "radio",
           },
           {
             label: "Queue",

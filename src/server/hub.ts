@@ -1442,7 +1442,8 @@ export async function createHub(options: HubOptions) {
   const assign = (
     playback: Playback,
     outputs: Output[],
-    source = live.source(sourceOf(playback) ?? ""),
+    // null: what plays is about to be replaced, so its source doesn't limit the outputs.
+    source: ReturnType<typeof live.source> | null = live.source(sourceOf(playback) ?? ""),
   ) => {
     playback.generation = (playback.generation ?? 0) + 1;
     // Its publisher leaves, or was chosen while it waited in Where it plays.
@@ -2579,7 +2580,7 @@ export async function createHub(options: HubOptions) {
     } else {
       requireProgramme(playback, actorId);
       // Its Device, alone there, keeps that playback and starts where Play on chose.
-      if (choice?.outputs) assign(playback, outputs);
+      if (choice?.outputs) assign(playback, outputs, null);
     }
     if (on) selectDevice(actorId, on);
     playback.outputs = playback.outputs.map((output) => ({
