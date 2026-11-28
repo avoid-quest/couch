@@ -156,15 +156,18 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     if (state.status !== "installing") return;
     if (!windows || error.code !== "UNKNOWN")
       return set({ status: "ready", error: "Couldn't install the update. Try again later." });
-    blocked = state.available!;
-    try {
-      writeFileSync(blockedPath, blocked);
-    } catch (error) {
-      logAppError("update", `Couldn't remember the blocked update: ${(error as Error).message}`);
-    }
+    remember(state.available!);
     autoUpdater.autoInstallOnAppQuit = false;
     set({ status: "error", available: null, error: blockedError });
   });
+  const remember = (version: string) => {
+    blocked = version;
+    try {
+      writeFileSync(blockedPath, version);
+    } catch (error) {
+      logAppError("update", `Couldn't remember the blocked update: ${(error as Error).message}`);
+    }
+  };
   // An app-only update also installs when Couch quits.
   let swapping: Promise<void> | null = null;
   const swap = (relaunch: boolean) =>
@@ -174,10 +177,15 @@ export function startUpdates({ channelPath, tv, onState, playing }: Options) {
     }));
   if (windows)
     app.on("quit", (_event, code) => {
-      if (appOnly && code === 0)
-        swap(false).catch((error) =>
+      if (code !== 0) return;
+      if (appOnly)
+        return void swap(false).catch((error) =>
           logAppError("update", `Couldn't start the update: ${error.message}`),
         );
+      // electron-updater starts the installer as Couch exits, too late to hear a refusal.
+      // If Couch then starts on this version again, that release counts as refused.
+      if (state.status === "ready" && state.available && autoUpdater.autoInstallOnAppQuit)
+        remember(state.available);
     });
 
   async function install(expected: string, delay: number, interrupt = false) {

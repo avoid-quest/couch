@@ -188,6 +188,23 @@ test("Windows uses the installer when a release changes other files", async () =
   expect(existsSync(join(temporary, "app.next"))).toBe(false);
 });
 
+test("a Windows installer tried at Quit counts as refused if Couch starts on the old version", async () => {
+  const requests = appRelease({ "resources/live-relay/couch-relay.exe": sha256("new relay") });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  expect(updates.state().status).toBe("ready");
+  app.emit("quit", {}, 0);
+  app.removeAllListeners();
+  const checked = requests.length;
+  const reopened = start();
+  await reopened.check();
+  expect(downloads).toEqual(["0.3.1"]);
+  expect(requests.length).toBe(checked);
+  expect(reopened.state()).toMatchObject({ status: "error", available: null });
+  expect(reopened.state().error).toContain("Windows blocked the update");
+});
+
 test("a damaged app.asar download is discarded", async () => {
   appRelease({}, "tampered");
   const updates = start();
@@ -254,13 +271,19 @@ test("the swap waits for Couch to exit, replaces app.asar and starts Couch again
   writeFileSync(relaunch, `#!/bin/sh\necho "node=$ELECTRON_RUN_AS_NODE" > "${started}"\n`, {
     mode: 0o755,
   });
-  const couch = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 500)"]);
+  // The stand-in Couch runs until the test ends it, so the first check can't race its exit.
+  const couch = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"]);
   const swap = Bun.spawn(
     [electron, "-e", swapScript, String(couch.pid), temporary, posix ? relaunch : ""],
     { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
   );
-  await Bun.sleep(200);
-  expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
+  try {
+    await Bun.sleep(300);
+    expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("old app");
+  } finally {
+    couch.kill();
+  }
+  await couch.exited;
   expect(await swap.exited).toBe(0);
   expect(readFileSync(join(temporary, "app.asar"), "utf8")).toBe("new app");
   expect(existsSync(join(temporary, "app.next"))).toBe(false);
