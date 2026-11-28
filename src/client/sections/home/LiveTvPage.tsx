@@ -3,7 +3,6 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { defaultStringifySearch, useLocation, useNavigate } from "@tanstack/react-router";
-import { offline } from "@/copy";
 import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
 import { collectionPageSize } from "@/collection-pagination";
@@ -102,7 +101,7 @@ export function useChannelLogo(channel: GuideChannel) {
 /** Every Live TV channel, which Home's Live TV heading opens: the guide's channels with what's on now and next, a page at a time. */
 export function LiveTvPage() {
   const { credentials } = useShell();
-  const { connected, state } = useSessionGate();
+  const { connected } = useSessionGate();
   const search: Record<string, unknown> = useLocation().search;
   const navigate = useNavigate();
   const filter = typeof search.filter === "string" ? search.filter.slice(0, 100) : "";
@@ -154,11 +153,6 @@ export function LiveTvPage() {
     <section data-page="Live TV" className="min-w-0 space-y-6">
       {/* No token: the header's search doesn't reach the playlists' channels, so Filter finds one. */}
       <RoomHead title="Live TV" />
-      {!connected && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {offline(state?.installationName)}
-        </p>
-      )}
       {/* The filters wait for the guide, so an empty one never offers a choice. */}
       {none ? (
         <NoPlaylists what="channels" settings="/settings/couch/sources/live-tv" />

@@ -9,22 +9,13 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Spinner } from "@/components/ui/spinner";
-import { offline } from "@/copy";
-import { useOptionalSessionGate } from "@/session/session-context";
 
 // The messages every Saved tab shows around its rows (docs/design.md "Messages").
 
-/** Status line while offline or loading. */
+/** Rows waiting to load. */
 export function SavedStatus({ connected, loading }: { connected: boolean; loading: boolean }) {
-  const name = useOptionalSessionGate()?.state?.installationName;
-  if (connected) return loading ? <MediaRowsSkeleton /> : null;
-  return (
-    <p role="status" className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-      {connected && <Spinner aria-hidden="true" role="presentation" />}
-      {connected ? "Loading…" : offline(name)}
-    </p>
-  );
+  // Out of reach, the header says so (docs/design.md, Problems); the page keeps what it showed.
+  return connected && loading ? <MediaRowsSkeleton /> : null;
 }
 
 /** A load or action error, with Try again when the page can retry. */

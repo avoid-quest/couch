@@ -1,6 +1,5 @@
 import { radioLabels } from "../../../shared/radio";
 import { MediaRowsSkeleton } from "@/components/LoadingMedia";
-import { offline } from "@/copy";
 import { useSessionGate } from "@/session/session-context";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,7 @@ const sourceLabels = {
 export function RadioPage() {
   useRoomScope({ kind: "radio", source: "All" });
   const { credentials, available } = useShell();
-  const { state, connected, run } = useSessionGate();
+  const { connected, run } = useSessionGate();
   const { search, searchStr } = useLocation();
   const navigate = useNavigate();
   const source =
@@ -84,11 +83,6 @@ export function RadioPage() {
   return (
     <section data-page="Radio" className="min-w-0 space-y-6">
       <RoomHead title="Radio" />
-      {!connected && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {offline(state?.installationName)}
-        </p>
-      )}
       <FilterBar label="Radio filters">
         <FilterChoice
           label="Source"
