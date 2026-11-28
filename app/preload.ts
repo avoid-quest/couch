@@ -141,7 +141,11 @@ if (captureId) {
     tvPresentation: process.argv.includes("--couch-tv-presentation"),
     ...(!process.argv.includes("--couch-tv-presentation")
       ? {
-          fullScreen: (enter?: boolean) => call<boolean>("full-screen", enter),
+          // Entering needs a press, as the page's own fullscreen does; reading and leaving don't.
+          fullScreen: (enter?: boolean) =>
+            enter === true && !navigator.userActivation.isActive
+              ? Promise.reject(new Error("Fullscreen needs a press."))
+              : call<boolean>("full-screen", enter),
           onFullScreen: (listener: (fullScreen: boolean) => void) => {
             const handler = (_event: unknown, value: boolean) => listener(value);
             ipcRenderer.on("couch:full-screen", handler);

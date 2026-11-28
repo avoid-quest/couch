@@ -664,7 +664,10 @@ function createWindow() {
     // Fullscreen hides the window controls, so the header drops their space.
     const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
     window.on("enter-full-screen", fullScreen);
-    window.on("leave-full-screen", fullScreen);
+    window.on("leave-full-screen", () => {
+      pageFullScreen = false;
+      fullScreen();
+    });
     window.webContents.on("dom-ready", fullScreen);
   }
   window.on("close", (event) => {
@@ -687,6 +690,10 @@ function createWindow() {
   // Only a document load resets playback: did-start-loading also fires on in-app page changes.
   contents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
     if (!mainFrame || inPlace) return;
+    if (pageFullScreen) {
+      pageFullScreen = false;
+      window?.setFullScreen(false);
+    }
     capture.clear();
     updatePlayback = "loading";
   });
@@ -742,9 +749,14 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
 }
 handle("mode", () => choice);
 // The player's fullscreen is the window's, so the system's own controls and Couch's button agree.
+// Whether the page asked for this fullscreen (the player), so a new document leaves it rather than keep it on Home.
+let pageFullScreen = false;
 handle("full-screen", (_event, enter) => {
   if (tv || !window) throw new Error("Fullscreen is unavailable.");
-  if (typeof enter === "boolean") window.setFullScreen(enter);
+  if (typeof enter === "boolean") {
+    pageFullScreen = enter;
+    window.setFullScreen(enter);
+  }
   return window.isFullScreen();
 });
 handle("capture-sources", () => capture.sources());

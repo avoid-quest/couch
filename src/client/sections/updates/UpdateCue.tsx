@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CircleAlert, CircleArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,14 +7,19 @@ import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { useSessionGate } from "@/session/session-context";
 import { useUpdateCenter } from "@/session/update-center";
-import { usePlayerFullscreen } from "@/sections/now/usePlayerFullscreen";
 import { updateInterrupts, updateReady } from "./update-presentation";
 
 /** One route to updates; completed work never occupies the header. */
 export function UpdateCue() {
   const { targets, batch, busy, canMaintain, checkFailed } = useUpdateCenter();
   const { state, tvPresentation } = useSessionGate();
-  const { fullscreen } = usePlayerFullscreen();
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const changed = () => setFullscreen(!!document.fullscreenElement);
+    changed();
+    document.addEventListener("fullscreenchange", changed);
+    return () => document.removeEventListener("fullscreenchange", changed);
+  }, []);
   const ready = targets.filter((target) => updateReady(target.state)).length;
   const downloading = targets.some((target) => target.state?.status === "downloading");
   const failed =
