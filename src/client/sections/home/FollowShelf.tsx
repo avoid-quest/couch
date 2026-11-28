@@ -12,7 +12,7 @@ import { majorityShape, providerItemShape } from "@/art-shape";
 import { collectionLocation } from "@/detail-navigation";
 import { metaLine } from "@/media-caption";
 import { TRY_AGAIN } from "@/copy";
-import { controlBox, undoable } from "@/toasts";
+import { undoable } from "@/toasts";
 import { progressFor } from "@/sections/find/provider-progress";
 import { SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import { useShell } from "@/sections/shell/shell-context";
@@ -107,10 +107,9 @@ export function FollowShelf({
   const source = providerNames[follow.provider];
   const href = collectionLocation({ provider: follow.provider, url: follow.url });
   const leave = (text: string, go: () => void, undo: () => void) => {
-    const box = controlBox();
     focusAfter(root.current);
     go();
-    undoable(text, undo, undefined, box);
+    undoable(text, undo);
   };
   const options: MenuAction[] = [
     {

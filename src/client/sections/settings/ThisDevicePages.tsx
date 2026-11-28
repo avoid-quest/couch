@@ -25,6 +25,7 @@ import { ErrorReportingSetting } from "./this-device/ErrorReportingSetting";
 import { DeviceNameSettings } from "./this-device/DeviceNameSettings";
 import { DeviceSharingSettings } from "./this-device/DeviceSharingSettings";
 import { DeviceTextSize } from "./this-device/DeviceTextSize";
+import { MessageSettings } from "./this-device/MessageSettings";
 import { QuitAppSettings } from "./this-device/QuitAppSettings";
 
 // What changes only on the device in hand, and what it lets others do, by intent: who it is, what you play from here, the
@@ -96,6 +97,7 @@ export function ThisDevicePage() {
           </Alert>
         )}
       </SettingsSection>
+      <MessageSettings />
       <SettingsSection title="What you play from here">
         <SettingsRow
           label="Online video quality"

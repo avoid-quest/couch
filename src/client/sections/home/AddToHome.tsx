@@ -29,7 +29,7 @@ import { isDesktop, subscribeDesktop } from "@/sections/shell/Outputs";
 import { useShell } from "@/sections/shell/shell-context";
 import { isTvPresentation } from "@/session/presentation";
 import { useSessionGate } from "@/session/session-context";
-import { controlBox, undoable } from "@/toasts";
+import { undoable } from "@/toasts";
 import type { QueueEntry } from "../../../shared/protocol";
 import {
   providerForUrl,
@@ -175,26 +175,13 @@ export function AddToHomePanel() {
       onClose={() => setOpen(null)}
     >
       {open && (
-        <AddToHomeForm
-          key={open.target.url}
-          target={open.target}
-          anchor={open.anchor}
-          done={() => setOpen(null)}
-        />
+        <AddToHomeForm key={open.target.url} target={open.target} done={() => setOpen(null)} />
       )}
     </FollowPanel>
   );
 }
 
-function AddToHomeForm({
-  target,
-  anchor,
-  done,
-}: {
-  target: AddTarget;
-  anchor: HTMLElement | null;
-  done: () => void;
-}) {
+function AddToHomeForm({ target, done }: { target: AddTarget; done: () => void }) {
   const { credentials, changeSection } = useShell();
   const { connected } = useSessionGate();
   const follows = useHomeFollows();
@@ -213,8 +200,6 @@ function AddToHomeForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!choice) return;
-    // Read before the panel closes: Undo shows beside the control that opened it.
-    const control = controlBox(anchor);
     done();
     if (followed) {
       goToFollow(followed.id, changeSection);
@@ -228,7 +213,7 @@ function AddToHomeForm({
       name: added,
       list: choice.list,
     });
-    undoable(`${added} is on Home.`, undo, undefined, control);
+    undoable(`${added} is on Home.`, undo);
   }
   return (
     <form className="grid gap-4" onSubmit={submit}>

@@ -3,7 +3,7 @@ import { Pencil, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldTitle } from "@/components/ui/field";
 import { useShell } from "@/sections/shell/shell-context";
-import { controlBox, undoable } from "@/toasts";
+import { undoable } from "@/toasts";
 import { providerNames } from "../../../shared/providers";
 import { useHomeFollows, type FollowId, type HomeFollow } from "./home-follows";
 import { removeHomeFollow, type HomeSectionId } from "./home-rows";
@@ -44,11 +44,10 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
         aria-label={`Remove ${follow.name} from Home`}
         title="Remove from Home"
         onClick={(event) => {
-          const box = controlBox(event.currentTarget);
           // Its line goes: the focus goes on to the next line's Switch, else the one before.
           const line = event.currentTarget.closest("li");
           const next = line?.nextElementSibling ?? line?.previousElementSibling;
-          undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id), undefined, box);
+          undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id));
           next?.querySelector<HTMLElement>('[role="switch"]')?.focus();
         }}
       >

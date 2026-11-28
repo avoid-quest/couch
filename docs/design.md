@@ -103,15 +103,20 @@ In `src/client/components`:
 
 Messages: **toasts** (`src/client/toasts.ts`, a fixed set of kinds, at most one
 action, never taking focus) for errors, Undo and unexpected outcomes; routine
-actions stay quiet. **Alert** for a problem that is the page, **Empty** for empty
-states, **Dialog** for short tasks, **AlertDialog** for confirmations, **Popover**
-for panels over the picture, **Sheet** for longer panels on phones.
+actions stay quiet. A message is a short pill in ink, its action a dark capsule
+inside, an Undo draining a thin bar over its time; a problem keeps the bar's dark
+surface and its icon. Every message shows in one place, centred over the content
+beside the side player (`--side-player`), at the bottom clear of the dock, tabs
+or player controls (`--bottom-bar`), or at the top: each device chooses in This
+device → General, and can turn off confirmations (Queued, Playing on).
+**Alert** for a problem that is the page, **Empty** for empty states, **Dialog**
+for short tasks, **AlertDialog** for confirmations, **Popover** for panels over
+the picture, **Sheet** for longer panels on phones.
 Portalled surfaces share `z-50`; later portals cover earlier ones.
 
 **A control's panel opens from it.** On desktops and the TV its Popover or menu
 hangs from the control and fits the screen; on phones a longer panel rises as a
-Sheet from the bottom, by the dock, while short menus stay Popovers. Undo and confirmations show in the toast corner nearest the
-control that caused them.
+Sheet from the bottom, by the dock, while short menus stay Popovers.
 
 ## Copy
 

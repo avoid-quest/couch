@@ -10,7 +10,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkLiveRelay } from "@/session/check-live-relay";
-import { notice } from "@/toasts";
+import { confirmed, notice } from "@/toasts";
 import type {
   LiveRelay,
   LiveRelaySettings as RelaySettings,
@@ -65,7 +65,7 @@ export function LiveRelaySettings({
     onSuccess: (result) => {
       client.setQueryData(liveRelayQuery(credentials).queryKey, result);
       setDraft(null);
-      notice(result.relay ? "External relay saved" : "External relay removed");
+      confirmed(result.relay ? "External relay saved" : "External relay removed");
     },
   });
   const busy = !connected || query.isPending || query.isError || save.isPending || check.isPending;

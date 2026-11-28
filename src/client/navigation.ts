@@ -212,10 +212,11 @@ function moveFocus(key: string) {
           visible,
         )
       : undefined;
-  // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
-  // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
+  // Up or Down with nothing further (the header's tabs, the top of the player's band, the page's foot) reaches the newest
+  // toast's action, at the top or the bottom. Sonner keeps the toasts past the two it shows, and each one leaving,
+  // mounted but unseen.
   const toast =
-    key === "ArrowUp" && !best
+    (key === "ArrowUp" || key === "ArrowDown") && !best
       ? [
           ...scope.querySelectorAll<HTMLElement>(
             `${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`,
