@@ -14,8 +14,9 @@ how big text is, which language and quality films play in.
   Text size**.
 - On this device: **Add to Home** on a series, programme or channel (its page,
   its menu, or the player while it plays) gives it a section of its own with
-  what the source lists there, kept fresh. Its **…** renames, moves, hides or
-  removes it; removing it keeps what I saved and played.
+  what the source lists there, kept fresh. Edit Home's **Add a section** opens
+  Search to find one. Its **…** or its line in Edit Home renames, moves, hides
+  or removes it; removing it keeps what I saved and played.
 - For what I play: **Online video quality** and **Playback → Audio language**.
 - An admin: the TV's interface size, with **Keep** or **Revert**, and the
   Couch's name.

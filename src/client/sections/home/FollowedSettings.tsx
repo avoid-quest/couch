@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field, FieldContent, FieldDescription, FieldTitle } from "@/components/ui/field";
+import { useShell } from "@/sections/shell/shell-context";
 import { controlBox, undoable } from "@/toasts";
 import { providerNames } from "../../../shared/providers";
 import { useHomeFollows, type FollowId, type HomeFollow } from "./home-follows";
@@ -43,12 +45,35 @@ function FollowedActions({ follow }: { follow: HomeFollow }) {
         title="Remove from Home"
         onClick={(event) => {
           const box = controlBox(event.currentTarget);
+          // Its line goes: the focus goes on to the next line's Switch, else the one before.
+          const line = event.currentTarget.closest("li");
+          const next = line?.nextElementSibling ?? line?.previousElementSibling;
           undoable(`${follow.name} is off Home.`, removeHomeFollow(follow.id), undefined, box);
+          next?.querySelector<HTMLElement>('[role="switch"]')?.focus();
         }}
       >
         <X aria-hidden="true" />
       </Button>
       <RenameSection follow={follow} anchor={renaming} onClose={() => setRenaming(null)} />
     </>
+  );
+}
+
+/** Edit Home's Add a section: a section follows a page's list, so it starts in Search, which finds the page. */
+export function AddSection() {
+  const { focusSearch } = useShell();
+  return (
+    <Field orientation="horizontal" className="items-center gap-4 border-b py-3">
+      <FieldContent className="min-w-0 flex-1 gap-0.5">
+        <FieldTitle className="text-body font-medium">Add a section</FieldTitle>
+        <FieldDescription className="text-meta">
+          Find a series, programme or channel in Search, then choose Add to Home in its … menu.
+        </FieldDescription>
+      </FieldContent>
+      <Button variant="outline" aria-label="Add a section" onClick={focusSearch}>
+        <Plus aria-hidden="true" />
+        Add
+      </Button>
+    </Field>
   );
 }

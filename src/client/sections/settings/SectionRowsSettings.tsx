@@ -17,12 +17,15 @@ export function SectionRowsSettings<Id extends string>({
   rows,
   layout,
   actions,
+  children,
 }: {
   page: string;
   rows: Record<Id, { label: string; note?: string }>;
   layout: ReturnType<typeof useSectionRows<Id>>;
   /** A line's own verbs before its moves (Home's followed sections: Rename, Remove). */
   actions?: (id: Id) => ReactNode;
+  /** Lines after the list, before Reset (Home's Add a section). */
+  children?: ReactNode;
 }) {
   const toSwitch = (button: HTMLElement) =>
     button.closest("li")?.querySelector<HTMLButtonElement>('[role="switch"]')?.focus();
@@ -84,6 +87,7 @@ export function SectionRowsSettings<Id extends string>({
           );
         })}
       </ol>
+      {children}
       <Button variant="outline" className="self-start" onClick={layout.reset}>
         Reset to default
       </Button>

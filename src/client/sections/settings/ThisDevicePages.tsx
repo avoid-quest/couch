@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SectionRowsSettings } from "./SectionRowsSettings";
 import { Switch } from "@/components/ui/switch";
 import { homeRows, useHomeRows } from "@/sections/home/home-rows";
-import { useFollowedRows } from "@/sections/home/FollowedSettings";
+import { AddSection, useFollowedRows } from "@/sections/home/FollowedSettings";
 import { ShareButton } from "@/sections/share/ShareControl";
 import { useShowShare } from "@/sections/share/show-share";
 import { useShell } from "@/sections/shell/AppShell";
@@ -146,7 +146,9 @@ export function HomeSettingsPage() {
         rows={{ ...homeRows, ...followed.rows }}
         layout={home}
         actions={followed.actions}
-      />
+      >
+        <AddSection />
+      </SectionRowsSettings>
     </SettingsLayout>
   );
 }
