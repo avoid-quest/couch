@@ -10,7 +10,7 @@ import {
   saveAction,
   useDetailAction,
   useForLaterSaves,
-} from "@/sections/details/ItemPage";
+} from "@/sections/details/save";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { failed } from "@/toasts";

@@ -13,7 +13,7 @@ import { ShelfHeading } from "@/components/Shelf";
 import { historyShape, majorityShape } from "@/art-shape";
 import { mediaCaption, metaLine } from "@/media-caption";
 import { formatRuntime } from "@/time-format";
-import { historyReference, useDetailAction, useForLaterToggle } from "@/sections/details/ItemPage";
+import { historyReference, useDetailAction, useForLaterToggle } from "@/sections/details/save";
 import { isTvPresentation } from "@/session/presentation";
 import type { PlayOn } from "../../../shared/protocol";
 import type { HistoryItem } from "../../../shared/viewing";

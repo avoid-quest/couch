@@ -3,11 +3,11 @@ import { playbackStatus } from "@/playback-status";
 import { MediaContext } from "@/components/MediaContext";
 import type { ClientSessionState } from "@/session/session";
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronRight, Settings } from "lucide-react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { ChevronDown, Settings } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
+import { PlaybackMenu } from "@/components/PlaybackSettings";
 import {
   PlaybackTimeline,
   PlaybackTransport,
@@ -20,8 +20,7 @@ import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { useArtworkPicture } from "@/components/AmbientLight";
 import { isAudioOnly } from "@/sections/now/player-presentation";
 import { useStationShow } from "@/sections/home/on-air";
-import { AddToHomeButton } from "@/sections/home/AddToHome";
-import { detailHref, queueItemLocation, useDetailNavigation } from "@/detail-navigation";
+import { PlayingMenu } from "@/sections/now/PlayingMenu";
 import { showsPicture } from "@/session/device-id";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { renderInto } from "@/session/renderer";
@@ -169,6 +168,12 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
             <PlayingChip state={state} />
             <span className="flex-1" />
             {!live && <PlaybackGear state={state} connected={connected} run={run} />}
+            <PlayingMenu
+              state={state}
+              connected={connected}
+              run={run}
+              back="[data-now-playing] [data-playing-menu]"
+            />
             <Button
               data-player-size
               variant="ghost"
@@ -221,11 +226,6 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
                     : undefined
                 }
               />
-              {!isRadio(current) && (
-                <span className="inline-flex [&>button]:mx-0 [&>button]:h-7 [&>button]:rounded-full [&>button]:px-2.5 [&>button]:text-xs [&>button]:shadow-[inset_0_0_0_1px_var(--border)]">
-                  <AddToHomeButton entry={current} />
-                </span>
-              )}
             </div>
             {status && <p className="mt-1.5 flex text-sm text-muted-foreground">{statusLine}</p>}
             <WhereBox state={state} connected={connected} run={run} />
@@ -311,6 +311,13 @@ export function NowPlaying({ state, connected, run, size, side, onOpen, onSize }
       <div className="relative flex min-w-0 items-center gap-1">
         {identity("Open player", () => onOpen(), { "data-player-last": "" })}
         {tool}
+        <PlayingMenu
+          state={state}
+          connected={connected}
+          run={run}
+          back="[data-now-playing] [data-playing-menu]"
+          className="relative opacity-100"
+        />
       </div>
       <PlaybackTransport
         state={state}
@@ -390,7 +397,6 @@ function PlaybackGear({
   run,
 }: Omit<Props, "size" | "side" | "onOpen" | "onSize">) {
   const { credentials } = useShell();
-  const detailNavigation = useDetailNavigation();
   const [menu, setMenu] = useState(false);
   const gear = useRef<HTMLButtonElement>(null);
   const current = state.queue.find((entry) => entry.id === state.currentEntryId)!;
@@ -410,7 +416,6 @@ function PlaybackGear({
           controls: state.controls,
         }
       : null;
-  const details = current.liveSourceId ? undefined : queueItemLocation(current);
   return (
     <Popover open={menu} onOpenChange={setMenu}>
       <PopoverTrigger asChild>
@@ -431,36 +436,6 @@ function PlaybackGear({
           {...settings}
           trigger={gear.current}
           tracks={!isAudioOnly(playback, current, state.player.tracks)}
-          details={
-            details && (
-              <Button asChild variant="ghost" className={playbackMenuRow}>
-                <Link
-                  to={detailHref(details)}
-                  aria-label="Details"
-                  onClick={(event) => {
-                    // As the player's own Details: in the section it was opened from, and Back returns to the gear.
-                    setMenu(false);
-                    if (
-                      event.button ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return;
-                    event.preventDefault();
-                    detailNavigation.open(
-                      details,
-                      '[data-now-playing] button[aria-label="Playback"]',
-                    );
-                  }}
-                >
-                  Details
-                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                </Link>
-              </Button>
-            )
-          }
         />
       )}
     </Popover>

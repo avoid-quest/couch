@@ -2,7 +2,7 @@ import { playbackControls } from "@/session/playback-controls";
 import type { PlaybackControls } from "../../shared/protocol";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useCaptionsOptions, usePlaybackRateOptions } from "@videojs/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -329,15 +329,14 @@ const row = "h-11 w-full justify-start gap-3 rounded-none px-3 font-normal";
 /**
  * The gear's menu, as YouTube's: a small menu above the gear over the picture, each row its setting and current value,
  * and a submenu that replaces it in place under a Back row. Subtitles and Audio lead it, as YouTube's Subtitles/CC and
- * Audio track rows; Details ends it. It is the Popover's content; the player owns the Popover and its trigger.
+ * Audio track rows. It is the Popover's content; the player owns the Popover and its trigger.
  * `tracks` is false where there is no picture (audio), so Subtitles and Audio stay out.
  */
 export function PlaybackMenu({
-  details,
   tracks: showTracks = true,
   trigger,
   ...props
-}: PlaybackSettingsProps & { details?: ReactNode; tracks?: boolean; trigger: HTMLElement | null }) {
+}: PlaybackSettingsProps & { tracks?: boolean; trigger: HTMLElement | null }) {
   const { entry, player, credentials, connected } = props;
   const controls = playbackControls({ controls: props.controls });
   const playbackClock = usePlaybackClock();
@@ -575,11 +574,8 @@ export function PlaybackMenu({
               <ChevronRight aria-hidden="true" className="-mr-1" />
             </Button>
           ))}
-          {details}
         </div>
       )}
     </PopoverContent>
   );
 }
-
-export const playbackMenuRow = row;

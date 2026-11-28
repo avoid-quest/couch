@@ -5,7 +5,7 @@ import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import type { MenuAction } from "@/components/RowMenu";
 import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
-import { saveAction, useDetailAction, useForLaterToggle } from "@/sections/details/ItemPage";
+import { saveAction, useDetailAction, useForLaterToggle } from "@/sections/details/save";
 
 export type QueueActionsProps = {
   credentials: Credentials;

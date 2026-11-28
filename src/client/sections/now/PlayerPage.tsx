@@ -15,12 +15,10 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import {
   ChevronDown,
-  ChevronRight,
   Info,
   Maximize,
   Minimize,
@@ -35,7 +33,7 @@ import { MediaArtwork, useArtRatio } from "@/components/MediaArtwork";
 import { useArtworkPicture } from "@/components/AmbientLight";
 import { Level } from "@/components/Level";
 import { mediaSubtitle } from "@/components/MediaContext";
-import { AddToHomeButton } from "@/sections/home/AddToHome";
+import { PlayingMenu } from "./PlayingMenu";
 import {
   PlaybackTime,
   PlaybackTimeline,
@@ -47,7 +45,7 @@ import {
 } from "@/components/PlaybackTransport";
 import { DigitalClock } from "@/components/DigitalClock";
 import { sourceLabel } from "@/source-label";
-import { PlaybackMenu, playbackMenuRow } from "@/components/PlaybackSettings";
+import { PlaybackMenu } from "@/components/PlaybackSettings";
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
@@ -71,7 +69,7 @@ import { WhereItPlays } from "@/sections/shell/Outputs";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { titleFit, titleLength } from "@/components/Stage";
-import { Link, useLocation } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import { RadioNext, RadioProgress, RadioStationLine } from "@/components/RadioSchedule";
 import { RadioRecognition } from "@/components/RadioRecognition";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioStationQuery } from "@/api/radio";
@@ -577,25 +575,6 @@ export function PlayerPage({
   if (!current && !queueOpen && !playerTarget) return null;
 
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
-  const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      !detailHref ||
-      event.button ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    // Back returns the TV and a keyboard to the gear they opened Details from; a pointer's Back returns to the picture.
-    event.preventDefault();
-    detailNavigation.open(
-      detailHref,
-      panel === "settings" && (tvPresentation || !event.detail)
-        ? '.player-page button[aria-label="Playback"]'
-        : undefined,
-    );
-  };
   // Back leads the top line on every screen, naming where it goes: a pointer has no Back key, and on the TV a
   // controller reaches it too. It never stops anything.
   const backTo = playerTarget ? "Remote" : shell.playerBackLabel;
@@ -682,7 +661,6 @@ export function PlayerPage({
             : undefined
         }
       />
-      {!radio && <AddToHomeButton entry={current} />}
     </>
   );
   // A station's tags wait for Info; its link stays the same element either way, so focus on it survives Info.
@@ -1260,23 +1238,18 @@ export function PlayerPage({
                         </Button>
                       </PopoverTrigger>
                       {panel === "settings" && settings && (
-                        <PlaybackMenu
-                          {...settings}
-                          tracks={!audioOnly}
-                          trigger={gear.current}
-                          details={
-                            detailHref && (
-                              <Button asChild variant="ghost" className={playbackMenuRow}>
-                                <Link to={detailHref} aria-label="Details" onClick={openDetails}>
-                                  Details
-                                  <ChevronRight aria-hidden="true" className="-mr-1 ml-auto" />
-                                </Link>
-                              </Button>
-                            )
-                          }
-                        />
+                        <PlaybackMenu {...settings} tracks={!audioOnly} trigger={gear.current} />
                       )}
                     </Popover>
+                  )}
+                  {/* What plays has its own "…" beside the gear, which keeps the settings. */}
+                  {state && (
+                    <PlayingMenu
+                      state={state}
+                      connected={connected}
+                      run={run}
+                      back=".player-page [data-playing-menu]"
+                    />
                   )}
                   {/* Fullscreen stays bottom right for audio and video, directly under Info beside artwork. The TV is
                     already fullscreen; only its picture keeps an empty slot so the tools stay in place. */}

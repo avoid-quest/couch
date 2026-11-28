@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, House, HousePlus, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { forLaterQuery } from "@/api/for-later";
 import { historyQuery } from "@/api/progress";
 import { providerPageQuery } from "@/api/providers";
@@ -42,7 +42,7 @@ import {
   type ProviderPage,
 } from "../../../shared/providers";
 import { followId, useHomeFollows, type HomeFollow } from "./home-follows";
-import { addHomeFollow, setHomeSectionShown, useHomeRows } from "./home-rows";
+import { addHomeFollow, setHomeSectionShown } from "./home-rows";
 
 /** A series, show or channel that Home can follow: its page, whose lists are offered. */
 export type AddTarget = { provider: ProviderId; url: string; title: string };
@@ -484,50 +484,11 @@ export function useHomeAction() {
 }
 
 /** What a playing item belongs to that Home can follow: its season or list, else its channel. */
-function entryTarget(entry: QueueEntry): AddTarget | undefined {
+export function entryTarget(entry: QueueEntry): AddTarget | undefined {
   const [outer, inner] = collectionLinks(entry.collection);
   const list = inner ?? outer;
   if (list)
     return { provider: list.provider, url: list.url, title: inner ? outer!.title : list.title };
   const provider = entry.creator && providerForUrl(entry.creator.url);
   if (provider) return { provider, url: entry.creator!.url, title: entry.creator!.title };
-}
-
-/**
- * The player's Add to Home for what plays, beside where it comes from. Once its list is on Home, "On Home" takes the
- * person to that section; a section hidden there says so, and shows again as it is opened.
- */
-export function AddToHomeButton({ entry }: { entry: QueueEntry }) {
-  const { changeSection } = useShell();
-  const follows = useHomeFollows();
-  const { rows } = useHomeRows();
-  const target = entryTarget(entry);
-  if (!target) return null;
-  const followed = followedFor(target, follows, !!entry.endless);
-  if (followed) {
-    const hidden = rows.some((row) => row.id === followed.id && !row.shown);
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-mx-2"
-        aria-label={hidden ? `Show ${followed.name} on Home` : `${followed.name} on Home`}
-        onClick={() => goToFollow(followed.id, changeSection)}
-      >
-        <House aria-hidden="true" />
-        {hidden ? "Hidden on Home" : "On Home"}
-      </Button>
-    );
-  }
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-mx-2"
-      onClick={(event) => addToHome(target, event.currentTarget)}
-    >
-      <HousePlus aria-hidden="true" />
-      Add to Home
-    </Button>
-  );
 }
