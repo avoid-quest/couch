@@ -139,7 +139,7 @@ function Lead({
   playing: boolean;
 }) {
   const [choosing, setChoosing] = useState(false);
-  const { devices } = usePlayOn();
+  const { devices, on } = usePlayOn();
   const destination = usePlayDestination();
   const save = useForLaterToggle(item.url, () => historyReference(item), useDetailAction());
   // The TV has no Save or "…" beside Resume: a held OK opens the menu, from the artwork, and Save is in it.
@@ -162,7 +162,7 @@ function Lead({
   const caption = mediaCaption(item);
   const meta = metaLine(caption.lead ?? programme(item), left(item));
   const makesWay = !playing && destination.playing;
-  const label = `Resume ${item.title}`;
+  const label = on(`Resume ${item.title}`);
   return (
     <div className="grid min-w-0 content-start gap-3">
       <div
