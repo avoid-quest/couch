@@ -12,7 +12,13 @@ export function PlayerSideSetting() {
   const { side, save } = usePlayerSide();
   return (
     <SettingsRow label="Player side" description="Where Now playing stands beside the page.">
-      <ChoiceGroup label="Player side" value={side} options={sides} onValueChange={save} />
+      <ChoiceGroup
+        label="Player side"
+        variant="segmented"
+        value={side}
+        options={sides}
+        onValueChange={save}
+      />
     </SettingsRow>
   );
 }
